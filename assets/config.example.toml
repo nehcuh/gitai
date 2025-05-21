@@ -1,0 +1,15 @@
+[ai]
+api_url = "http://localhost:11434/v1/chat/completions"
+model_name = "qwen3:32b-q8_0"
+temperature = 0.7
+api_key = "YOUR_API_KEY_IF_NEEDED"
+
+[tree_sitter]
+# 是否启用语法树分析功能（默认关闭）
+enabled = false
+# 分析深度: "shallow", "medium", "deep"
+analysis_depth = "medium"
+# 是否启用缓存
+cache_enabled = true
+# 支持的语言列表
+languages = ["rust", "javascript", "python", "go", "java"]
