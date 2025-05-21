@@ -1,6 +1,7 @@
 use colored::*;
 // use regex::Regex;
 use std::process::ExitStatus; // Keep only ExitStatus as HashMap is not used
+use serde::{Deserialize, Serialize};
 
 /// Represents the output of a command execution
 ///
