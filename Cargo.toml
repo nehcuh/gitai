@@ -1,0 +1,27 @@
+[package]
+name = "gitai"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive"] }
+colored = "3.0.0"
+dirs = "6.0.0"
+lazy_static = "1.5.0"
+regex = "1.11.1"
+reqwest = { version = "0.12.15", features = ["json"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.45.0", features = ["full"] }
+toml = "0.8.22"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+tree-sitter = "0.25.4"
+tree-sitter-go = "0.23.4"
+tree-sitter-java = "0.23.5"
+tree-sitter-javascript = "0.23.1"
+tree-sitter-python = "0.23.6"
+tree-sitter-rust = "0.24.0"
+
+[dev-dependencies]
+tempfile = "3.20.0"
