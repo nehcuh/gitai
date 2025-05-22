@@ -138,12 +138,3 @@ pub(crate) async fn extract_diff_for_review(args: &ReviewArgs) -> Result<String,
         }
     }
 }
-
-/// Determine analysis depth from args
-fn get_analysis_depth(args: &ReviewArgs) -> AnalysisDepth {
-    match args.depth.to_lowercase().as_str() {
-        "shallow" | "basic" => AnalysisDepth::Basic,
-        "deep" => AnalysisDepth::Deep,
-        _ => AnalysisDepth::Normal, // Default to normal if not recognized
-    }
-}

@@ -5,8 +5,13 @@ mod tree_sitter_analyzer;
 mod types;
 mod utils;
 
+use handlers::git::passthrough_to_git;
+use handlers::review::handle_review;
+use utils::construct_review_args;
+
 use crate::config::AppConfig;
 use crate::errors::AppError;
+use crate::handlers::help::handle_help;
 use crate::utils::generate_gitai_help;
 
 #[tokio::main]
@@ -15,7 +20,8 @@ async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = match AppConfig::load() {
+    // Default configuration can be overwritten by command-line commands
+    let mut config = match AppConfig::load() {
         // Prefix with underscore to mark as unused
         Ok(config) => config,
         Err(e) => return Err(AppError::Config(e)),
@@ -58,8 +64,10 @@ async fn main() -> Result<(), AppError> {
     // review 处理
     if args.iter().any(|arg| arg == "review" || arg == "rv") {
         tracing::info!("检测到review命令");
-        handle_review(&cofig, args, use_ai).await?;
-        Ok(())
+        let review_args = construct_review_args(&args);
+        // review_args can overwritten config tree-sitter config
+        handle_review(&mut config, review_args).await?;
+        return Ok(());
     }
 
     // commit 处理

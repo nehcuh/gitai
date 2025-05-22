@@ -14,8 +14,8 @@ pub struct GitaiArgs {
     pub noai: bool,
 
     /// Specify output language
-    #[clap(long, global = true)]
-    pub language: Option<String>,
+    // #[clap(long, global = true)]
+    // pub language: Option<String>,
 
     #[command(subcommand)]
     pub command: GitaiSubCommand,
@@ -87,16 +87,8 @@ pub struct ReviewArgs {
     pub output: Option<String>,
 
     /// Use tree-sitter for enhanced code analysis (enabled by default)
-    #[clap(long = "ts")]
+    #[clap(long = "tree-sitter", alias = "ts")]
     pub tree_sitter: bool,
-
-    /// Disable Tree-sitter analysis
-    #[clap(long = "no-ts")]
-    pub no_tree_sitter: bool,
-
-    /// Combined review with tree-sitter analysis
-    #[clap(long = "review-ts")]
-    pub review_ts: bool,
 
     /// First commit reference
     #[clap(long, value_name = "COMMIT")]

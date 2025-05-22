@@ -1,104 +1,38 @@
-use std::time::SystemTime;
+use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
-use tree_sitter::{Language, Tree};
-
-// Defines the type of change in a Git diff
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ChangeType {
-    Added,
-    Modified,
-    Deleted,
-    Renamed,
-    #[allow(dead_code)]
-    Copied,
-    #[allow(dead_code)]
-    TypeChanged,
-}
-
-// Represents a hunk range in git diff format (@@ -a,b +c,d @@)
-#[derive(Debug, Clone)]
-pub struct HunkRange {
-    pub start: usize,
-    pub count: usize,
-}
-
-// Represents a single hunk in a Git diff
-#[derive(Debug, Clone)]
-pub struct DiffHunk {
-    #[allow(dead_code)]
-    pub old_range: HunkRange,
-    pub new_range: HunkRange,
-    #[allow(dead_code)]
-    pub lines: Vec<String>,
-}
-
-// 文件AST结构
-// 这个结构体代表一个文件的语法分析树(AST)
-// 使用tree-sitter提供的实际Tree类型
-#[derive(Debug, Clone)]
-pub struct FileAst {
-    /// 文件路径
-    pub path: PathBuf,
-    /// tree-sitter解析树
-    pub tree: Tree,
-    /// 源代码
-    pub source: String,
-    /// 内容哈希值
-    pub content_hash: String,
-    /// 最后解析时间
-    #[allow(dead_code)]
-    pub last_parsed: SystemTime,
-    /// 语言标识
-    pub language_id: String,
-}
-
-// Represents a changed file in a Git diff
-#[derive(Debug, Clone)]
-pub struct ChangedFile {
-    pub path: PathBuf,
-    pub change_type: ChangeType,
-    pub hunks: Vec<DiffHunk>,
-    pub file_mode_change: Option<String>,
-}
-
-// Represents the entire Git diff
-#[derive(Debug, Clone)]
-pub struct GitDiff {
-    pub changed_files: Vec<ChangedFile>,
-    pub metadata: Option<HashMap<String, String>>,
-}
+use tree_sitter::Language;
 
 // Rust 语言解析器
 pub fn get_tree_sitter_rust() -> Language {
-    tree_sitter_rust::language()
+    tree_sitter_rust::LANGUAGE.into()
 }
 
 // Java 语言解析器
 pub fn get_tree_sitter_java() -> Language {
-    tree_sitter_java::language()
+    tree_sitter_java::LANGUAGE.into()
 }
 
 // Python 语言解析器
 pub fn get_tree_sitter_python() -> Language {
-    tree_sitter_python::language()
+    tree_sitter_python::LANGUAGE.into()
 }
 
 // Go 语言解析器
 pub fn get_tree_sitter_go() -> Language {
-    tree_sitter_go::language()
+    tree_sitter_go::LANGUAGE.into()
 }
 
 // JS 语言解析器
 pub fn get_tree_sitter_js() -> Language {
-    tree_sitter_javascript::language()
+    tree_sitter_javascript::LANGUAGE.into()
 }
 
 // C 语言解析器
 pub fn get_tree_sitter_c() -> Language {
-    tree_sitter_c::language()
+    tree_sitter_c::LANGUAGE.into()
 }
 
 // C++ 语言解析器
 pub fn get_tree_sitter_cpp() -> Language {
-    tree_sitter_cpp::language()
+    tree_sitter_cpp::LANGUAGE.into()
 }

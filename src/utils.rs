@@ -1,3 +1,47 @@
+use clap::Parser;
+
+use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs};
+
+pub fn construct_review_args(args: &[String]) -> ReviewArgs {
+    // 重构review命令参数以便使用clap解析
+    let mut review_args_vec = vec!["gitai".to_string(), "review".to_string()];
+
+    // 获取review之后的所有其他参数
+    let review_index = args
+        .iter()
+        .position(|a| a == "review" || a == "rv")
+        .unwrap_or(0);
+    if review_index + 1 < args.len() {
+        review_args_vec.extend_from_slice(&args[review_index + 1..]);
+    }
+
+    tracing::debug!("重构的review命令: {:?}", review_args_vec);
+
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&review_args_vec) {
+        match parsed_args.command {
+            GitaiSubCommand::Review(review_args) => {
+                tracing::debug!("解析出来的 review 结构为: {:?}", review_args);
+                return review_args;
+            }
+            _ => panic!("无法解析 git review 命令,命令为: {:?}", args),
+        }
+    } else {
+        tracing::warn!("解析review命令失败");
+        // 创建默认的ReviewArgs
+        ReviewArgs {
+            depth: "medium".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+        }
+    }
+}
+
 /// Generates custom help information for gitai, including gitai-specific
 /// commands and options not included in standard git help.
 pub fn generate_gitai_help() -> String {
@@ -28,16 +72,14 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      -m, --message   直接传递消息给提交\n");
     help.push_str("      -r, --review        在提交前执行代码评审\n\n");
 
-    help.push_str("  review (rv)         执行 AI 辅助的代码评审\n");
+    help.push_str("  review (rv)          执行 AI 辅助的代码评审\n");
     help.push_str("    选项:\n");
-    help.push_str("      --depth=LEVEL   分析深度级别 (默认: medium)\n");
-    help.push_str("      --focus=AREA    评审重点区域\n");
-    help.push_str("      --lang=LANGUAGE 限制分析到特定语言\n");
-    help.push_str("      --format=FORMAT 输出格式 (默认: text)\n");
-    help.push_str("      --output=FILE   输出文件\n");
-    help.push_str("      --ts            使用 Tree-sitter 进行增强代码分析（默认）\n");
-    help.push_str("      --no-ts         禁用 Tree-sitter 分析\n");
-    help.push_str("      --review-ts     结合评审与 tree-sitter 分析\n");
+    help.push_str("      --depth=LEVEL    分析深度级别 (默认: medium)\n");
+    help.push_str("      --focus=AREA     评审重点区域\n");
+    help.push_str("      --lang=LANGUAGE  限制分析到特定语言\n");
+    help.push_str("      --format=FORMAT  输出格式 (默认: text)\n");
+    help.push_str("      --output=FILE    输出文件\n");
+    help.push_str("      --tree-sitter    使用 Tree-sitter 进行增强代码分析（默认）\n");
     help.push_str("      --commit1=COMMIT 第一个提交引用\n");
     help.push_str("      --commit2=COMMIT 第二个提交引用（如果比较两个提交）\n\n");
 
