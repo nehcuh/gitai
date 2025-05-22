@@ -1,7 +1,13 @@
-mod core;
+mod config;
+mod errors;
+mod handlers;
+mod tree_sitter_analyzer;
+mod types;
+mod utils;
 
-use crate::core::config::AppConfig;
-use crate::core::errors::AppError;
+use crate::config::AppConfig;
+use crate::errors::AppError;
+use crate::utils::generate_gitai_help;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -9,70 +15,70 @@ async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let _config = match AppConfig::load() { // Prefix with underscore to mark as unused
+    let config = match AppConfig::load() {
+        // Prefix with underscore to mark as unused
         Ok(config) => config,
         Err(e) => return Err(AppError::Config(e)),
     };
 
-    // tracing::debug!("AI setting\n: api_url: {}", &_config.ai.api_url);
-    // // Obtain cmd args
-    // let args: Vec<String> = std::env::args().collect();
+    // Handling cmd args
+    let mut args: Vec<String> = std::env::args().collect();
 
-    // // Default behavior should be gitie --ai
-    // if args.len() <= 1 {
-    //     passthrough_to_git(&[])?;
-    //     return Ok(());
-    // }
+    // 检测是否需要弃用 AI
+    if args.iter().any(|arg| arg == "--noai") {
+        passthrough_to_git(&args)?;
+        return Ok(());
+    }
 
-    // // Filter tree-sitter related arguments, ensure clean git commands
-    // let filtered_args = filter_tree_sitter_args(&args[1..]);
+    // 检测是否需要启用全局 AI
+    let mut use_ai = false;
+    if args.iter().any(|arg| arg == "--ai") {
+        tracing::info!("检测到 AI 标识，全局启用 AI 能力");
+        use_ai = true;
+    } else {
+        tracing::info!("智能启用 AI 能力");
+    }
 
-    // // Check if contains `review` argument
-    // // Notice: review is a new command beyond git command supported arguments
-    // if filtered_args.contains(&"review".to_string())
-    //     && filtered_args.iter().all(|a| a != "--help" && a != "-h")
-    // {
-    //     tracing::info!("检测到review命令");
+    // Filter ai flags
+    args.retain(|arg| arg != "--ai" && arg != "--noai");
 
-    //     // Refactor review comand arg to use clap parse
-    //     let mut review_args_vec = vec!["gitai".to_string(), "review".to_string()];
+    if args.len() <= 1 {
+        println!("{}", generate_gitai_help());
+        return Ok(());
+    }
 
-    //     // Obtain arguments after review
-    //     let review_index = filtered_args
-    //         .iter()
-    //         .position(|a| a == "review")
-    //         .unwrap_or(0);
-    //     if review_index + 1 < filtered_args.len() {
-    //         review_args_vec.extend_from_slice(&filtered_args[review_index + 1..]);
-    //     }
+    // 帮助信息的全局处理
+    if args.iter().any(|arg| arg == "-h" || arg == "--help") {
+        tracing::info!("检测到 help 标识");
+        handle_help(&config, args, use_ai).await?;
+        return Ok(());
+    }
 
-    //     tracing::debug!("重构的review命令: {:?}", review_args_vec);
+    // gitai 特殊指令处理
+    // review 处理
+    if args.iter().any(|arg| arg == "review" || arg == "rv") {
+        tracing::info!("检测到review命令");
+        handle_review(&cofig, args, use_ai).await?;
+        Ok(())
+    }
 
-    //     if let Ok(parsed_args) = GitaiArgs::try_parse_from(&review_args_vec) {
-    //         match parsed_args.command {
-    //             GitaiSubCommand::Review(review_args) => {
-    //                 return handle_review(review_args, &config).await;
-    //             }
-    //             _ => {}
-    //         }
-    //     } else {
-    //         tracing::warn!("解析review命令失败");
-    //         // 创建默认的ReviewArgs
-    //         let default_review_args = ReviewArgs {
-    //             depth: "normal".to_string(),
-    //             focus: None,
-    //             lang: None,
-    //             format: "text".to_string(),
-    //             output: None,
-    //             tree_sitter: false,
-    //             no_tree_sitter: false,
-    //             review_ts: false,
-    //             passthrough_args: vec![],
-    //             commit1: None,
-    //             commit2: None,
-    //         };
-    //         return handle_review(default_review_args, &config).await;
+    // commit 处理
+    // if args.iter().any(|arg| arg == "commit" || arg = "cm") {
+    //     if args.iter().any(|arg| {
+    //         arg == "-t"
+    //             || arg == "--tree-sitter"
+    //             || arg == "-l"
+    //             || arg == "--level"
+    //             || arg == "-r"
+    //             || arg == "--review"
+    //     }) {
+    //         todo!()
     //     }
     // }
+
+    // 标准 git 指令处理
+    // 1. 当全局 ai 标识启用时，同时捕捉标准输出和标准错误，利用 AI 解释
+    // 2. 当没有指定全局 ai 标识时，标准输出直接转发，捕获标准错误并提供 AI 解释
+
     Ok(())
 }
