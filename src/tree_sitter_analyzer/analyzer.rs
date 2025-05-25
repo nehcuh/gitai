@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::time::SystemTime;
 use tree_sitter::{Parser, Query, QueryCursor};
+use streaming_iterator::StreamingIterator;
 
 use crate::config::TreeSitterConfig;
 use crate::errors::TreeSitterError;
@@ -10,6 +11,7 @@ use crate::types::analyze::{
     AffectedNode, DiffHunk, FileAst, DiffAnalysis, FileAnalysis, ChangeType, 
     ChangePattern, ChangeScope, ChangeAnalysis, ChangeStats
 };
+
 
 use crate::types::analyze::{LanguageRegistry, NodeAnalysisConfig};
 use super::core::{
@@ -449,7 +451,7 @@ impl TreeSitterAnalyzer {
             let hunk_start_line = hunk.new_range.start.saturating_sub(1);
             let hunk_end_line = hunk_start_line + hunk.new_range.count;
 
-            let matches = cursor.matches(query, tree_root, source_bytes);
+            let mut matches = cursor.matches(query, tree_root, source_bytes);
             while let Some(m) = matches.next() {
                 for capture in m.captures {
                     let node = capture.node;

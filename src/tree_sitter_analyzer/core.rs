@@ -6,8 +6,8 @@ use tree_sitter_highlight::HighlightConfiguration;
 use crate::{errors::TreeSitterError, types::analyze::GitDiff};
 
 use crate::types::analyze::{
-    ChangeType, ChangedFile, DiffHunk, FileAst, HunkRange, 
-    LanguageConfig, LanguageRegistry, NodeAnalysisConfig
+    ChangeType, ChangedFile, DiffHunk, FileAst, HunkRange, LanguageConfig, LanguageRegistry,
+    NodeAnalysisConfig,
 };
 
 const RUST_HIGHLIGHTS: &str = include_str!(concat!(
@@ -83,10 +83,7 @@ const C_INJECTIONS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/c/injections.scm"
 ));
-const C_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/c/locals.scm"
-));
+const C_LOCALS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/queries/c/locals.scm"));
 
 const CPP_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -170,7 +167,11 @@ pub fn get_go_full_queries() -> (&'static str, &'static str, &'static str) {
 }
 
 pub fn get_js_full_queries() -> (&'static str, &'static str, &'static str) {
-    (JAVASCRIPT_HIGHLIGHTS, JAVASCRIPT_INJECTIONS, JAVASCRIPT_LOCALS)
+    (
+        JAVASCRIPT_HIGHLIGHTS,
+        JAVASCRIPT_INJECTIONS,
+        JAVASCRIPT_LOCALS,
+    )
 }
 
 pub fn get_c_full_queries() -> (&'static str, &'static str, &'static str) {
@@ -196,13 +197,19 @@ pub fn get_query_pattern_for_language(language: &str) -> Option<&'static str> {
 }
 
 // 获取语言的完整查询集合
-pub fn get_full_queries_for_language(language: &str) -> Option<(&'static str, &'static str, &'static str)> {
+pub fn get_full_queries_for_language(
+    language: &str,
+) -> Option<(&'static str, &'static str, &'static str)> {
     match language {
         "rust" => Some((RUST_HIGHLIGHTS, RUST_INJECTIONS, RUST_LOCALS)),
         "java" => Some((JAVA_HIGHLIGHTS, JAVA_INJECTIONS, JAVA_LOCALS)),
         "python" => Some((PYTHON_HIGHLIGHTS, PYTHON_INJECTIONS, PYTHON_LOCALS)),
         "go" => Some((GO_HIGHLIGHTS, GO_INJECTIONS, GO_LOCALS)),
-        "js" | "javascript" => Some((JAVASCRIPT_HIGHLIGHTS, JAVASCRIPT_INJECTIONS, JAVASCRIPT_LOCALS)),
+        "js" | "javascript" => Some((
+            JAVASCRIPT_HIGHLIGHTS,
+            JAVASCRIPT_INJECTIONS,
+            JAVASCRIPT_LOCALS,
+        )),
         "c" => Some((C_HIGHLIGHTS, C_INJECTIONS, C_LOCALS)),
         "cpp" | "c++" => Some((CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)),
         _ => None,
@@ -231,7 +238,10 @@ pub fn get_supported_languages() -> &'static [&'static str] {
 
 // 检查语言是否被支持
 pub fn is_language_supported(language: &str) -> bool {
-    matches!(language, "rust" | "java" | "python" | "go" | "js" | "javascript" | "c" | "cpp" | "c++")
+    matches!(
+        language,
+        "rust" | "java" | "python" | "go" | "js" | "javascript" | "c" | "cpp" | "c++"
+    )
 }
 
 // 获取语言的标准文件扩展名
@@ -251,7 +261,7 @@ pub fn get_extensions_for_language(language: &str) -> &'static [&'static str] {
 // 创建语言注册表的实用函数
 pub fn create_language_registry() -> LanguageRegistry {
     let mut registry = LanguageRegistry::new();
-    
+
     // Rust 配置
     registry.register_language(LanguageConfig {
         name: "rust",
@@ -337,15 +347,32 @@ pub fn get_node_analysis_config(language: &str) -> Option<NodeAnalysisConfig> {
     match language {
         "rust" => Some(NodeAnalysisConfig {
             language: "rust",
-            capture_names: &["function.name", "struct.name", "enum.name", "trait.name", "impl.name"],
-            important_nodes: &["function_item", "struct_item", "enum_item", "trait_item", "impl_item"],
+            capture_names: &[
+                "function.name",
+                "struct.name",
+                "enum.name",
+                "trait.name",
+                "impl.name",
+            ],
+            important_nodes: &[
+                "function_item",
+                "struct_item",
+                "enum_item",
+                "trait_item",
+                "impl_item",
+            ],
             visibility_indicators: &["pub", "pub(crate)", "pub(super)", "pub(self)"],
             scope_indicators: &["mod", "fn", "impl", "trait"],
         }),
         "java" => Some(NodeAnalysisConfig {
             language: "java",
             capture_names: &["class.name", "method.name", "field.name", "interface.name"],
-            important_nodes: &["class_declaration", "method_declaration", "field_declaration", "interface_declaration"],
+            important_nodes: &[
+                "class_declaration",
+                "method_declaration",
+                "field_declaration",
+                "interface_declaration",
+            ],
             visibility_indicators: &["public", "private", "protected"],
             scope_indicators: &["class", "interface", "method", "package"],
         }),
@@ -359,14 +386,22 @@ pub fn get_node_analysis_config(language: &str) -> Option<NodeAnalysisConfig> {
         "go" => Some(NodeAnalysisConfig {
             language: "go",
             capture_names: &["function.name", "type.name", "method.name"],
-            important_nodes: &["function_declaration", "type_declaration", "method_declaration"],
+            important_nodes: &[
+                "function_declaration",
+                "type_declaration",
+                "method_declaration",
+            ],
             visibility_indicators: &[],
             scope_indicators: &["func", "type", "package"],
         }),
         "js" => Some(NodeAnalysisConfig {
             language: "js",
             capture_names: &["function.name", "class.name", "method.name"],
-            important_nodes: &["function_declaration", "class_declaration", "method_definition"],
+            important_nodes: &[
+                "function_declaration",
+                "class_declaration",
+                "method_definition",
+            ],
             visibility_indicators: &["export", "static"],
             scope_indicators: &["function", "class", "method"],
         }),
@@ -401,7 +436,7 @@ pub fn is_node_public(node: &tree_sitter::Node, file_ast: &FileAst) -> bool {
             {
                 return true;
             }
-            
+
             let mut cursor = node.walk();
             for child_node in node.children(&mut cursor) {
                 if child_node.kind() == "visibility_modifier" {
@@ -431,27 +466,27 @@ pub fn is_node_public(node: &tree_sitter::Node, file_ast: &FileAst) -> bool {
 
 // 解析 Git diff 文本
 pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
-    use crate::types::analyze::{GitDiff, ChangedFile, ChangeType, DiffHunk, HunkRange};
+    use crate::types::analyze::{ChangeType, ChangedFile, DiffHunk, GitDiff, HunkRange};
     use std::collections::HashMap;
-    
+
     let mut changed_files = Vec::new();
     let lines: Vec<&str> = diff_text.lines().collect();
     let mut i = 0;
-    
+
     while i < lines.len() {
         let line = lines[i];
-        
+
         if line.starts_with("diff --git") {
             // 解析文件头
             if let Some(file_path) = parse_file_path(line) {
                 let mut hunks = Vec::new();
                 let mut change_type = ChangeType::Modified;
-                
+
                 // 查找文件模式和hunk信息
                 i += 1;
                 while i < lines.len() && !lines[i].starts_with("diff --git") {
                     let current_line = lines[i];
-                    
+
                     if current_line.starts_with("new file mode") {
                         change_type = ChangeType::Added;
                     } else if current_line.starts_with("deleted file mode") {
@@ -464,7 +499,7 @@ pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
                     }
                     i += 1;
                 }
-                
+
                 changed_files.push(ChangedFile {
                     path: PathBuf::from(file_path),
                     change_type,
@@ -476,7 +511,7 @@ pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
         }
         i += 1;
     }
-    
+
     Ok(GitDiff {
         changed_files,
         metadata: Some(HashMap::new()),
@@ -495,17 +530,88 @@ fn parse_file_path(line: &str) -> Option<String> {
     None
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::analyze::ChangeType;
+
+    #[test]
+    fn test_parse_file_path() {
+        assert_eq!(parse_file_path("diff --git a/src/main.rs b/src/main.rs"), Some("src/main.rs".to_string()));
+        assert_eq!(parse_file_path("diff --git a/foo b/bar"), None);
+    }
+
+    #[test]
+    fn test_parse_hunk() {
+        let line = "@@ -1,5 +1,6 @@";
+        let hunk = parse_hunk(line).expect("Should parse hunk");
+        assert_eq!(hunk.old_range.start, 1);
+        assert_eq!(hunk.old_range.count, 5);
+        assert_eq!(hunk.new_range.start, 1);
+        assert_eq!(hunk.new_range.count, 6);
+    }
+
+    #[test]
+    fn test_detect_language_from_extension() {
+        assert_eq!(detect_language_from_extension("rs"), Some("rust"));
+        assert_eq!(detect_language_from_extension("TS"), Some("js"));
+        assert_eq!(detect_language_from_extension("unknown"), None);
+    }
+
+    #[test]
+    fn test_get_query_pattern_for_language() {
+        assert!(get_query_pattern_for_language("rust").is_some());
+        assert!(get_query_pattern_for_language("invalid").is_none());
+    }
+
+    #[test]
+    fn test_get_full_queries_for_language() {
+        assert!(get_full_queries_for_language("python").is_some());
+        assert!(get_full_queries_for_language("invalid").is_none());
+    }
+
+    #[test]
+    fn test_language_support_helpers() {
+        let langs = get_supported_languages();
+        assert!(langs.contains(&"rust"));
+        assert!(is_language_supported("cpp"));
+        assert!(!is_language_supported("haskell"));
+        let exts = get_extensions_for_language("js");
+        assert!(exts.contains(&"js"));
+    }
+
+    #[test]
+    fn test_parse_git_diff_simple() {
+        let diff = concat!(
+            "diff --git a/foo.rs b/foo.rs\n",
+            "new file mode 100644\n",
+            "@@ -0,0 +1,2 @@\n",
+            "+line1\n",
+            "+line2\n"
+        );
+        let gd = parse_git_diff(diff).unwrap();
+        assert_eq!(gd.changed_files.len(), 1);
+        let cf = &gd.changed_files[0];
+        assert_eq!(cf.path.to_str().unwrap(), "foo.rs");
+        assert_eq!(cf.change_type, ChangeType::Added);
+        assert_eq!(cf.hunks.len(), 1);
+        let h = &cf.hunks[0];
+        assert_eq!(h.new_range.start, 1);
+        assert_eq!(h.new_range.count, 2);
+    }
+}
+
 fn parse_hunk(line: &str) -> Option<DiffHunk> {
     // 解析 "@@ -old_start,old_count +new_start,new_count @@" 格式
     use regex::Regex;
-    
+
     let re = Regex::new(r"@@ -(\d+),(\d+) \+(\d+),(\d+) @@").ok()?;
     if let Some(captures) = re.captures(line) {
         let old_start: usize = captures.get(1)?.as_str().parse().ok()?;
         let old_count: usize = captures.get(2)?.as_str().parse().ok()?;
         let new_start: usize = captures.get(3)?.as_str().parse().ok()?;
         let new_count: usize = captures.get(4)?.as_str().parse().ok()?;
-        
+
         return Some(DiffHunk {
             old_range: HunkRange {
                 start: old_start,

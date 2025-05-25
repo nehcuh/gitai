@@ -168,7 +168,6 @@ impl AppConfig {
             "general-helper".to_string(),
             general_helper_prompt_path.clone(),
         );
-
         user_prompt_paths.insert("translator".to_string(), translator_prompt_path.clone());
 
         let mut existing_files = Vec::new();
@@ -256,72 +255,56 @@ impl AppConfig {
             ConfigError::FileWrite(user_prompt_dir.to_string_lossy().to_string(), e)
         })?;
 
-        let mut files_to_initialize = Vec::new();
-
+        // Initialize missing config files
         if !user_config_path.exists() {
-            files_to_initialize.push("配置文件");
+            tracing::info!("配置文件 {} 不存在，正在初始化", CONFIG_FILE_NAME);
+            Self::initialize_config_file(
+                &user_config_path,
+                TEMPLATE_CONFIG_FILE,
+                "GITAI_ASSETS_CONFIG",
+                "Config",
+            )?;
         }
 
         if !commit_generator_prompt_path.exists() {
-            files_to_initialize.push(COMMIT_GENERATOR_PROMPT);
+            tracing::info!("{} 不存在，正在初始化", COMMIT_GENERATOR_PROMPT);
+            Self::initialize_config_file(
+                &commit_generator_prompt_path,
+                TEMPLATE_COMMIT_GENERATOR,
+                "GITAI_COMMIT_GENERATOR_PROMPT",
+                "Commit generator prompt",
+            )?;
         }
 
         if !commit_deviation_prompt_path.exists() {
-            files_to_initialize.push(COMMIT_DIVIATION_PROMPT);
+            tracing::info!("{} 不存在，正在初始化", COMMIT_DIVIATION_PROMPT);
+            Self::initialize_config_file(
+                &commit_deviation_prompt_path,
+                TEMPLATE_COMMIT_DEVIATION,
+                "GITAI_COMMIT_DEVIATION_PROMPT",
+                "Commit deviation prompt",
+            )?;
         }
 
         if !general_helper_prompt_path.exists() {
-            files_to_initialize.push(HELPER_PROMPT);
+            tracing::info!("{} 不存在，正在初始化", HELPER_PROMPT);
+            Self::initialize_config_file(
+                &general_helper_prompt_path,
+                TEMPLATE_HELPER,
+                "GITAI_GENERAL_HELP_PROMPT",
+                "Git general prompt",
+            )?;
         }
 
         if !translator_prompt_path.exists() {
-            files_to_initialize.push(TRANSLATOR_PROMPT);
+            tracing::info!("{} 不存在，正在初始化", TRANSLATOR_PROMPT);
+            Self::initialize_config_file(
+                &translator_prompt_path,
+                TEMPLATE_TRANSLATOR,
+                "GITAI_TRANSLATOR_PROMPT",
+                "Git translator prompt",
+            )?;
         }
-
-        if files_to_initialize.is_empty() {
-            return Ok((user_config_path, user_prompt_paths));
-        } else {
-            tracing::info!(
-                "以下文件不存在，正在初始化: {}",
-                files_to_initialize.join(", ")
-            );
-        }
-
-        // Initialize each config file if needed
-        Self::initialize_config_file(
-            &user_config_path,
-            TEMPLATE_CONFIG_FILE,
-            "GITAI_ASSETS_CONFIG",
-            "Config",
-        )?;
-
-        Self::initialize_config_file(
-            &commit_generator_prompt_path,
-            TEMPLATE_COMMIT_GENERATOR,
-            "GITAI_COMMIT_GENERATOR_PROMPT",
-            "Commit generator prompt",
-        )?;
-
-        Self::initialize_config_file(
-            &commit_deviation_prompt_path,
-            TEMPLATE_COMMIT_DEVIATION,
-            "GITAI_COMMIT_DEVIATION_PROMPT",
-            "Commit deviation prompt",
-        )?;
-
-        Self::initialize_config_file(
-            &general_helper_prompt_path,
-            TEMPLATE_HELPER,
-            "GITAI_GENERAL_HELP_PROMPT",
-            "Git general prompt",
-        )?;
-
-        Self::initialize_config_file(
-            &translator_prompt_path,
-            TEMPLATE_TRANSLATOR,
-            "GITAI_TRANSLATOR_PROMPT",
-            "Git translator prompt",
-        )?;
 
         Ok((user_config_path, user_prompt_paths))
     }
