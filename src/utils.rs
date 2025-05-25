@@ -144,3 +144,75 @@ pub fn generate_gitai_help() -> String {
     );
     help
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::git::ReviewArgs;
+
+    fn make_args(vec: Vec<&str>) -> Vec<String> {
+        vec.into_iter().map(String::from).collect()
+    }
+
+    #[test]
+    fn test_construct_review_args_default() {
+        let args = make_args(vec!["gitai", "review"]);
+        let expected = ReviewArgs {
+            depth: "medium".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+        };
+        assert_eq!(construct_review_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_review_args_with_all_options() {
+        let args = make_args(vec![
+            "gitai", "review",
+            "--depth=deep",
+            "--focus", "performance",
+            "--lang", "Rust",
+            "--format", "json",
+            "--output", "out.txt",
+            "--tree-sitter",
+            "--commit1", "abc123",
+            "--commit2", "def456",
+            "--", "--extra", "flag"
+        ]);
+        let expected = ReviewArgs {
+            depth: "deep".to_string(),
+            focus: Some("performance".to_string()),
+            lang: Some("Rust".to_string()),
+            format: "json".to_string(),
+            output: Some("out.txt".to_string()),
+            tree_sitter: true,
+            passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
+            commit1: Some("abc123".to_string()),
+            commit2: Some("def456".to_string()),
+        };
+        assert_eq!(construct_review_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_review_args_alias_rv() {
+        let args = make_args(vec!["gitai", "rv", "--depth=shallow"]);
+        let expected = ReviewArgs {
+            depth: "shallow".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+        };
+        assert_eq!(construct_review_args(&args), expected);
+    }
+}

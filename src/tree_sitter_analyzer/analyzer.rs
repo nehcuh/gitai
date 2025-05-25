@@ -1,24 +1,21 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 use std::time::SystemTime;
-use tree_sitter::{Parser, Query, QueryCursor};
 use streaming_iterator::StreamingIterator;
+use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::config::TreeSitterConfig;
 use crate::errors::TreeSitterError;
-use crate::types::analyze::{
-    AffectedNode, DiffHunk, FileAst, DiffAnalysis, FileAnalysis, ChangeType, 
-    ChangePattern, ChangeScope, ChangeAnalysis, ChangeStats
-};
+use crate::types::git::{ChangeType, DiffHunk};
 
-
-use crate::types::analyze::{LanguageRegistry, NodeAnalysisConfig};
 use super::core::{
-    get_node_analysis_config, is_node_public, parse_git_diff, 
-    create_language_registry
+    AffectedNode, ChangeAnalysis, ChangePattern, ChangeScope, ChangeStats, DiffAnalysis,
+    FileAnalysis, FileAst, create_language_registry, get_node_analysis_config, is_node_public,
+    parse_git_diff,
 };
 use super::utils::calculate_hash;
+use crate::types::analyze::LanguageRegistry;
 
 pub struct TreeSitterAnalyzer {
     pub config: TreeSitterConfig,
@@ -26,6 +23,16 @@ pub struct TreeSitterAnalyzer {
     language_registry: LanguageRegistry,
     file_asts: HashMap<PathBuf, FileAst>,
     queries: HashMap<String, Query>,
+}
+
+// 节点分析配置
+#[derive(Debug, Clone)]
+pub struct NodeAnalysisConfig {
+    pub language: &'static str,
+    pub capture_names: &'static [&'static str],
+    pub important_nodes: &'static [&'static str],
+    pub visibility_indicators: &'static [&'static str],
+    pub scope_indicators: &'static [&'static str],
 }
 
 // 统一的节点增强器
@@ -41,23 +48,47 @@ impl UnifiedNodeEnhancer {
     }
 
     fn enhance_node(&self, node: &mut AffectedNode) {
-        let content = node.content.as_ref().map(|c| c.as_str()).unwrap_or("").to_string();
-        
+        let content = node
+            .content
+            .as_ref()
+            .map(|c| c.as_str())
+            .unwrap_or("")
+            .to_string();
+
         // 检查可见性
-        for &indicator in self.analysis_config.visibility_indicators {
-            if content.contains(indicator) {
-                node.is_public = match self.analysis_config.language {
-                    "rust" => indicator.starts_with("pub"),
-                    "java" | "cpp" => indicator == "public",
-                    "js" => indicator == "export",
-                    "c" => indicator == "extern",
-                    _ => false,
-                };
-                break;
+        match self.analysis_config.language {
+            "python" => {
+                // Python：双下划线开头视为私有，其余视为公开
+                node.is_public = !node.name.starts_with("__");
+            }
+            "go" => {
+                // Go：首字母大写视为公开，首字母小写视为私有
+                node.is_public = node
+                    .name
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false);
+            }
+            _ => {
+                for &indicator in self.analysis_config.visibility_indicators {
+                    if content.contains(indicator) {
+                        node.is_public = match self.analysis_config.language {
+                            "rust" => indicator.starts_with("pub"),
+                            "java" | "cpp" => indicator == "public",
+                            "js" => indicator == "export",
+                            "c" => indicator == "extern",
+                            _ => false,
+                        };
+                        break;
+                    }
+                }
             }
         }
 
         // 语言特定的节点类型优化
+        // 它根据节点的原始类型（如 "struct_item"、"function_item"、"class_declaration" 等）和节点的内容（content），结合特定语言的语法和特征，对节点类型进行更细粒度的标记。
+        // 以 Rust 为例: 如果节点类型是 "function_item"，但内容里包含了 #[test]，那么就会把这个节点优化为 "test_function"；
         self.optimize_node_type(node, &content);
     }
 
@@ -70,7 +101,7 @@ impl UnifiedNodeEnhancer {
             "js" => self.optimize_js_node(node, content),
             "c" => self.optimize_c_node(node, content),
             "cpp" => self.optimize_cpp_node(node, content),
-            _ => {},
+            _ => {}
         }
     }
 
@@ -118,8 +149,11 @@ impl UnifiedNodeEnhancer {
     fn optimize_java_node(&self, node: &mut AffectedNode, content: &str) {
         node.node_type = match node.node_type.as_str() {
             "class_declaration" => {
-                if content.contains("@Service") || content.contains("@Component") 
-                    || content.contains("@Controller") || content.contains("@Repository") {
+                if content.contains("@Service")
+                    || content.contains("@Component")
+                    || content.contains("@Controller")
+                    || content.contains("@Repository")
+                {
                     "spring_component".to_string()
                 } else if content.contains("@Entity") || content.contains("@Table") {
                     "jpa_entity".to_string()
@@ -209,9 +243,15 @@ impl UnifiedNodeEnhancer {
             }
             "function_definition" => {
                 let mut tags = vec!["function".to_string()];
-                if content.contains("static") { tags.push("static".to_string()); }
-                if content.contains("inline") { tags.push("inline".to_string()); }
-                if content.contains("main(") { tags.push("main_function".to_string()); }
+                if content.contains("static") {
+                    tags.push("static".to_string());
+                }
+                if content.contains("inline") {
+                    tags.push("inline".to_string());
+                }
+                if content.contains("main(") {
+                    tags.push("main_function".to_string());
+                }
                 tags.join("|")
             }
             _ => node.node_type.clone(),
@@ -281,9 +321,17 @@ impl SummaryGenerator {
         }
     }
 
-    fn generate_summary(&self, file_path: &std::path::Path, affected_nodes: &[AffectedNode]) -> String {
-        let mut summary = format!("{}文件 {} 变更分析：", self.language_name, file_path.display());
-        
+    fn generate_summary(
+        &self,
+        file_path: &std::path::Path,
+        affected_nodes: &[AffectedNode],
+    ) -> String {
+        let mut summary = format!(
+            "{}文件 {} 变更分析：",
+            self.language_name,
+            file_path.display()
+        );
+
         if affected_nodes.is_empty() {
             return format!("{}未检测到结构性变更", summary);
         }
@@ -307,7 +355,7 @@ impl SummaryGenerator {
 
     fn format_structure_changes(&self) -> Vec<String> {
         let mut parts = Vec::new();
-        
+
         for (node_type, count) in &self.node_counts {
             if *count > 0 && node_type != "unknown" {
                 let display_name = self.get_display_name(node_type);
@@ -329,6 +377,24 @@ impl SummaryGenerator {
             ("Java", "field") => "字段",
             ("C", "struct_definition") => "结构体",
             ("C", "function") => "函数",
+            ("C++", "class_definition") => "类",
+            ("C++", "template_class") => "模板类",
+            ("C++", "function_definition") => "函数",
+            ("C++", "virtual_function") => "虚函数",
+            ("C++", "template_function") => "模板函数",
+            ("C++", "struct_specifier") => "结构体",
+            ("Python", "function_definition") => "函数",
+            ("Python", "async_function") => "异步函数",
+            ("Python", "test_function") => "测试函数",
+            ("Python", "class_definition") => "类",
+            ("Python", "django_model") => "Django模型",
+            ("Go", "function_definition") => "函数",
+            ("Go", "method_definition") => "方法",
+            ("JavaScript", "function_definition") => "函数",
+            ("JavaScript", "async_function") => "异步函数",
+            ("JavaScript", "arrow_function") => "箭头函数",
+            ("JavaScript", "class_declaration") => "类",
+            ("JavaScript", "method_definition") => "方法",
             _ => node_type,
         }
     }
@@ -343,7 +409,7 @@ impl TreeSitterAnalyzer {
             file_asts: HashMap::new(),
             queries: HashMap::new(),
         };
-        
+
         analyzer.initialize_queries()?;
         Ok(analyzer)
     }
@@ -364,10 +430,16 @@ impl TreeSitterAnalyzer {
         Ok(())
     }
 
-    pub fn detect_language(&self, path: &std::path::Path) -> Result<Option<String>, TreeSitterError> {
+    pub fn detect_language(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<Option<String>, TreeSitterError> {
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-        
-        if let Some(config) = self.language_registry.detect_language_by_extension(extension) {
+
+        if let Some(config) = self
+            .language_registry
+            .detect_language_by_extension(extension)
+        {
             Ok(Some(config.name.to_string()))
         } else {
             Ok(None)
@@ -375,14 +447,16 @@ impl TreeSitterAnalyzer {
     }
 
     pub fn parse_file(&mut self, file_path: &std::path::Path) -> Result<FileAst, TreeSitterError> {
-        let lang_id = self.detect_language(file_path)?
-            .ok_or_else(|| TreeSitterError::UnsupportedLanguage(format!("Unknown file type: {:?}", file_path)))?;
-        
-        let config = self.language_registry.get_config(&lang_id)
+        let lang_id = self.detect_language(file_path)?.ok_or_else(|| {
+            TreeSitterError::UnsupportedLanguage(format!("Unknown file type: {:?}", file_path))
+        })?;
+
+        let config = self
+            .language_registry
+            .get_config(&lang_id)
             .ok_or_else(|| TreeSitterError::UnsupportedLanguage(lang_id.clone()))?;
 
-        let source_code = fs::read_to_string(file_path)
-            .map_err(TreeSitterError::IOError)?;
+        let source_code = fs::read_to_string(file_path).map_err(TreeSitterError::IOError)?;
 
         let current_hash = calculate_hash(&source_code);
 
@@ -394,10 +468,12 @@ impl TreeSitterAnalyzer {
         }
 
         let mut parser = Parser::new();
-        parser.set_language(&config.get_language())
+        parser
+            .set_language(&config.get_language())
             .map_err(|e| TreeSitterError::ParseError(format!("Failed to set language: {}", e)))?;
 
-        let tree = parser.parse(&source_code, None)
+        let tree = parser
+            .parse(&source_code, None)
             .ok_or_else(|| TreeSitterError::ParseError("Failed to parse file".to_string()))?;
 
         let file_ast = FileAst {
@@ -410,7 +486,8 @@ impl TreeSitterAnalyzer {
         };
 
         if self.config.cache_enabled {
-            self.file_asts.insert(file_path.to_path_buf(), file_ast.clone());
+            self.file_asts
+                .insert(file_path.to_path_buf(), file_ast.clone());
         }
 
         Ok(file_ast)
@@ -422,7 +499,7 @@ impl TreeSitterAnalyzer {
         hunks: &[DiffHunk],
     ) -> Result<Vec<AffectedNode>, TreeSitterError> {
         let mut affected_nodes = self.analyze_generic_file_changes(file_ast, hunks)?;
-        
+
         // 应用语言特定的增强
         if let Some(enhancer) = UnifiedNodeEnhancer::new(&file_ast.language_id) {
             for node in &mut affected_nodes {
@@ -439,8 +516,10 @@ impl TreeSitterAnalyzer {
         hunks: &[DiffHunk],
     ) -> Result<Vec<AffectedNode>, TreeSitterError> {
         let mut affected_nodes = Vec::new();
-        
-        let query = self.queries.get(&file_ast.language_id)
+
+        let query = self
+            .queries
+            .get(&file_ast.language_id)
             .ok_or_else(|| TreeSitterError::UnsupportedLanguage(file_ast.language_id.clone()))?;
 
         let source_bytes = file_ast.source.as_bytes();
@@ -462,9 +541,9 @@ impl TreeSitterAnalyzer {
                     if node_start_line <= hunk_end_line && node_end_line >= hunk_start_line {
                         let content = node.utf8_text(source_bytes).unwrap_or("").to_string();
                         let node_name = self.extract_node_name(&m, query, source_bytes);
-                        
+
                         let change_type = self.determine_change_type(hunk);
-                        
+
                         affected_nodes.push(AffectedNode {
                             node_type: node.kind().to_string(),
                             name: node_name,
@@ -484,11 +563,16 @@ impl TreeSitterAnalyzer {
         // 去重
         affected_nodes.sort_by_key(|n| (n.range.0, n.range.1, n.node_type.clone()));
         affected_nodes.dedup_by_key(|n| (n.range.0, n.range.1, n.node_type.clone()));
-        
+
         Ok(affected_nodes)
     }
 
-    fn extract_node_name(&self, m: &tree_sitter::QueryMatch, query: &Query, source: &[u8]) -> String {
+    fn extract_node_name(
+        &self,
+        m: &tree_sitter::QueryMatch,
+        query: &Query,
+        source: &[u8],
+    ) -> String {
         m.captures
             .iter()
             .find(|c| query.capture_names()[c.index as usize].ends_with(".name"))
@@ -513,12 +597,10 @@ impl TreeSitterAnalyzer {
         affected_nodes: &[AffectedNode],
     ) -> String {
         let config = self.language_registry.get_config(&file_ast.language_id);
-        let language_display_name = config
-            .map(|c| c.display_name)
-            .unwrap_or("Unknown");
+        let language_display_name = config.map(|c| c.display_name).unwrap_or("Unknown");
 
         let mut generator = SummaryGenerator::new(language_display_name.to_string());
-        
+
         for node in affected_nodes {
             generator.add_node(node);
         }
@@ -549,7 +631,8 @@ impl TreeSitterAnalyzer {
                         *language_counts.entry(lang_id.clone()).or_insert(0) += 1;
 
                         if let Ok(file_ast) = self.parse_file(&file_path) {
-                            let affected_nodes = self.analyze_file_changes(&file_ast, &file_diff_info.hunks)?;
+                            let affected_nodes =
+                                self.analyze_file_changes(&file_ast, &file_diff_info.hunks)?;
                             total_affected_nodes += affected_nodes.len();
 
                             for node in &affected_nodes {
@@ -557,7 +640,9 @@ impl TreeSitterAnalyzer {
                                     match change_type.as_str() {
                                         "added" | "added_content" => total_additions += 1,
                                         "deleted" => total_deletions += 1,
-                                        "modified" | "modified_with_deletion" => total_modifications += 1,
+                                        "modified" | "modified_with_deletion" => {
+                                            total_modifications += 1
+                                        }
                                         _ => {}
                                     }
                                 }
@@ -598,7 +683,11 @@ impl TreeSitterAnalyzer {
 
         let overall_summary = format!(
             "分析完成。共影响{}个文件，{}个代码结构。新增{}，删除{}，修改{}。",
-            file_analyses.len(), total_affected_nodes, total_additions, total_deletions, total_modifications
+            file_analyses.len(),
+            total_affected_nodes,
+            total_additions,
+            total_deletions,
+            total_modifications
         );
 
         let change_analysis = ChangeAnalysis {
@@ -622,14 +711,14 @@ impl TreeSitterAnalyzer {
 pub fn collect_change_stats(affected_nodes: &[AffectedNode]) -> ChangeStats {
     let mut node_type_counts = HashMap::new();
     let mut change_type_counts = HashMap::new();
-    
+
     for node in affected_nodes {
         *node_type_counts.entry(node.node_type.clone()).or_insert(0) += 1;
         if let Some(ref change_type) = node.change_type {
             *change_type_counts.entry(change_type.clone()).or_insert(0) += 1;
         }
     }
-    
+
     ChangeStats {
         node_type_counts,
         change_type_counts,

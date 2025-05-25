@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use std::{collections::HashMap, path::PathBuf};
 
 /// Defines the command-line arguments specific to `gitai` own subcommands.
 /// This is typically used after determining that the invocation is not a global AI explanation request.
@@ -35,7 +36,7 @@ pub enum GitaiSubCommand {
 }
 
 /// Arguments for the `commit` subcommand
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct CommitArgs {
     /// Enable Tree-sitter syntax analysis for improved commit messages.
     /// Optional value can specify analysis depth: 'shallow', 'medium' (default), or 'deep'.
@@ -64,7 +65,7 @@ pub struct CommitArgs {
 }
 
 /// Arguments for the `review` subcommand
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ReviewArgs {
     /// Analysis depth level
     #[clap(long, value_name = "LEVEL", default_value = "medium")]
@@ -101,4 +102,49 @@ pub struct ReviewArgs {
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,
+}
+
+// Represents the entire Git diff
+#[derive(Debug, Clone)]
+pub struct GitDiff {
+    pub changed_files: Vec<ChangedFile>,
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+// Defines the type of change in a Git diff
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChangeType {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    #[allow(dead_code)]
+    Copied,
+    #[allow(dead_code)]
+    TypeChanged,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChangedFile {
+    pub path: PathBuf,
+    pub change_type: ChangeType,
+    pub hunks: Vec<DiffHunk>,
+    pub file_mode_change: Option<String>,
+}
+
+// Represents a hunk range in git diff format (@@ -a,b +c,d @@)
+#[derive(Debug, Clone)]
+pub struct HunkRange {
+    pub start: usize,
+    pub count: usize,
+}
+
+// Represents a single hunk in a Git diff
+#[derive(Debug, Clone)]
+pub struct DiffHunk {
+    #[allow(dead_code)]
+    pub old_range: HunkRange,
+    pub new_range: HunkRange,
+    #[allow(dead_code)]
+    pub lines: Vec<String>,
 }
