@@ -3,7 +3,7 @@ use crate::{
     errors::{AIError, AppError},
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
-        core::{AnalysisDepth, detect_language_from_extension, parse_git_diff},
+        core::{detect_language_from_extension, parse_git_diff},
     },
     types::{
         ai::{ChatMessage, OpenAIChatCompletionResponse, OpenAIChatRequest},
@@ -42,10 +42,6 @@ pub async fn handle_review(
 
     tracing::debug!("检测到差异信息，长度: {} 字符", diff_text.len());
 
-    // Determine analysis depth
-    let depth = get_analysis_depth(&review_args);
-    tracing::info!("使用分析深度: {:?}", depth);
-
     // Determine if TreeSitter should be used
     let use_tree_sitter = review_args.tree_sitter;
     tracing::debug!(
@@ -57,7 +53,7 @@ pub async fn handle_review(
     let analyze_start = Instant::now();
     let (git_diff, analysis_text, analysis_results) = if use_tree_sitter {
         tracing::info!("使用TreeSitter进行深度代码分析");
-        analyze_diff_with_tree_sitter(&diff_text, depth, config)
+        analyze_diff_with_tree_sitter(&diff_text, &review_args.depth, config)
             .await
             .map_err(|e| {
                 tracing::error!("TreeSitter分析失败: {:?}", e);
@@ -115,19 +111,10 @@ pub async fn handle_review(
     Ok(())
 }
 
-/// Determine analysis depth from args
-fn get_analysis_depth(args: &ReviewArgs) -> AnalysisDepth {
-    match args.depth.to_lowercase().as_str() {
-        "shallow" | "basic" => AnalysisDepth::Basic,
-        "deep" => AnalysisDepth::Deep,
-        _ => AnalysisDepth::Normal, // Default to normal if not recognized
-    }
-}
-
 /// Analyze diff with TreeSitter
 async fn analyze_diff_with_tree_sitter(
     diff_text: &str,
-    _depth: AnalysisDepth,
+    depth: &str,
     _config: &AppConfig,
 ) -> Result<
     (
@@ -137,8 +124,10 @@ async fn analyze_diff_with_tree_sitter(
     ),
     AppError,
 > {
-    // Initialize TreeSitter analyzer
-    let mut analyzer = TreeSitterAnalyzer::new(TreeSitterConfig::default()).map_err(|e| {
+    // Initialize TreeSitter analyzer with analysis depth
+    let mut config = TreeSitterConfig::default();
+    config.analysis_depth = depth.to_string();
+    let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
         tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
         AppError::TreeSitter(e)
     })?;
@@ -154,6 +143,7 @@ async fn analyze_diff_with_tree_sitter(
         tracing::error!("执行差异分析失败: {:?}", e);
         AppError::TreeSitter(e)
     })?;
+    tracing::debug!("差异分析结果: {:?}", analysis);
 
     // Create detailed analysis text
     let analysis_text = format_tree_sitter_analysis(&analysis, &git_diff);
@@ -351,7 +341,7 @@ fn extract_language_info(
     }
 }
 
-/// Generate AI review prompt
+/// Generate AI review prompt using review.md template
 async fn generate_ai_review_prompt(
     _config: &AppConfig,
     diff_text: &str,
@@ -360,41 +350,23 @@ async fn generate_ai_review_prompt(
     _git_diff: &GitDiff,
     languages: &str,
 ) -> Result<String, AppError> {
-    let base_prompt = format!(
-        "你是一位经验丰富的代码评审专家，精通多种编程语言，特别是{}。\
-        你擅长识别代码中的潜在问题、安全隐患和性能瓶颈，并提供具体的改进建议。\
-        请根据提供的结构化分析，对以下代码变更进行全面评审。",
-        if languages.is_empty() {
-            "各种编程语言".to_string()
-        } else {
-            languages.to_string()
-        }
-    );
+    // Review prompt will be loaded in send_review_to_ai function
 
     let focus_instruction = if let Some(focus) = &args.focus {
-        format!("请特别关注以下方面: {}", focus)
+        format!("\n\n**特别关注的方面:** {}", focus)
     } else {
-        "请全面评审代码，特别关注以下方面：\n\
-        1. 代码质量和最佳实践\n\
-        2. 可能的安全隐患或漏洞\n\
-        3. 性能优化机会\n\
-        4. 可读性和可维护性\n\
-        5. 与现有代码的集成和兼容性"
-            .to_string()
+        String::new()
     };
 
-    let review_guide = "请提供结构化的评审，包括：\n\
-        1. 总体评价：变更的整体质量和目的\n\
-        2. 问题列表：发现的具体问题，每个问题包含：\n\
-           - 问题位置和描述\n\
-           - 问题严重程度\n\
-           - 改进建议\n\
-        3. 改进建议：如何提升代码质量\n\
-        4. 总结：最重要的1-3个需要关注的点";
+    let language_context = if !languages.is_empty() {
+        format!("\n\n**检测到的编程语言:** {}", languages)
+    } else {
+        String::new()
+    };
 
     let prompt = format!(
-        "{}\n\n## 代码评审请求\n\n{}\n\n## 评审指南\n\n{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
-        base_prompt, focus_instruction, review_guide, analysis, diff_text
+        "## 代码评审请求{}{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
+        focus_instruction, language_context, analysis, diff_text
     );
 
     Ok(prompt)
@@ -402,10 +374,19 @@ async fn generate_ai_review_prompt(
 
 /// Send review request to AI
 async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, AIError> {
+    // Load system prompt from review.md
+    let system_prompt = match config.prompts.get("review") {
+        Some(prompt) => prompt.clone(),
+        None => {
+            // Fallback to embedded assets/review.md if not configured
+            include_str!("../../assets/review.md").to_string()
+        }
+    };
+
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
-            content: "您是一位经验丰富的代码评审专家，精通多种编程语言和软件开发最佳实践。请提供建设性的、具体的改进建议。".to_string(),
+            content: system_prompt,
         },
         ChatMessage {
             role: "user".to_string(),

@@ -9,13 +9,15 @@ use crate::config::TreeSitterConfig;
 use crate::errors::TreeSitterError;
 use crate::types::git::{ChangeType, DiffHunk};
 
+use super::core::LanguageRegistry;
 use super::core::{
     AffectedNode, ChangeAnalysis, ChangePattern, ChangeScope, ChangeStats, DiffAnalysis,
     FileAnalysis, FileAst, create_language_registry, get_node_analysis_config, is_node_public,
     parse_git_diff,
 };
 use super::utils::calculate_hash;
-use super::core::LanguageRegistry;
+
+
 
 pub struct TreeSitterAnalyzer {
     pub config: TreeSitterConfig,
@@ -419,6 +421,10 @@ impl TreeSitterAnalyzer {
         self.file_asts.clear();
     }
 
+    pub fn set_analysis_depth(&mut self, depth: String) {
+        self.config.analysis_depth = depth;
+    }
+
     fn initialize_queries(&mut self) -> Result<(), TreeSitterError> {
         for language in self.language_registry.get_all_languages() {
             if let Some(config) = self.language_registry.get_config(language) {
@@ -573,12 +579,45 @@ impl TreeSitterAnalyzer {
         query: &Query,
         source: &[u8],
     ) -> String {
-        m.captures
+        // First try to find captures ending with .name
+        if let Some(capture) = m.captures
             .iter()
             .find(|c| query.capture_names()[c.index as usize].ends_with(".name"))
-            .and_then(|c| c.node.utf8_text(source).ok())
-            .unwrap_or("unknown")
-            .to_string()
+        {
+            if let Ok(name) = capture.node.utf8_text(source) {
+                return name.to_string();
+            }
+        }
+
+        // Then try to find other meaningful captures
+        for capture in m.captures {
+            let capture_name = &query.capture_names()[capture.index as usize];
+            
+            // Skip generic captures like "identifier", "type_identifier"
+            if capture_name == &"identifier" || capture_name == &"type_identifier" || capture_name == &"field_identifier" {
+                continue;
+            }
+            
+            // Try to extract text from more specific captures
+            if let Ok(text) = capture.node.utf8_text(source) {
+                // Filter out very long text (likely code blocks)
+                if text.len() < 100 && !text.contains('\n') {
+                    return text.to_string();
+                }
+            }
+        }
+
+        // Fallback to first capture if no specific name found
+        if let Some(capture) = m.captures.first() {
+            if let Ok(text) = capture.node.utf8_text(source) {
+                // Only return short, single-line text
+                if text.len() < 50 && !text.contains('\n') {
+                    return text.to_string();
+                }
+            }
+        }
+
+        "unknown".to_string()
     }
 
     fn determine_change_type(&self, hunk: &DiffHunk) -> String {
@@ -673,9 +712,17 @@ impl TreeSitterAnalyzer {
         }
 
         let change_pattern = ChangePattern::MixedChange; // 简化的模式检测
-        let change_scope = if total_affected_nodes > 20 {
+        
+        // 根据分析深度动态调整阈值
+        let (major_threshold, moderate_threshold) = match self.config.analysis_depth.as_str() {
+            "shallow" | "basic" => (30, 10),  // 较高阈值，更容易归类为minor
+            "deep" => (10, 3),                // 较低阈值，更敏感地检测变更
+            _ => (20, 5),                     // 默认medium深度
+        };
+        
+        let change_scope = if total_affected_nodes > major_threshold {
             ChangeScope::Major
-        } else if total_affected_nodes > 5 {
+        } else if total_affected_nodes > moderate_threshold {
             ChangeScope::Moderate
         } else {
             ChangeScope::Minor

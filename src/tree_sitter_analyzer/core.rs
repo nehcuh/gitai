@@ -667,8 +667,6 @@ pub fn is_node_public(node: &tree_sitter::Node, file_ast: &FileAst) -> bool {
 
 // 解析 Git diff 文本
 pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
-    use std::collections::HashMap;
-
     let mut changed_files = Vec::new();
     let lines: Vec<&str> = diff_text.lines().collect();
     let mut i = 0;

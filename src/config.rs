@@ -14,6 +14,7 @@ const HELPER_PROMPT: &str = "helper-prompt.md";
 const TRANSLATOR_PROMPT: &str = "translator.md";
 const COMMIT_GENERATOR_PROMPT: &str = "commit-generator.md";
 const COMMIT_DIVIATION_PROMPT: &str = "commit-deviation.md"; // For future develop, calculate diviation of code and user develop tasks
+const REVIEW_PROMPT: &str = "review.md";
 
 // Templates files
 const TEMPLATE_CONFIG_FILE: &str = "assets/config.example.toml";
@@ -21,9 +22,10 @@ const TEMPLATE_HELPER: &str = "assets/helper-prompt.md";
 const TEMPLATE_TRANSLATOR: &str = "assets/translator.md";
 const TEMPLATE_COMMIT_GENERATOR: &str = "assets/commit-generator.md";
 const TEMPLATE_COMMIT_DEVIATION: &str = "assets/commit-deviation.md";
+const TEMPLATE_REVIEW: &str = "assets/review.md";
 
 // Total configuration files
-const TOTAL_CONFIG_FILE_COUNT: u32 = 5;
+const TOTAL_CONFIG_FILE_COUNT: u32 = 6;
 
 /// Get the absolute path of a template file based on project root
 fn abs_template_path(relative_path: &str) -> std::path::PathBuf {
@@ -156,6 +158,9 @@ impl AppConfig {
         // Translator AI support
         let translator_prompt_path = Self::extract_file_path(USER_PROMPT_PATH, TRANSLATOR_PROMPT)?;
 
+        // Review AI support
+        let review_prompt_path = Self::extract_file_path(USER_PROMPT_PATH, REVIEW_PROMPT)?;
+
         let mut user_prompt_paths = HashMap::new();
         user_prompt_paths.insert(
             "commit-generator".to_string(),
@@ -170,6 +175,7 @@ impl AppConfig {
             general_helper_prompt_path.clone(),
         );
         user_prompt_paths.insert("translator".to_string(), translator_prompt_path.clone());
+        user_prompt_paths.insert("review".to_string(), review_prompt_path.clone());
 
         let mut existing_files = Vec::new();
         let mut existing_count = 0;
@@ -187,6 +193,14 @@ impl AppConfig {
             ));
         }
 
+        if commit_deviation_prompt_path.exists() {
+            existing_count += 1;
+            existing_files.push(format!(
+                "用户 commit-deviation.md 已存在于 {:?}",
+                commit_deviation_prompt_path
+            ));
+        }
+
         if general_helper_prompt_path.exists() {
             existing_count += 1;
             existing_files.push(format!(
@@ -201,6 +215,11 @@ impl AppConfig {
                 "用户 translator.md 已存在于 {:?}",
                 translator_prompt_path
             ));
+        }
+
+        if review_prompt_path.exists() {
+            existing_count += 1;
+            existing_files.push(format!("用户 review.md 已存在于 {:?}", review_prompt_path));
         }
 
         if existing_count > 0 {
@@ -304,6 +323,16 @@ impl AppConfig {
                 TEMPLATE_TRANSLATOR,
                 "GITAI_TRANSLATOR_PROMPT",
                 "Git translator prompt",
+            )?;
+        }
+
+        if !review_prompt_path.exists() {
+            tracing::info!("{} 不存在，正在初始化", REVIEW_PROMPT);
+            Self::initialize_config_file(
+                &review_prompt_path,
+                TEMPLATE_REVIEW,
+                "GITAI_REVIEW_PROMPT",
+                "Git review prompt",
             )?;
         }
 
@@ -415,6 +444,13 @@ impl AppConfig {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
             .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
         let project_queries = PathBuf::from(manifest_dir).join("queries");
+        
+        // Skip if queries directory doesn't exist (e.g., in tests)
+        if !project_queries.exists() {
+            tracing::debug!("Queries directory {:?} does not exist, skipping rules initialization", project_queries);
+            return Ok(());
+        }
+        
         let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
         for entry in std::fs::read_dir(&project_queries)
             .map_err(|e| ConfigError::FileRead("read project queries".into(), e))?
@@ -625,7 +661,7 @@ impl AppConfig {
             prompts,
         };
 
-        tracing::info!("配置加载完成，Gitie 准备就绪");
+        tracing::info!("配置加载完成，Gitai 准备就绪");
         Ok(config)
     }
 }
@@ -675,6 +711,7 @@ mod tests {
             (TEMPLATE_COMMIT_GENERATOR, "Generate a commit message."),
             (TEMPLATE_COMMIT_DEVIATION, "Explain commit deviation."),
             (TEMPLATE_HELPER, "General AI help prompt."),
+            (TEMPLATE_REVIEW, "Review prompt."),
             (TEMPLATE_TRANSLATOR, "Translator AI help prompt."),
         ];
 
@@ -726,14 +763,12 @@ mod tests {
                 test_assets_dir.join(TEMPLATE_TRANSLATOR).to_str().unwrap(),
             )
         };
-
-        // Ensure initialize_rules has a project queries directory to read from
-        let project_root = temp_dir.path();
-        let queries_dir = project_root.join("queries");
-        fs::create_dir_all(&queries_dir)?;
         unsafe {
-            env::set_var("CARGO_MANIFEST_DIR", project_root.to_str().unwrap());
-        }
+            env::set_var(
+                "GITAI_REVIEW_PROMPT",
+                test_assets_dir.join(TEMPLATE_REVIEW).to_str().unwrap(),
+            )
+        };
 
         let fake_target_tmp_dir = temp_dir.path().join("target").join("tmp");
         fs::create_dir_all(&fake_target_tmp_dir)?;
@@ -753,6 +788,7 @@ mod tests {
         let expected_commit_dev_prompt_path = user_prompts_dir.join(COMMIT_DIVIATION_PROMPT);
         let expected_helper_prompt_path = user_prompts_dir.join(HELPER_PROMPT);
         let expected_translator_prompt_path = user_prompts_dir.join(TRANSLATOR_PROMPT);
+        let expected_review_prompt_path = user_prompts_dir.join(REVIEW_PROMPT);
         assert!(
             !expected_config_file_path.exists(),
             "Config file should not exist before init"
@@ -772,6 +808,10 @@ mod tests {
         assert!(
             !expected_translator_prompt_path.exists(),
             "Translator prompt should not exist before init"
+        );
+        assert!(
+            !expected_review_prompt_path.exists(),
+            "Review prompt should not exist before init"
         );
 
         let (config_path, prompt_paths) = AppConfig::initialize_config()?;
@@ -800,6 +840,11 @@ mod tests {
             prompt_paths.get("translator").unwrap(),
             &expected_translator_prompt_path,
             "Translator path mismatch"
+        );
+        assert_eq!(
+            prompt_paths.get("review").unwrap(),
+            &expected_review_prompt_path,
+            "Review path mismatch"
         );
 
         assert!(
@@ -879,10 +924,16 @@ mod tests {
         assert!((app_config.ai.temperature - 0.7).abs() < f32::EPSILON);
         assert!(app_config.ai.api_key.is_none());
 
-        assert!(app_config.prompts.contains_key("commit-generator"));
+        assert!(app_config.prompts.contains_key("translator"));
         assert_eq!(
-            app_config.prompts.get("commit-generator").unwrap().trim(),
-            "Generate a commit message."
+            app_config.prompts.get("translator").unwrap().trim(),
+            "Translator AI help prompt."
+        );
+        
+        assert!(app_config.prompts.contains_key("review"));
+        assert_eq!(
+            app_config.prompts.get("review").unwrap().trim(),
+            "Review prompt."
         );
 
         assert!(app_config.prompts.contains_key("commit-deviation"));
@@ -1018,6 +1069,7 @@ languages = ["rust", "python"]
         assert!(!app_config.prompts.contains_key("commit-generator"));
         assert!(app_config.prompts.contains_key("commit-deviation"));
         assert!(app_config.prompts.contains_key("general-helper"));
+        assert!(app_config.prompts.contains_key("review"));
 
         Ok(())
     }
@@ -1055,15 +1107,11 @@ languages = ["rust", "python"]
         Ok(())
     }
 
-
     #[test]
     fn test_initialize_rules_copies_missing_files() -> Result<(), Box<dyn std::error::Error>> {
         use std::fs::{self, File};
         use std::io::Write;
-        use tempfile::TempDir;
-
         let (temp_dir, _user_config_base, _user_prompts_dir) = setup_test_environment()?;
-        let project_root = temp_dir.path();
 
         // Mimic project root (where queries should be found)
         let project_root = temp_dir.path();
