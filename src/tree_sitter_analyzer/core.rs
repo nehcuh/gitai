@@ -1,7 +1,10 @@
 use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 use super::analyzer::NodeAnalysisConfig;
-use crate::{errors::TreeSitterError, types::git::ChangeType};
+use crate::{
+    errors::TreeSitterError,
+    types::git::{ChangeType, ChangedFile, DiffHunk, GitDiff, HunkRange},
+};
 use tree_sitter::{Language, Tree};
 
 /// 分析深度
@@ -664,7 +667,6 @@ pub fn is_node_public(node: &tree_sitter::Node, file_ast: &FileAst) -> bool {
 
 // 解析 Git diff 文本
 pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
-    use crate::types::analyze::{ChangeType, ChangedFile, DiffHunk, GitDiff, HunkRange};
     use std::collections::HashMap;
 
     let mut changed_files = Vec::new();
@@ -731,7 +733,6 @@ fn parse_file_path(line: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::analyze::ChangeType;
 
     #[test]
     fn test_parse_file_path() {
@@ -739,7 +740,11 @@ mod tests {
             parse_file_path("diff --git a/src/main.rs b/src/main.rs"),
             Some("src/main.rs".to_string())
         );
-        assert_eq!(parse_file_path("diff --git a/foo b/bar"), None);
+        assert_eq!(
+            parse_file_path("diff --git a/foo b/bar"),
+            Some("bar".to_string())
+        );
+        assert_eq!(parse_file_path("diff --git a/foo"), None);
     }
 
     #[test]

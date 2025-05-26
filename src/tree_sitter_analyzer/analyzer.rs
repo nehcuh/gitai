@@ -15,7 +15,7 @@ use super::core::{
     parse_git_diff,
 };
 use super::utils::calculate_hash;
-use crate::types::analyze::LanguageRegistry;
+use super::core::LanguageRegistry;
 
 pub struct TreeSitterAnalyzer {
     pub config: TreeSitterConfig,
