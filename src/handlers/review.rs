@@ -6,12 +6,11 @@ use crate::{
         core::{detect_language_from_extension, parse_git_diff},
     },
     types::{
-        ai::{ChatMessage, OpenAIChatCompletionResponse, OpenAIChatRequest},
         git::{GitDiff, ReviewArgs},
     },
 };
 
-use super::git::extract_diff_for_review;
+use super::{ai::{execute_review_request, create_review_prompt}, git::extract_diff_for_review};
 use chrono;
 use colored::Colorize;
 use std::{collections::HashMap, env, fs, io::Write, time::Instant};
@@ -350,23 +349,11 @@ async fn generate_ai_review_prompt(
     _git_diff: &GitDiff,
     languages: &str,
 ) -> Result<String, AppError> {
-    // Review prompt will be loaded in send_review_to_ai function
-
-    let focus_instruction = if let Some(focus) = &args.focus {
-        format!("\n\n**特别关注的方面:** {}", focus)
-    } else {
-        String::new()
-    };
-
-    let language_context = if !languages.is_empty() {
-        format!("\n\n**检测到的编程语言:** {}", languages)
-    } else {
-        String::new()
-    };
-
-    let prompt = format!(
-        "## 代码评审请求{}{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
-        focus_instruction, language_context, analysis, diff_text
+    let prompt = create_review_prompt(
+        diff_text,
+        analysis,
+        args.focus.as_deref(),
+        languages,
     );
 
     Ok(prompt)
@@ -383,91 +370,10 @@ async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, A
         }
     };
 
-    let messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        },
-    ];
-
-    execute_ai_request_local(config, messages).await
+    execute_review_request(config, &system_prompt, prompt).await
 }
 
-/// Local implementation of AI request execution
-async fn execute_ai_request_local(
-    config: &AppConfig,
-    messages: Vec<ChatMessage>,
-) -> Result<String, AIError> {
-    let request_payload = OpenAIChatRequest {
-        model: config.ai.model_name.clone(),
-        messages,
-        temperature: Some(config.ai.temperature),
-        stream: false,
-    };
 
-    if let Ok(json_string) = serde_json::to_string_pretty(&request_payload) {
-        tracing::debug!("正在发送 JSON 数据到 AI 进行评审:\n{}", json_string);
-    }
-
-    let client = reqwest::Client::new();
-    let mut request_builder = client.post(&config.ai.api_url);
-
-    // Add authorization header if api_key present
-    if let Some(api_key) = &config.ai.api_key {
-        if !api_key.is_empty() {
-            tracing::debug!("正在使用 API 密钥进行 AI 评审");
-            request_builder = request_builder.bearer_auth(api_key);
-        }
-    }
-
-    let openai_response = request_builder
-        .json(&request_payload)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("发送 AI 评审请求失败: {}", e);
-            AIError::RequestFailed(e)
-        })?;
-
-    if !openai_response.status().is_success() {
-        let status_code = openai_response.status();
-        let body = openai_response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Failed to read error body from AI response".to_string());
-        tracing::error!("AI 评审 API 请求失败，状态码: {}: {}", status_code, body);
-        return Err(AIError::ApiResponseError(status_code, body));
-    }
-
-    match openai_response.json::<OpenAIChatCompletionResponse>().await {
-        Ok(response_data) => {
-            if let Some(choice) = response_data.choices.get(0) {
-                let original_content = &choice.message.content;
-                if original_content.trim().is_empty() {
-                    tracing::warn!("AI 评审返回了空的消息内容。");
-                    Err(AIError::EmptyMessage)
-                } else {
-                    tracing::debug!(
-                        "收到 AI 评审响应: \"{}\"",
-                        original_content.chars().take(100).collect::<String>()
-                    );
-                    Ok(original_content.clone())
-                }
-            } else {
-                tracing::warn!("在 AI 评审响应中未找到选项。");
-                Err(AIError::NoChoiceInResponse)
-            }
-        }
-        Err(e) => {
-            tracing::error!("解析来自 AI 评审的 JSON 响应失败: {}", e);
-            Err(AIError::ResponseParseFailed(e))
-        }
-    }
-}
 
 /// Generate fallback review when AI is unavailable
 fn generate_fallback_review(

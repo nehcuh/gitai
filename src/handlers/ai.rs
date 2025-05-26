@@ -45,21 +45,12 @@ pub async fn explain_git_command_output(
     //     system_prompt_content = format!("{}\n\n此帮助内容包含标准 Git 命令", system_prompt_content);
     // }
 
-    let messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt_content,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: format!(
-                "请解释以下{}帮助信息，重点说明每个命令的作用和用法：\n\n{}",
-                "Git ", command_output
-            ),
-        },
-    ];
+    let user_prompt = format!(
+        "请解释以下{}帮助信息，重点说明每个命令的作用和用法：\n\n{}",
+        "Git ", command_output
+    );
 
-    match execute_ai_request(config, messages).await {
+    match execute_explain_request(config, &system_prompt_content, &user_prompt).await {
         Ok(ai_explanation) => {
             let formatted_output = format!(
                 "#Git 命令帮助\n\n##原始帮助输出\n\n```text\n{}\n```\n## AI 解释\n\n{}\n",
@@ -71,10 +62,12 @@ pub async fn explain_git_command_output(
     }
 }
 
-/// Helpter function to execute the AI request and process the response
-async fn execute_ai_request(
+/// Generic function to execute AI request with configurable options
+pub async fn execute_ai_request_generic(
     config: &AppConfig,
     messages: Vec<ChatMessage>,
+    log_prefix: &str,
+    clean_output: bool,
 ) -> Result<String, AIError> {
     let request_payload = OpenAIChatRequest {
         model: config.ai.model_name.clone(),
@@ -84,7 +77,7 @@ async fn execute_ai_request(
     };
 
     if let Ok(json_string) = serde_json::to_string_pretty(&request_payload) {
-        tracing::debug!("正在发送 JSON 数据到 AI 进行解释:\n{}", json_string);
+        tracing::debug!("正在发送 JSON 数据到 AI 进行{}:\n{}", log_prefix, json_string);
     } else {
         tracing::warn!("序列化 AI 请求数据用于调试失败。");
     }
@@ -92,10 +85,10 @@ async fn execute_ai_request(
     let client = reqwest::Client::new();
     let mut request_builder = client.post(&config.ai.api_url);
 
-    // Add authorization header i api_key represent
+    // Add authorization header if api_key present
     if let Some(api_key) = &config.ai.api_key {
         if !api_key.is_empty() {
-            tracing::debug!("正在使用 API 密钥进行 AI 解释");
+            tracing::debug!("正在使用 API 密钥进行 AI {}", log_prefix);
             request_builder = request_builder.bearer_auth(api_key);
         }
     }
@@ -105,11 +98,7 @@ async fn execute_ai_request(
         .send()
         .await
         .map_err(|e| {
-            tracing::error!("发送 AI 解释请求失败: {}", e);
-            // This error could be a network issue, DNS resolution failure, etc.
-            // AIError::RequestFailed is a general error for reqwest issues.
-            // AIError::ExplainerNetworkError could be used if a more specific categorization is needed
-            // and can be reliably determined from `e`.
+            tracing::error!("发送 AI {}请求失败: {}", log_prefix, e);
             AIError::RequestFailed(e)
         })?;
 
@@ -119,7 +108,7 @@ async fn execute_ai_request(
             .text()
             .await
             .unwrap_or_else(|_| "Failed to read error body from AI response".to_string());
-        tracing::error!("AI 解释器 API 请求失败，状态码: {}: {}", status_code, body);
+        tracing::error!("AI {} API 请求失败，状态码: {}: {}", log_prefix, status_code, body);
         return Err(AIError::ApiResponseError(status_code, body));
     }
 
@@ -129,24 +118,31 @@ async fn execute_ai_request(
             if let Some(choice) = response_data.choices.get(0) {
                 let original_content = &choice.message.content;
                 if original_content.trim().is_empty() {
-                    tracing::warn!("AI 解释器返回了空的消息内容。");
+                    tracing::warn!("AI {}返回了空的消息内容。", log_prefix);
                     Err(AIError::EmptyMessage)
                 } else {
-                    let cleaned_content = clean_ai_output(original_content);
+                    let final_content = if clean_output {
+                        clean_ai_output(original_content)
+                    } else {
+                        original_content.clone()
+                    };
+                    
+                    let log_msg = if clean_output { "清理后的" } else { "" };
                     tracing::debug!(
-                        "收到清理后的 AI 解释: \"{}\"",
-                        cleaned_content.chars().take(100).collect::<String>()
+                        "收到{}AI {}: \"{}\"",
+                        log_msg,
+                        log_prefix,
+                        final_content.chars().take(100).collect::<String>()
                     );
-                    Ok(cleaned_content)
+                    Ok(final_content)
                 }
             } else {
-                tracing::warn!("在 AI 解释器响应中未找到选项。");
+                tracing::warn!("在 AI {}响应中未找到选项。", log_prefix);
                 Err(AIError::NoChoiceInResponse)
             }
         }
         Err(e) => {
-            tracing::error!("解析来自 AI 解释器的 JSON 响应失败: {}", e);
-            // This error occurs if the response body is not valid JSON matching OpenAIChatCompletionResponse
+            tracing::error!("解析来自 AI {}的 JSON 响应失败: {}", log_prefix, e);
             Err(AIError::ResponseParseFailed(e))
         }
     }
@@ -160,7 +156,83 @@ lazy_static! {
     static ref RE_THINK_TAGS: Regex = Regex::new(r"(?s)<think>.*?</think>").unwrap();
 }
 
+/// Helper function to execute the AI request and process the response
+/// This is a wrapper around execute_ai_request_generic with default options for backward compatibility
+async fn execute_ai_request(
+    config: &AppConfig,
+    messages: Vec<ChatMessage>,
+) -> Result<String, AIError> {
+    execute_ai_request_generic(config, messages, "解释", true).await
+}
+
+/// Dedicated function for code review requests
+/// Returns the raw AI response without cleaning <think> tags as they might be useful for review context
+pub async fn execute_review_request(
+    config: &AppConfig,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, AIError> {
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt.to_string(),
+        },
+    ];
+
+    execute_ai_request_generic(config, messages, "评审", false).await
+}
+
+/// Dedicated function for explanation requests  
+/// Cleans the output by removing <think> tags for cleaner explanations
+pub async fn execute_explain_request(
+    config: &AppConfig,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, AIError> {
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt.to_string(),
+        },
+    ];
+
+    execute_ai_request_generic(config, messages, "解释", true).await
+}
+
+/// Helper function to create a review prompt for code changes
+pub fn create_review_prompt(
+    diff_text: &str,
+    analysis: &str,
+    focus: Option<&str>,
+    languages: &str,
+) -> String {
+    let focus_instruction = if let Some(focus) = focus {
+        format!("\n\n**特别关注的方面:** {}", focus)
+    } else {
+        String::new()
+    };
+
+    let language_context = if !languages.is_empty() {
+        format!("\n\n**检测到的编程语言:** {}", languages)
+    } else {
+        String::new()
+    };
+
+    format!(
+        "## 代码评审请求{}{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
+        focus_instruction, language_context, analysis, diff_text
+    )
+}
+
 pub fn clean_ai_output(text: &str) -> String {
-    // Using the pre-compiled regex pattern for better perfomance
+    // Using the pre-compiled regex pattern for better performance
     RE_THINK_TAGS.replace_all(text, "").into_owned()
 }
