@@ -6,6 +6,7 @@ use crate::errors::ConfigError;
 // Configuration location
 const USER_CONFIG_PATH: &str = "~/.config/gitai";
 const USER_PROMPT_PATH: &str = "~/.config/gitai/prompts";
+const USER_RULES_PATH: &str = "~/.config/gitai/rules";
 
 // Fully configuration files
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -379,6 +380,10 @@ impl AppConfig {
 
     pub fn load() -> Result<Self, ConfigError> {
         let start_time = std::time::Instant::now();
+
+        tracing::info!("加载 AST Query 配置");
+        Self::initialize_rules()?;
+
         let (user_config_path, user_prompt_paths) = match Self::initialize_config() {
             Ok(result) => {
                 tracing::debug!("配置初始化完成，用时 {:?}", start_time.elapsed());
@@ -398,6 +403,41 @@ impl AppConfig {
         }
 
         Self::load_config_from_file(&user_config_path, &user_prompt_paths)
+    }
+
+    /// copy default Tree-sitter rule files to user's config directory if missing
+    fn initialize_rules() -> Result<(), ConfigError> {
+        // resolve user rules base
+        let base = Self::extract_file_path(USER_RULES_PATH, "")?;
+        std::fs::create_dir_all(&base)
+            .map_err(|e| ConfigError::FileWrite(base.to_string_lossy().into(), e))?;
+        // default queries directory in project
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
+        let project_queries = PathBuf::from(manifest_dir).join("queries");
+        let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
+        for entry in std::fs::read_dir(&project_queries)
+            .map_err(|e| ConfigError::FileRead("read project queries".into(), e))?
+        {
+            let dir = entry
+                .map_err(|e| ConfigError::FileRead("iter project queries".into(), e))?
+                .path();
+            if dir.is_dir() {
+                let lang = dir.file_name().unwrap();
+                let dest = base.join(lang);
+                std::fs::create_dir_all(&dest)
+                    .map_err(|e| ConfigError::FileWrite(dest.to_string_lossy().into(), e))?;
+                for file in &scm_files {
+                    let src = dir.join(file);
+                    let dst = dest.join(file);
+                    if !dst.exists() {
+                        std::fs::copy(&src, &dst)
+                            .map_err(|e| ConfigError::FileWrite(dst.to_string_lossy().into(), e))?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn load_config_from_file(
@@ -686,6 +726,14 @@ mod tests {
                 test_assets_dir.join(TEMPLATE_TRANSLATOR).to_str().unwrap(),
             )
         };
+
+        // Ensure initialize_rules has a project queries directory to read from
+        let project_root = temp_dir.path();
+        let queries_dir = project_root.join("queries");
+        fs::create_dir_all(&queries_dir)?;
+        unsafe {
+            env::set_var("CARGO_MANIFEST_DIR", project_root.to_str().unwrap());
+        }
 
         let fake_target_tmp_dir = temp_dir.path().join("target").join("tmp");
         fs::create_dir_all(&fake_target_tmp_dir)?;
@@ -1003,6 +1051,57 @@ languages = ["rust", "python"]
             !app_config.prompts.contains_key("general-helper"),
             "Empty general-helper prompt should not be loaded"
         );
+
+        Ok(())
+    }
+
+
+    #[test]
+    fn test_initialize_rules_copies_missing_files() -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs::{self, File};
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let (temp_dir, _user_config_base, _user_prompts_dir) = setup_test_environment()?;
+        let project_root = temp_dir.path();
+
+        // Mimic project root (where queries should be found)
+        let project_root = temp_dir.path();
+        let queries_dir = project_root.join("queries/rust");
+        fs::create_dir_all(&queries_dir)?;
+
+        let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
+        for f in &scm_files {
+            let mut file = File::create(queries_dir.join(f))?;
+            writeln!(file, "test content for {f}")?;
+        }
+
+        // Set CARGO_MANIFEST_DIR so abs_template_path works (simulate from project root)
+        unsafe { std::env::set_var("CARGO_MANIFEST_DIR", &project_root) };
+
+        // Patch the extract_file_path function if needed, or ensure USER_RULES_PATH resolves into temp_dir
+        // (if not, you may want to temporarily override USER_RULES_PATH or mock it)
+
+        // Call initialize_rules and check results
+        let result = AppConfig::initialize_rules();
+        assert!(result.is_ok());
+
+        // The user rules directory should now have "rust/{*.scm}"
+        let user_rules_dir = temp_dir.path().join(".config/gitai/rules/rust");
+        fs::create_dir_all(&user_rules_dir)?;
+
+        for f in &scm_files {
+            let user_file = user_rules_dir.join(f);
+            assert!(
+                user_file.exists(),
+                "File {f} should be copied to user rules dir"
+            );
+            let content = fs::read_to_string(&user_file)?;
+            assert!(
+                content.contains("test content"),
+                "File contents should match"
+            );
+        }
 
         Ok(())
     }

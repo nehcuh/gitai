@@ -1,20 +1,20 @@
 use crate::{
     config::{AppConfig, TreeSitterConfig},
-    errors::{AppError, AIError},
+    errors::{AIError, AppError},
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
-        core::{AnalysisDepth, parse_git_diff, detect_language_from_extension},
+        core::{AnalysisDepth, detect_language_from_extension, parse_git_diff},
     },
     types::{
-        ai::{ChatMessage, OpenAIChatRequest, OpenAIChatCompletionResponse},
-        git::{ReviewArgs, GitDiff},
+        ai::{ChatMessage, OpenAIChatCompletionResponse, OpenAIChatRequest},
+        git::{GitDiff, ReviewArgs},
     },
 };
 
 use super::git::extract_diff_for_review;
-use std::{collections::HashMap, env, fs, io::Write, time::Instant};
-use colored::Colorize;
 use chrono;
+use colored::Colorize;
+use std::{collections::HashMap, env, fs, io::Write, time::Instant};
 
 pub async fn handle_review(
     config: &mut AppConfig,
@@ -23,7 +23,9 @@ pub async fn handle_review(
     let start_time = Instant::now();
     tracing::info!(
         "开始执行代码评审，参数: depth={}, format={}, tree_sitter={}",
-        review_args.depth, review_args.format, review_args.tree_sitter
+        review_args.depth,
+        review_args.format,
+        review_args.tree_sitter
     );
 
     // Extract the Git diff
@@ -33,7 +35,8 @@ pub async fn handle_review(
     if diff_text.trim().is_empty() {
         tracing::warn!("未检测到代码变更");
         return Err(AppError::Generic(
-            "没有检测到代码变更，无法执行评审。请确保已暂存变更或指定了有效的提交范围。".to_string(),
+            "没有检测到代码变更，无法执行评审。请确保已暂存变更或指定了有效的提交范围。"
+                .to_string(),
         ));
     }
 
@@ -45,13 +48,17 @@ pub async fn handle_review(
 
     // Determine if TreeSitter should be used
     let use_tree_sitter = review_args.tree_sitter;
-    tracing::debug!("TreeSitter分析: {}", if use_tree_sitter { "启用" } else { "禁用" });
+    tracing::debug!(
+        "TreeSitter分析: {}",
+        if use_tree_sitter { "启用" } else { "禁用" }
+    );
 
     // Analyze the diff with appropriate analyzer
     let analyze_start = Instant::now();
     let (git_diff, analysis_text, analysis_results) = if use_tree_sitter {
         tracing::info!("使用TreeSitter进行深度代码分析");
-        analyze_diff_with_tree_sitter(&diff_text, depth, config).await
+        analyze_diff_with_tree_sitter(&diff_text, depth, config)
+            .await
             .map_err(|e| {
                 tracing::error!("TreeSitter分析失败: {:?}", e);
                 e
@@ -75,7 +82,8 @@ pub async fn handle_review(
         &review_args,
         &git_diff,
         &language_info,
-    ).await?;
+    )
+    .await?;
 
     // Try to send to AI
     let ai_start = Instant::now();
@@ -121,27 +129,31 @@ async fn analyze_diff_with_tree_sitter(
     diff_text: &str,
     _depth: AnalysisDepth,
     _config: &AppConfig,
-) -> Result<(GitDiff, String, Option<crate::tree_sitter_analyzer::core::DiffAnalysis>), AppError> {
+) -> Result<
+    (
+        GitDiff,
+        String,
+        Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    ),
+    AppError,
+> {
     // Initialize TreeSitter analyzer
-    let mut analyzer = TreeSitterAnalyzer::new(TreeSitterConfig::default())
-        .map_err(|e| {
-            tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-            AppError::TreeSitter(e)
-        })?;
+    let mut analyzer = TreeSitterAnalyzer::new(TreeSitterConfig::default()).map_err(|e| {
+        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
 
     // Parse the diff to get structured representation
-    let git_diff = parse_git_diff(diff_text)
-        .map_err(|e| {
-            tracing::error!("解析Git差异失败: {:?}", e);
-            AppError::TreeSitter(e)
-        })?;
+    let git_diff = parse_git_diff(diff_text).map_err(|e| {
+        tracing::error!("解析Git差异失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
 
     // Generate analysis using TreeSitter
-    let analysis = analyzer.analyze_diff(diff_text)
-        .map_err(|e| {
-            tracing::error!("执行差异分析失败: {:?}", e);
-            AppError::TreeSitter(e)
-        })?;
+    let analysis = analyzer.analyze_diff(diff_text).map_err(|e| {
+        tracing::error!("执行差异分析失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
 
     // Create detailed analysis text
     let analysis_text = format_tree_sitter_analysis(&analysis, &git_diff);
@@ -150,9 +162,17 @@ async fn analyze_diff_with_tree_sitter(
 }
 
 /// Simple diff analysis without TreeSitter
-async fn analyze_diff_simple(diff_text: &str) -> Result<(GitDiff, String, Option<crate::tree_sitter_analyzer::core::DiffAnalysis>), AppError> {
-    let git_diff = parse_git_diff(diff_text)
-        .map_err(|e| AppError::TreeSitter(e))?;
+async fn analyze_diff_simple(
+    diff_text: &str,
+) -> Result<
+    (
+        GitDiff,
+        String,
+        Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    ),
+    AppError,
+> {
+    let git_diff = parse_git_diff(diff_text).map_err(|e| AppError::TreeSitter(e))?;
 
     let mut analysis_text = String::new();
     analysis_text.push_str("## 代码变更分析\n\n");
@@ -191,37 +211,61 @@ fn format_tree_sitter_analysis(
     _git_diff: &GitDiff,
 ) -> String {
     let mut text = String::new();
-    
+
     text.push_str("## TreeSitter 代码结构分析\n\n");
     text.push_str(&format!("### 总体摘要\n\n{}\n\n", analysis.overall_summary));
-    
+
     text.push_str("### 变更统计\n\n");
-    text.push_str(&format!("- 影响文件数: **{}**\n", analysis.file_analyses.len()));
-    text.push_str(&format!("- 函数变更: **{}**\n", analysis.change_analysis.function_changes));
-    text.push_str(&format!("- 类型变更: **{}**\n", analysis.change_analysis.type_changes));
-    text.push_str(&format!("- 方法变更: **{}**\n", analysis.change_analysis.method_changes));
-    text.push_str(&format!("- 接口变更: **{}**\n", analysis.change_analysis.interface_changes));
-    text.push_str(&format!("- 其他变更: **{}**\n\n", analysis.change_analysis.other_changes));
-    
+    text.push_str(&format!(
+        "- 影响文件数: **{}**\n",
+        analysis.file_analyses.len()
+    ));
+    text.push_str(&format!(
+        "- 函数变更: **{}**\n",
+        analysis.change_analysis.function_changes
+    ));
+    text.push_str(&format!(
+        "- 类型变更: **{}**\n",
+        analysis.change_analysis.type_changes
+    ));
+    text.push_str(&format!(
+        "- 方法变更: **{}**\n",
+        analysis.change_analysis.method_changes
+    ));
+    text.push_str(&format!(
+        "- 接口变更: **{}**\n",
+        analysis.change_analysis.interface_changes
+    ));
+    text.push_str(&format!(
+        "- 其他变更: **{}**\n\n",
+        analysis.change_analysis.other_changes
+    ));
+
     // 按语言分组显示文件分析
-    let mut language_groups: HashMap<String, Vec<&crate::tree_sitter_analyzer::core::FileAnalysis>> = HashMap::new();
+    let mut language_groups: HashMap<
+        String,
+        Vec<&crate::tree_sitter_analyzer::core::FileAnalysis>,
+    > = HashMap::new();
     for file_analysis in &analysis.file_analyses {
-        language_groups.entry(file_analysis.language.clone()).or_default().push(file_analysis);
+        language_groups
+            .entry(file_analysis.language.clone())
+            .or_default()
+            .push(file_analysis);
     }
-    
+
     for (language, files) in language_groups {
         if language == "unknown" || language.is_empty() {
             continue;
         }
-        
+
         text.push_str(&format!("### {} 文件变更\n\n", language.to_uppercase()));
         for file_analysis in files {
             text.push_str(&format!("- **{}**\n", file_analysis.path.display()));
-            
+
             if let Some(summary) = &file_analysis.summary {
                 text.push_str(&format!("  - {}\n", summary));
             }
-            
+
             if !file_analysis.affected_nodes.is_empty() {
                 text.push_str("  - 受影响的代码结构:\n");
                 for node in &file_analysis.affected_nodes {
@@ -235,7 +279,7 @@ fn format_tree_sitter_analysis(
                         },
                         None => "",
                     };
-                    
+
                     text.push_str(&format!(
                         "    - {}**{}** `{}` ({})\n",
                         change_type, node.node_type, node.name, visibility
@@ -245,7 +289,7 @@ fn format_tree_sitter_analysis(
         }
         text.push_str("\n");
     }
-    
+
     // 添加评审建议
     text.push_str("### 评审重点建议\n\n");
     match &analysis.change_analysis.change_pattern {
@@ -269,7 +313,7 @@ fn format_tree_sitter_analysis(
             text.push_str("  - 使用 AI 进行深度评审，提供详细反馈\n");
         }
     }
-    
+
     text
 }
 
@@ -280,7 +324,9 @@ fn extract_language_info(
 ) -> String {
     if let Some(analysis) = analysis_results {
         // 从TreeSitter分析中获取详细语言信息
-        analysis.file_analyses.iter()
+        analysis
+            .file_analyses
+            .iter()
             .filter(|f| !f.language.is_empty() && f.language != "unknown" && f.language != "error")
             .map(|f| f.language.clone())
             .collect::<std::collections::HashSet<_>>()
@@ -289,9 +335,12 @@ fn extract_language_info(
             .join(", ")
     } else {
         // 从文件扩展名猜测语言
-        git_diff.changed_files.iter()
+        git_diff
+            .changed_files
+            .iter()
             .filter_map(|f| {
-                f.path.extension()
+                f.path
+                    .extension()
                     .and_then(|ext| ext.to_str())
                     .and_then(|ext| detect_language_from_extension(ext))
             })
@@ -315,7 +364,11 @@ async fn generate_ai_review_prompt(
         "你是一位经验丰富的代码评审专家，精通多种编程语言，特别是{}。\
         你擅长识别代码中的潜在问题、安全隐患和性能瓶颈，并提供具体的改进建议。\
         请根据提供的结构化分析，对以下代码变更进行全面评审。",
-        if languages.is_empty() { "各种编程语言".to_string() } else { languages.to_string() }
+        if languages.is_empty() {
+            "各种编程语言".to_string()
+        } else {
+            languages.to_string()
+        }
     );
 
     let focus_instruction = if let Some(focus) = &args.focus {
@@ -326,7 +379,8 @@ async fn generate_ai_review_prompt(
         2. 可能的安全隐患或漏洞\n\
         3. 性能优化机会\n\
         4. 可读性和可维护性\n\
-        5. 与现有代码的集成和兼容性".to_string()
+        5. 与现有代码的集成和兼容性"
+            .to_string()
     };
 
     let review_guide = "请提供结构化的评审，包括：\n\
@@ -441,39 +495,58 @@ fn generate_fallback_review(
     analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
 ) -> String {
     let mut review = String::new();
-    
+
     review.push_str("# 代码评审结果 (离线模式)\n\n");
     review.push_str("⚠️ **无法连接到 AI 服务，以下是基于静态分析的评审结果**\n\n");
-    
+
     review.push_str("## 基本代码检查\n\n");
-    
+
     if let Some(analysis) = analysis_results {
-        review.push_str(&format!("- 检测到 {} 个文件变更\n", analysis.file_analyses.len()));
-        review.push_str(&format!("- 函数变更: {}\n", analysis.change_analysis.function_changes));
-        review.push_str(&format!("- 类型变更: {}\n", analysis.change_analysis.type_changes));
-        review.push_str(&format!("- 变更模式: {:?}\n", analysis.change_analysis.change_pattern));
-        review.push_str(&format!("- 变更范围: {:?}\n", analysis.change_analysis.change_scope));
+        review.push_str(&format!(
+            "- 检测到 {} 个文件变更\n",
+            analysis.file_analyses.len()
+        ));
+        review.push_str(&format!(
+            "- 函数变更: {}\n",
+            analysis.change_analysis.function_changes
+        ));
+        review.push_str(&format!(
+            "- 类型变更: {}\n",
+            analysis.change_analysis.type_changes
+        ));
+        review.push_str(&format!(
+            "- 变更模式: {:?}\n",
+            analysis.change_analysis.change_pattern
+        ));
+        review.push_str(&format!(
+            "- 变更范围: {:?}\n",
+            analysis.change_analysis.change_scope
+        ));
     } else {
-        review.push_str(&format!("- 检测到 {} 个文件变更\n", git_diff.changed_files.len()));
+        review.push_str(&format!(
+            "- 检测到 {} 个文件变更\n",
+            git_diff.changed_files.len()
+        ));
     }
-    
+
     review.push_str("\n## 分析结果\n\n");
     review.push_str(analysis_text);
-    
+
     review.push_str("\n## 建议\n\n");
     review.push_str("- 请检查网络连接和 AI 配置\n");
     review.push_str("- 建议手动检查代码质量和安全性\n");
     review.push_str("- 考虑使用本地代码质量工具进行补充检查\n");
-    
+
     review
 }
 
 /// Format and output the review results
-async fn format_and_output_review(
-    review_text: &str,
-    args: &ReviewArgs,
-) -> Result<(), AppError> {
-    tracing::debug!("格式化输出，格式: {}, 输出文件: {:?}", args.format, args.output);
+async fn format_and_output_review(review_text: &str, args: &ReviewArgs) -> Result<(), AppError> {
+    tracing::debug!(
+        "格式化输出，格式: {}, 输出文件: {:?}",
+        args.format,
+        args.output
+    );
 
     let formatted_output = match args.format.to_lowercase().as_str() {
         "json" => {
@@ -487,7 +560,8 @@ async fn format_and_output_review(
                 "analysis_depth": args.depth,
                 "focus": args.focus,
                 "language": args.lang
-            }).to_string()
+            })
+            .to_string()
         }
         "html" => {
             tracing::debug!("使用HTML格式输出");
@@ -557,7 +631,11 @@ async fn format_and_output_review(
         file.flush()
             .map_err(|e| AppError::IO(format!("刷新文件缓冲区失败: {}", expanded_path), e))?;
 
-        println!("{} 评审结果已保存到: {}", "✅".green(), expanded_path.bold());
+        println!(
+            "{} 评审结果已保存到: {}",
+            "✅".green(),
+            expanded_path.bold()
+        );
         tracing::info!("评审结果已成功保存到文件: {}", expanded_path);
     } else {
         // 输出到控制台
