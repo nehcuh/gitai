@@ -92,7 +92,7 @@ pub async fn handle_review(
                     println!("Description:\n{}", item.description);
                     fetched_work_items.push(item);
                 }
-                Err(e: DevOpsError) => { // Explicitly type e as DevOpsError
+                Err(e) => { // Type of e is inferred
                     tracing::warn!("Failed to fetch a work item: {:?}", e);
                     println!("Failed to fetch work item: {:?}", e);
                     // Depending on requirements, one might choose to return an error here

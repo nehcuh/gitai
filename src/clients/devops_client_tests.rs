@@ -255,10 +255,9 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(500);
+            then.status(500).times(1); // .times(1) moved here
         })
-        .await // .await before .times()
-        .times(1); // Expect this mock to be called once
+        .await;
 
     // Second call succeeds
     let mock_200 = server
@@ -267,10 +266,9 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(200).json_body_obj(&success_response);
+            then.status(200).json_body_obj(&success_response).times(1); // .times(1) moved here
         })
-        .await // .await before .times()
-        .times(1); // Expect this mock to be called once
+        .await;
     
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_ok(), "Result was: {:?}", result.err());
@@ -446,10 +444,9 @@ async fn test_get_work_item_retry_persistent_failure() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(500);
+            then.status(500).times(3); // .times(3) moved here
         })
-        .await // .await before .times()
-        .times(3); // Expect this mock to be called three times (1 initial + 2 retries)
+        .await;
     
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_err());
