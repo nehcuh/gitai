@@ -257,8 +257,8 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
             ));
             then.status(500);
         })
-        .times(1) // Expect this mock to be called once
-        .await;
+        .await // .await before .times()
+        .times(1); // Expect this mock to be called once
 
     // Second call succeeds
     let mock_200 = server
@@ -269,8 +269,8 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
             ));
             then.status(200).json_body_obj(&success_response);
         })
-        .times(1) // Expect this mock to be called once
-        .await;
+        .await // .await before .times()
+        .times(1); // Expect this mock to be called once
     
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_ok(), "Result was: {:?}", result.err());
@@ -448,16 +448,15 @@ async fn test_get_work_item_retry_persistent_failure() {
             ));
             then.status(500);
         })
-        .await;
+        .await // .await before .times()
+        .times(3); // Expect this mock to be called three times (1 initial + 2 retries)
     
-    // The client should try 3 times (1 initial + 2 retries).
-    // So, the mock should be hit 3 times.
-    mock_500.expect_hits_async(3).await; // Default retry_count is 3
-
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_err());
     match result.unwrap_err() {
         DevOpsError::ServerError { status_code } => assert_eq!(status_code, 500),
         _ => panic!("Expected ServerError after retries"),
     }
+    // Assert that mock was called as expected
+    mock_500.assert_async().await;
 }
