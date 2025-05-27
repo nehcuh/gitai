@@ -1,7 +1,7 @@
 use crate::{
     clients::devops_client::DevOpsClient, // Added
     config::{AppConfig, TreeSitterConfig},
-    errors::{devops::ApiError as DevOpsApiError, AIError, AppError}, // Added DevOpsApiError
+    errors::{AIError, AppError, DevOpsError}, // Corrected import
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
@@ -164,7 +164,7 @@ pub async fn handle_review(
     tracing::debug!("检测到的语言: {}", language_info);
 
     // Generate AI prompt with enhanced context
-    let prompt = generate_ai_review_prompt(
+    let prompt_result: Result<String, AppError> = generate_ai_review_prompt(
         config,
         &diff_text,
         &analysis_text,
@@ -173,7 +173,8 @@ pub async fn handle_review(
         &language_info,
         &fetched_work_items, // Pass the fetched items
     )
-    .await?;
+    .await;
+    let prompt: String = prompt_result?;
 
     // Try to send to AI
     let ai_start = Instant::now();
