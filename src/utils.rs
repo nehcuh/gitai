@@ -156,7 +156,7 @@ pub fn generate_gitai_help() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::git::ReviewArgs;
+    use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
 
     fn make_args(vec: Vec<&str>) -> Vec<String> {
         vec.into_iter().map(String::from).collect()
@@ -211,9 +211,9 @@ mod tests {
             passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
             commit1: Some("abc123".to_string()),
             commit2: Some("def456".to_string()),
-            stories: Some(vec![1, 2, 3]),
-            tasks: Some(vec![4, 5]),
-            defects: Some(vec![6]),
+            stories: Some(CommaSeparatedU32List(vec![1, 2, 3])),
+            tasks: Some(CommaSeparatedU32List(vec![4, 5])),
+            defects: Some(CommaSeparatedU32List(vec![6])),
             space_id: Some(12345),
         };
         assert_eq!(construct_review_args(&args), expected);
@@ -257,7 +257,7 @@ mod tests {
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
-            stories: Some(vec![7, 8]),
+            stories: Some(CommaSeparatedU32List(vec![7, 8])),
             tasks: None,
             defects: None,
             space_id: Some(98765),
@@ -284,9 +284,9 @@ mod tests {
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
-            stories: Some(vec![]),
-            tasks: Some(vec![]),
-            defects: Some(vec![]),
+            stories: Some(CommaSeparatedU32List(vec![])),
+            tasks: Some(CommaSeparatedU32List(vec![])),
+            defects: Some(CommaSeparatedU32List(vec![])),
             space_id: Some(123),
         };
         assert_eq!(construct_review_args(&args), expected);

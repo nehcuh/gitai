@@ -1,5 +1,30 @@
 use clap::{Args, Parser, Subcommand};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
+
+// Wrapper type for comma-separated u32 lists to be used with clap
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommaSeparatedU32List(pub Vec<u32>);
+
+impl FromStr for CommaSeparatedU32List {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            // Handles cases like --stories=
+            Ok(CommaSeparatedU32List(Vec::new()))
+        } else {
+            s.split(',')
+                .map(|item_str| {
+                    item_str
+                        .trim()
+                        .parse::<u32>()
+                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
+                })
+                .collect::<Result<Vec<u32>, String>>()
+                .map(CommaSeparatedU32List)
+        }
+    }
+}
 
 /// Defines the command-line arguments specific to `gitai` own subcommands.
 /// This is typically used after determining that the invocation is not a global AI explanation request.
@@ -100,16 +125,16 @@ pub struct ReviewArgs {
     pub commit2: Option<String>,
 
     /// Stories associated with the review
-    #[clap(long, value_name = "STORIES", use_delimiter = true, value_delimiter = ',')]
-    pub stories: Option<Vec<u32>>,
+    #[clap(long, value_name = "STORIES", require_equals = true)]
+    pub stories: Option<CommaSeparatedU32List>,
 
     /// Tasks associated with the review
-    #[clap(long, value_name = "TASKS", use_delimiter = true, value_delimiter = ',')]
-    pub tasks: Option<Vec<u32>>,
+    #[clap(long, value_name = "TASKS", require_equals = true)]
+    pub tasks: Option<CommaSeparatedU32List>,
 
     /// Defects associated with the review
-    #[clap(long, value_name = "DEFECTS", use_delimiter = true, value_delimiter = ',')]
-    pub defects: Option<Vec<u32>>,
+    #[clap(long, value_name = "DEFECTS", require_equals = true)]
+    pub defects: Option<CommaSeparatedU32List>,
 
     /// Space ID for the review
     #[clap(long, value_name = "SPACE_ID")]

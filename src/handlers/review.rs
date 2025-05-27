@@ -5,12 +5,13 @@ use crate::{
         analyzer::TreeSitterAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
     },
-    types::{
-        git::{GitDiff, ReviewArgs},
-    },
+    types::git::{GitDiff, ReviewArgs},
 };
 
-use super::{ai::{execute_review_request, create_review_prompt}, git::extract_diff_for_review};
+use super::{
+    ai::{create_review_prompt, execute_review_request},
+    git::extract_diff_for_review,
+};
 use chrono;
 use colored::Colorize;
 use std::{collections::HashMap, env, fs, io::Write, time::Instant};
@@ -29,6 +30,17 @@ pub async fn handle_review(
             "When specifying stories, tasks, or defects, --space-id is required.".to_string(),
         ));
     }
+
+    // if review_args.stories.is_none()
+    //     && review_args.tasks.is_none()
+    //     && review_args.defects.is_none()
+    //     && review_args.space_id.is_some()
+    // {
+    //     return Err(AppError::Generic(
+    //         "When not specifying stories, tasks, or defects, --space-id is not supported."
+    //             .to_string(),
+    //     ));
+    // }
 
     let start_time = Instant::now();
     tracing::info!(
@@ -356,7 +368,7 @@ mod tests {
     use super::*;
     use crate::config::{AIConfig, AppConfig, TreeSitterConfig};
     use crate::errors::AppError;
-    use crate::types::git::ReviewArgs;
+    use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
     use std::collections::HashMap;
 
     fn default_review_args() -> ReviewArgs {
@@ -389,43 +401,49 @@ mod tests {
     async fn test_handle_review_validation_stories_without_space_id() {
         let mut config = minimal_app_config();
         let review_args = ReviewArgs {
-            stories: Some(vec![1]),
+            stories: Some(CommaSeparatedU32List(vec![1])),
             ..default_review_args()
         };
 
         let result = handle_review(&mut config, review_args).await;
-        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+        assert!(
+            matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
+        );
     }
 
     #[tokio::test]
     async fn test_handle_review_validation_tasks_without_space_id() {
         let mut config = minimal_app_config();
         let review_args = ReviewArgs {
-            tasks: Some(vec![1]),
+            tasks: Some(CommaSeparatedU32List(vec![1])),
             ..default_review_args()
         };
 
         let result = handle_review(&mut config, review_args).await;
-        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+        assert!(
+            matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
+        );
     }
 
     #[tokio::test]
     async fn test_handle_review_validation_defects_without_space_id() {
         let mut config = minimal_app_config();
         let review_args = ReviewArgs {
-            defects: Some(vec![1]),
+            defects: Some(CommaSeparatedU32List(vec![1])),
             ..default_review_args()
         };
 
         let result = handle_review(&mut config, review_args).await;
-        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+        assert!(
+            matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
+        );
     }
 
     #[tokio::test]
     async fn test_handle_review_validation_stories_with_space_id_ok() {
         let mut config = minimal_app_config();
         let review_args = ReviewArgs {
-            stories: Some(vec![1]),
+            stories: Some(CommaSeparatedU32List(vec![1])),
             space_id: Some(123),
             ..default_review_args()
         };
@@ -434,7 +452,9 @@ mod tests {
         // Expecting a different error because validation should pass, and git diff will fail.
         // Or Ok(()) if somehow the diff doesn't run or returns empty.
         match result {
-            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
+            Err(AppError::Generic(msg))
+                if msg == "When specifying stories, tasks, or defects, --space-id is required." =>
+            {
                 panic!("Validation should have passed, but failed with space_id error.");
             }
             _ => {
@@ -448,15 +468,19 @@ mod tests {
     async fn test_handle_review_validation_empty_stories_with_space_id_ok() {
         let mut config = minimal_app_config();
         let review_args = ReviewArgs {
-            stories: Some(vec![]),
+            stories: Some(CommaSeparatedU32List(vec![])),
             space_id: Some(123),
             ..default_review_args()
         };
 
         let result = handle_review(&mut config, review_args).await;
         match result {
-            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
-                panic!("Validation should have passed for empty stories with space_id, but failed.");
+            Err(AppError::Generic(msg))
+                if msg == "When specifying stories, tasks, or defects, --space-id is required." =>
+            {
+                panic!(
+                    "Validation should have passed for empty stories with space_id, but failed."
+                );
             }
             _ => {}
         }
@@ -471,8 +495,12 @@ mod tests {
 
         let result = handle_review(&mut config, review_args).await;
         match result {
-            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
-                panic!("Validation should have passed for no work items and no space_id, but failed.");
+            Err(AppError::Generic(msg))
+                if msg == "When specifying stories, tasks, or defects, --space-id is required." =>
+            {
+                panic!(
+                    "Validation should have passed for no work items and no space_id, but failed."
+                );
             }
             _ => {}
         }
@@ -488,12 +516,7 @@ async fn generate_ai_review_prompt(
     _git_diff: &GitDiff,
     languages: &str,
 ) -> Result<String, AppError> {
-    let prompt = create_review_prompt(
-        diff_text,
-        analysis,
-        args.focus.as_deref(),
-        languages,
-    );
+    let prompt = create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
 
     Ok(prompt)
 }
@@ -511,8 +534,6 @@ async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, A
 
     execute_review_request(config, &system_prompt, prompt).await
 }
-
-
 
 /// Generate fallback review when AI is unavailable
 fn generate_fallback_review(
