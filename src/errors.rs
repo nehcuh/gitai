@@ -1,3 +1,5 @@
+use thiserror::Error; // Added for DevOpsError
+
 #[allow(unused)]
 #[derive(Debug)]
 pub enum AppError {
@@ -5,9 +7,42 @@ pub enum AppError {
     Git(GitError),
     AI(AIError),
     TreeSitter(TreeSitterError),
+    DevOps(DevOpsError), // Added DevOpsError variant
     IO(String, std::io::Error), // For generic I/O errors not covered by specific types
     Generic(String),            // For simple string-based errors
 }
+
+// Copied and renamed ApiError from src/errors/devops.rs
+#[derive(Debug, Error)]
+pub enum DevOpsError {
+    #[error("Network request failed: {0}")]
+    NetworkError(#[from] reqwest::Error),
+    
+    #[error("Authentication failed: Invalid token")]
+    AuthenticationError,
+    
+    #[error("Work item {item_id} not found")]
+    WorkItemNotFound { item_id: u32 },
+    
+    #[error("API rate limit exceeded, please try again later")]
+    RateLimitExceeded,
+    
+    #[error("Server error: {status_code}")]
+    ServerError { status_code: u16 },
+    
+    #[error("Response data parsing failed: {0}")]
+    ParseError(#[from] serde_json::Error),
+    
+    #[error("Request timed out")]
+    TimeoutError,
+
+    #[error("API returned an error: Code {code}, Message: {message}")]
+    ApiLogicalError { code: i32, message: String },
+
+    #[error("Unexpected response structure from API: {0}")]
+    UnexpectedResponseStructure(String),
+}
+
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -78,6 +113,7 @@ impl std::fmt::Display for AppError {
             AppError::Git(e) => write!(f, "Git command error: {}", e),
             AppError::AI(e) => write!(f, "AI interaction error: {}", e),
             AppError::TreeSitter(e) => write!(f, "Tree-sitter error: {}", e),
+            AppError::DevOps(e) => write!(f, "DevOps API error: {}", e), // Added for DevOps
             AppError::IO(context, e) => write!(f, "I/O error while {}: {}", context, e),
             AppError::Generic(s) => write!(f, "Application error: {}", s),
         }
@@ -91,6 +127,7 @@ impl std::error::Error for AppError {
             AppError::Git(e) => Some(e),
             AppError::AI(e) => Some(e),
             AppError::TreeSitter(e) => Some(e),
+            AppError::DevOps(e) => Some(e), // Added for DevOps
             AppError::IO(_, e) => Some(e),
             AppError::Generic(_) => None,
         }
@@ -286,6 +323,13 @@ impl From<AIError> for AppError {
 impl From<TreeSitterError> for AppError {
     fn from(err: TreeSitterError) -> Self {
         AppError::TreeSitter(err)
+    }
+}
+
+// Added From<DevOpsError> for AppError
+impl From<DevOpsError> for AppError {
+    fn from(err: DevOpsError) -> Self {
+        AppError::DevOps(err)
     }
 }
 
