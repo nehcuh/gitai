@@ -13,3 +13,10 @@ analysis_depth = "medium"
 cache_enabled = true
 # 支持的语言列表
 languages = ["rust", "javascript", "python", "go", "java"]
+
+[account]
+devops_platform = "coding"                    # Supported: "coding", "jira", "azure-devops"
+base_url = "https://your-devops-instance.com" # Your DevOps instance URL
+token = "YOUR_DEVOPS_API_TOKEN"               # Your personal access token
+timeout = 30000                               # Optional: API request timeout in milliseconds (default: 30000)
+retry_count = 3                               # Optional: API request retry count (default: 3)

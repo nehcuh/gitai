@@ -18,6 +18,10 @@ pub enum ConfigError {
     PromptFileMissing(String),
     FieldMissing(String), // Added for missing required fields
     GitConfigRead(String, std::io::Error),
+    DevOpsConfigMissing(String), // DevOps platform configuration missing
+    UnsupportedPlatform(String), // Unsupported platform
+    InvalidUrl(String),
+    EmptyToken,
     Other(String), // Other errors
 }
 
@@ -114,6 +118,18 @@ impl std::fmt::Display for ConfigError {
             ConfigError::GitConfigRead(context, e) => {
                 write!(f, "Failed to read Git configuration for {}: {}", context, e)
             }
+            ConfigError::DevOpsConfigMissing(context) => {
+                write!(f, "Failed to read DevOps configuration: {}", context)
+            }
+            ConfigError::UnsupportedPlatform(context) => {
+                write!(f, "Unsupported DevOps platform: {}", context)
+            }
+            ConfigError::InvalidUrl(context) => {
+                write!(f, "Wrong url format: {}", context)
+            }
+            ConfigError::EmptyToken => {
+                write!(f, "Empty token")
+            }
             ConfigError::Other(content) => write!(f, "Other Config Error: {}", content),
         }
     }
@@ -128,6 +144,10 @@ impl std::error::Error for ConfigError {
             ConfigError::PromptFileMissing(_) => None,
             ConfigError::FieldMissing(_) => None,
             ConfigError::GitConfigRead(_, e) => Some(e),
+            ConfigError::DevOpsConfigMissing(_) => None,
+            ConfigError::UnsupportedPlatform(_) => None,
+            ConfigError::InvalidUrl(_) => None,
+            ConfigError::EmptyToken => None,
             ConfigError::Other(_) => None,
         }
     }

@@ -44,7 +44,7 @@ pub struct AIConfig {
 }
 
 /// Account Configuration for DevOps platforms
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct AccountConfig {
     pub devops_platform: String,
     pub base_url: String,
@@ -63,7 +63,7 @@ impl Default for AccountConfig {
             base_url: String::new(),
             token: String::new(),
             timeout: Some(30000), // Default timeout 30 seconds
-            retry_count: Some(3),   // Default retry count 3
+            retry_count: Some(3), // Default retry count 3
         }
     }
 }
@@ -81,7 +81,9 @@ impl AccountConfig {
         let token_env = env_map.get("GITAI_DEVOPS_TOKEN");
 
         // Extract values from file_account_config if it exists
-        let file_platform = file_account_config.as_ref().map(|c| c.devops_platform.clone());
+        let file_platform = file_account_config
+            .as_ref()
+            .map(|c| c.devops_platform.clone());
         let file_base_url = file_account_config.as_ref().map(|c| c.base_url.clone());
         let file_token = file_account_config.as_ref().map(|c| c.token.clone());
         let file_timeout = file_account_config.as_ref().and_then(|c| c.timeout);
@@ -104,16 +106,39 @@ impl AccountConfig {
             return Ok(None);
         }
 
+        // Check if core fields have meaningful values (not None and not empty)
+        let platform_is_meaningful = devops_platform.as_ref().map_or(false, |s| !s.is_empty());
+        let url_is_meaningful = base_url.as_ref().map_or(false, |s| !s.is_empty());
+        let token_is_meaningful = token.as_ref().map_or(false, |s| !s.is_empty());
+
+        if !platform_is_meaningful && !url_is_meaningful && !token_is_meaningful {
+            // If no core fields have non-empty values from any source,
+            // it means no account config is intended, even if optional fields like timeout/retry exist.
+            return Ok(None);
+        }
+
         // If some core fields are present, then all three (platform, url, token) must be resolvable.
-        let final_devops_platform = devops_platform.ok_or_else(|| ConfigError::Missing("account.devops_platform (and GITAI_DEVOPS_PLATFORM not set)".to_string()))?;
-        let final_base_url = base_url.ok_or_else(|| ConfigError::Missing("account.base_url (and GITAI_DEVOPS_BASE_URL not set)".to_string()))?;
-        let final_token = token.ok_or_else(|| ConfigError::Missing("account.token (and GITAI_DEVOPS_TOKEN not set)".to_string()))?;
+        let final_devops_platform = devops_platform.ok_or_else(|| {
+            ConfigError::DevOpsConfigMissing(
+                "account.devops_platform (and GITAI_DEVOPS_PLATFORM not set)".to_string(),
+            )
+        })?;
+        let final_base_url = base_url.ok_or_else(|| {
+            ConfigError::DevOpsConfigMissing(
+                "account.base_url (and GITAI_DEVOPS_BASE_URL not set)".to_string(),
+            )
+        })?;
+        let final_token = token.ok_or_else(|| {
+            ConfigError::DevOpsConfigMissing(
+                "account.token (and GITAI_DEVOPS_TOKEN not set)".to_string(),
+            )
+        })?;
 
         Ok(Some(Self {
             devops_platform: final_devops_platform,
             base_url: final_base_url,
             token: final_token,
-            timeout, // Will be None if not in file_account_config
+            timeout,     // Will be None if not in file_account_config
             retry_count, // Will be None if not in file_account_config
         }))
     }
@@ -122,7 +147,11 @@ impl AccountConfig {
         // Validate platform support
         match self.devops_platform.to_lowercase().as_str() {
             "coding" | "jira" | "azure-devops" => { /* Platform is supported */ }
-            _ => return Err(ConfigError::UnsupportedPlatform(self.devops_platform.clone())),
+            _ => {
+                return Err(ConfigError::UnsupportedPlatform(
+                    self.devops_platform.clone(),
+                ));
+            }
         }
 
         // Validate URL format
@@ -554,13 +583,16 @@ impl AppConfig {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
             .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
         let project_queries = PathBuf::from(manifest_dir).join("queries");
-        
+
         // Skip if queries directory doesn't exist (e.g., in tests)
         if !project_queries.exists() {
-            tracing::debug!("Queries directory {:?} does not exist, skipping rules initialization", project_queries);
+            tracing::debug!(
+                "Queries directory {:?} does not exist, skipping rules initialization",
+                project_queries
+            );
             return Ok(());
         }
-        
+
         let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
         for entry in std::fs::read_dir(&project_queries)
             .map_err(|e| ConfigError::FileRead("read project queries".into(), e))?
@@ -745,6 +777,43 @@ impl AppConfig {
             tracing::debug!("Tree-sitter 支持的语言: {}", languages.join(", "));
         }
 
+        // --- Account Configuration Loading ---
+        let file_loaded_account_config: Option<AccountConfig> =
+            partial_config.account.map(|p_acc| AccountConfig {
+                devops_platform: p_acc.devops_platform.unwrap_or_default(),
+                base_url: p_acc.base_url.unwrap_or_default(),
+                token: p_acc.token.unwrap_or_default(),
+                timeout: p_acc.timeout.or(AccountConfig::default().timeout),
+                retry_count: p_acc.retry_count.or(AccountConfig::default().retry_count),
+            });
+
+        let mut env_map = HashMap::new();
+        if let Ok(val) = env::var("GITAI_DEVOPS_PLATFORM") {
+            env_map.insert("GITAI_DEVOPS_PLATFORM".to_string(), val);
+        }
+        if let Ok(val) = env::var("GITAI_DEVOPS_BASE_URL") {
+            env_map.insert("GITAI_DEVOPS_BASE_URL".to_string(), val);
+        }
+        if let Ok(val) = env::var("GITAI_DEVOPS_TOKEN") {
+            env_map.insert("GITAI_DEVOPS_TOKEN".to_string(), val);
+        }
+
+        let final_account_config =
+            match AccountConfig::from_env_or_file(file_loaded_account_config, &env_map)? {
+                Some(acc_conf) => {
+                    acc_conf.validate()?;
+                    Some(acc_conf)
+                }
+                None => None,
+            };
+
+        if final_account_config.is_some() {
+            tracing::info!("Account configuration loaded successfully.");
+        } else {
+            tracing::info!("No account configuration found or loaded.");
+        }
+        // --- End Account Configuration Loading ---
+
         if prompts.is_empty() {
             tracing::warn!("未能加载任何提示文件，配置可能不完整");
         } else if prompts.len() < prompt_paths.len() {
@@ -768,12 +837,20 @@ impl AppConfig {
         let config = Self {
             ai: ai_config,
             tree_sitter: tree_sitter_config,
+            account: final_account_config,
             prompts,
         };
 
         tracing::info!("配置加载完成，Gitai 准备就绪");
         Ok(config)
     }
+}
+
+// Helper to create HashMap for environment variables
+fn make_env_map(vars: &[(&str, &str)]) -> HashMap<String, String> {
+    vars.iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -886,6 +963,125 @@ mod tests {
 
         // Return the actual paths where config files will be written by the functions under test
         Ok((temp_dir, user_config_base_dir, user_prompts_dir))
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_all_from_file() {
+        let file_config = Some(AccountConfig {
+            devops_platform: "coding".to_string(),
+            base_url: "https://file.example.com".to_string(),
+            token: "file_token".to_string(),
+            timeout: Some(10000),
+            retry_count: Some(1),
+        });
+        let env_map = HashMap::new();
+        let result = AccountConfig::from_env_or_file(file_config.clone(), &env_map).unwrap();
+        assert_eq!(result, file_config);
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_all_from_env() {
+        let env_map = make_env_map(&[
+            ("GITAI_DEVOPS_PLATFORM", "jira"),
+            ("GITAI_DEVOPS_BASE_URL", "https://env.example.com"),
+            ("GITAI_DEVOPS_TOKEN", "env_token"),
+        ]);
+        let result = AccountConfig::from_env_or_file(None, &env_map).unwrap();
+        assert!(result.is_some());
+        let config = result.unwrap();
+        assert_eq!(config.devops_platform, "jira");
+        assert_eq!(config.base_url, "https://env.example.com");
+        assert_eq!(config.token, "env_token");
+        assert_eq!(config.timeout, None); // No file config, so None
+        assert_eq!(config.retry_count, None); // No file config, so None
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_mixed_env_overrides() {
+        let file_config = Some(AccountConfig {
+            devops_platform: "coding".to_string(),
+            base_url: "https://file.example.com".to_string(),
+            token: "file_token".to_string(),
+            timeout: Some(10000),
+            retry_count: Some(1),
+        });
+        let env_map = make_env_map(&[
+            ("GITAI_DEVOPS_PLATFORM", "jira"),
+            ("GITAI_DEVOPS_BASE_URL", "https://env.example.com"),
+            ("GITAI_DEVOPS_TOKEN", "env_token"),
+        ]);
+        let result = AccountConfig::from_env_or_file(file_config, &env_map).unwrap();
+        assert!(result.is_some());
+        let config = result.unwrap();
+        assert_eq!(config.devops_platform, "jira");
+        assert_eq!(config.base_url, "https://env.example.com");
+        assert_eq!(config.token, "env_token");
+        assert_eq!(config.timeout, Some(10000)); // From file
+        assert_eq!(config.retry_count, Some(1)); // From file
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_partial_file_completed_by_env() {
+        let file_config = Some(AccountConfig {
+            devops_platform: "coding".to_string(),
+            base_url: "".to_string(), //  empty, to be overridden or completed
+            token: "".to_string(),    // empty
+            timeout: Some(5000),
+            retry_count: None,
+        });
+        let env_map = make_env_map(&[
+            ("GITAI_DEVOPS_BASE_URL", "https://env.example.com"),
+            ("GITAI_DEVOPS_TOKEN", "env_token_for_partial_file"),
+        ]);
+        let result = AccountConfig::from_env_or_file(file_config, &env_map).unwrap();
+        assert!(result.is_some());
+        let config = result.unwrap();
+        assert_eq!(config.devops_platform, "coding"); // From file
+        assert_eq!(config.base_url, "https://env.example.com"); // From env
+        assert_eq!(config.token, "env_token_for_partial_file"); // From env
+        assert_eq!(config.timeout, Some(5000));
+        assert_eq!(config.retry_count, None);
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_partial_env_completed_by_file() {
+        let file_config = Some(AccountConfig {
+            devops_platform: "".to_string(), // empty, should be completed by file if env is not set
+            base_url: "https://file.example.com".to_string(),
+            token: "file_token_for_partial_env".to_string(),
+            timeout: None,
+            retry_count: Some(2),
+        });
+        let env_map = make_env_map(&[("GITAI_DEVOPS_PLATFORM", "azure-devops")]);
+        let result = AccountConfig::from_env_or_file(file_config, &env_map).unwrap();
+        assert!(result.is_some());
+        let config = result.unwrap();
+        assert_eq!(config.devops_platform, "azure-devops"); // From env
+        assert_eq!(config.base_url, "https://file.example.com"); // From file
+        assert_eq!(config.token, "file_token_for_partial_env"); // From file
+        assert_eq!(config.timeout, None);
+        assert_eq!(config.retry_count, Some(2));
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_all_missing() {
+        let result = AccountConfig::from_env_or_file(None, &HashMap::new()).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_account_config_from_env_or_file_only_optional_fields_in_file() {
+        let file_config = Some(AccountConfig {
+            devops_platform: "".to_string(),
+            base_url: "".to_string(),
+            token: "".to_string(),
+            timeout: Some(10000),
+            retry_count: Some(5),
+        });
+        let env_map = HashMap::new();
+        let result = AccountConfig::from_env_or_file(file_config, &env_map).unwrap();
+        // Since platform, base_url, and token are empty, it should be treated as no config provided.
+        assert!(result.is_none());
     }
 
     #[test]
@@ -1039,7 +1235,7 @@ mod tests {
             app_config.prompts.get("translator").unwrap().trim(),
             "Translator AI help prompt."
         );
-        
+
         assert!(app_config.prompts.contains_key("review"));
         assert_eq!(
             app_config.prompts.get("review").unwrap().trim(),
