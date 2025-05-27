@@ -255,7 +255,7 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(500).times(1); // .times(1) moved here
+            then.status(500); // Removed .times(1)
         })
         .await;
 
@@ -266,7 +266,7 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(200).json_body_obj(&success_response).times(1); // .times(1) moved here
+            then.status(200).json_body_obj(&success_response); // Removed .times(1)
         })
         .await;
     
@@ -275,8 +275,8 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
     assert_eq!(result.unwrap(), mock_item);
 
     // Assert that mocks were called as expected
-    mock_500.assert_async().await;
-    mock_200.assert_async().await;
+    mock_500.assert_hits_async(1).await; // Changed to assert_hits_async(1)
+    mock_200.assert_hits_async(1).await; // Changed to assert_hits_async(1)
 }
 
 #[tokio::test]
@@ -444,7 +444,7 @@ async fn test_get_work_item_retry_persistent_failure() {
                 "/external/collaboration/api/project/{}/issues/{}",
                 space_id, item_id
             ));
-            then.status(500).times(3); // .times(3) moved here
+            then.status(500); // Removed .times(3)
         })
         .await;
     
@@ -455,5 +455,5 @@ async fn test_get_work_item_retry_persistent_failure() {
         _ => panic!("Expected ServerError after retries"),
     }
     // Assert that mock was called as expected
-    mock_500.assert_async().await;
+    mock_500.assert_hits_async(3).await; // Changed to assert_hits_async(3)
 }

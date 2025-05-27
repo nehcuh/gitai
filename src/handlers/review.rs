@@ -1,7 +1,7 @@
 use crate::{
     clients::devops_client::DevOpsClient, // Added
     config::{AppConfig, TreeSitterConfig},
-    errors::{AIError, AppError, DevOpsError}, // Corrected import
+    errors::{AIError, AppError}, // DevOpsError import removed
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
