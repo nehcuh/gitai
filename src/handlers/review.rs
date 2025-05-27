@@ -1,11 +1,15 @@
 use crate::{
+    clients::devops_client::DevOpsClient, // Added
     config::{AppConfig, TreeSitterConfig},
-    errors::{AIError, AppError},
+    errors::{devops::ApiError as DevOpsApiError, AIError, AppError}, // Added DevOpsApiError
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
     },
-    types::git::{GitDiff, ReviewArgs},
+    types::{
+        devops::WorkItem, // Added
+        git::{GitDiff, ReviewArgs},
+    },
 };
 
 use super::{
@@ -14,7 +18,7 @@ use super::{
 };
 use chrono;
 use colored::Colorize;
-use std::{collections::HashMap, env, fs, io::Write, time::Instant};
+use std::{collections::HashMap, env, fs, io::Write, time::Instant}; // env was already here
 
 pub async fn handle_review(
     config: &mut AppConfig,
@@ -29,6 +33,73 @@ pub async fn handle_review(
         return Err(AppError::Generic(
             "When specifying stories, tasks, or defects, --space-id is required.".to_string(),
         ));
+    }
+
+    // DevOps Client Instantiation & Work Item Fetching
+    let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
+        .unwrap_or_else(|_| "https://codingcorp.devops.cmschina.com.cn".to_string());
+    let devops_token = env::var("DEV_DEVOPS_API_TOKEN")
+        .unwrap_or_else(|_| "your_placeholder_token".to_string());
+
+    if devops_token == "your_placeholder_token" {
+        tracing::warn!("Using placeholder DevOps API token. Please set DEV_DEVOPS_API_TOKEN environment variable.");
+    }
+    let devops_client = DevOpsClient::new(devops_base_url, devops_token);
+
+    let mut all_work_item_ids: Vec<u32> = Vec::new();
+    if let Some(stories) = &review_args.stories {
+        all_work_item_ids.extend(&stories.0);
+    }
+    if let Some(tasks) = &review_args.tasks {
+        all_work_item_ids.extend(&tasks.0);
+    }
+    if let Some(defects) = &review_args.defects {
+        all_work_item_ids.extend(&defects.0);
+    }
+
+    all_work_item_ids.sort_unstable();
+    all_work_item_ids.dedup();
+
+    let mut fetched_work_items: Vec<WorkItem> = Vec::new();
+
+    if !all_work_item_ids.is_empty() && review_args.space_id.is_some() {
+        let space_id = review_args.space_id.unwrap(); // Already validated
+        tracing::info!(
+            "Fetching work items from DevOps: Space ID {}, Item IDs: {:?}",
+            space_id,
+            all_work_item_ids
+        );
+
+        // Note: devops_client.get_work_items returns Vec<Result<WorkItem, DevOpsApiError>>
+        // The prompt's Ok(results) / Err(e) for the whole batch is not how my client is structured.
+        // My client's get_work_items itself doesn't return a Result for the batch, but a Vec of Results.
+        let results = devops_client
+            .get_work_items(space_id, &all_work_item_ids)
+            .await;
+        
+        for result in results {
+            match result {
+                Ok(item) => {
+                    tracing::info!(
+                        "Successfully fetched work item: ID {}, Name: {}",
+                        item.id,
+                        item.name
+                    );
+                    println!(
+                        "Fetched Work Item: ID: {}, Name: {}, Type: {}, Status: {}",
+                        item.id, item.name, item.r#type, item.status_name
+                    );
+                    println!("Description:\n{}", item.description);
+                    fetched_work_items.push(item);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch a work item: {:?}", e);
+                    println!("Failed to fetch work item: {:?}", e);
+                    // Depending on requirements, one might choose to return an error here
+                    // or collect errors and decide later. For now, just log and continue.
+                }
+            }
+        }
     }
 
     // if review_args.stories.is_none()
@@ -100,6 +171,7 @@ pub async fn handle_review(
         &review_args,
         &git_diff,
         &language_info,
+        &fetched_work_items, // Pass the fetched items
     )
     .await?;
 
@@ -516,10 +588,35 @@ async fn generate_ai_review_prompt(
     args: &ReviewArgs,
     _git_diff: &GitDiff,
     languages: &str,
+    work_items: &[WorkItem], // New parameter
 ) -> Result<String, AppError> {
-    let prompt = create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
+    let work_items_summary = if work_items.is_empty() {
+        String::new()
+    } else {
+        let mut summary = String::from("\n\n## Relevant Work Items:\n");
+        for item in work_items {
+            summary.push_str(&format!(
+                "- **{} (ID: {})**: {}\n  Type: {}, Status: {}\n  Description:\n{}\n",
+                item.name,
+                item.id,
+                item.issue_type_detail.name, // Main title/summary for the type
+                item.r#type,                 // General type like "Story", "Task"
+                item.status_name,
+                item.description
+                    .lines()
+                    .map(|l| format!("    {}", l))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ));
+        }
+        summary
+    };
 
-    Ok(prompt)
+    let prompt_without_work_items =
+        create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
+
+    // Append work items summary to the prompt
+    Ok(format!("{}{}", prompt_without_work_items, work_items_summary))
 }
 
 /// Send review request to AI

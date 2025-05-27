@@ -1,4 +1,5 @@
 mod config;
+pub mod clients;
 mod errors;
 mod handlers;
 mod tree_sitter_analyzer;
