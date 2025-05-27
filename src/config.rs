@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, io::ErrorKind, path::PathBuf};
 
 use crate::errors::ConfigError;
@@ -41,6 +41,102 @@ pub struct AIConfig {
     pub temperature: f32,
     pub api_key: Option<String>,
     // optional: top_k, top_p
+}
+
+/// Account Configuration for DevOps platforms
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AccountConfig {
+    pub devops_platform: String,
+    pub base_url: String,
+    pub token: String,
+    pub timeout: Option<u64>,
+    pub retry_count: Option<u32>,
+}
+
+// Default implementation for AccountConfig
+// Note: User must provide devops_platform, base_url, and token.
+// Defaults are provided for timeout and retry_count.
+impl Default for AccountConfig {
+    fn default() -> Self {
+        Self {
+            devops_platform: String::new(), // Or some default platform if applicable
+            base_url: String::new(),
+            token: String::new(),
+            timeout: Some(30000), // Default timeout 30 seconds
+            retry_count: Some(3),   // Default retry count 3
+        }
+    }
+}
+
+impl AccountConfig {
+    // Note: The user story's example took `config: Option<AccountConfig>`.
+    // We'll take `file_account_config: Option<Self>` to represent the config loaded from the file.
+    // And `env_map: &HashMap<String, String>` to pass pre-fetched environment variables.
+    pub fn from_env_or_file(
+        file_account_config: Option<Self>, // Config directly from TOML
+        env_map: &HashMap<String, String>, // Pre-fetched relevant environment variables
+    ) -> Result<Option<Self>, ConfigError> {
+        let devops_platform_env = env_map.get("GITAI_DEVOPS_PLATFORM");
+        let base_url_env = env_map.get("GITAI_DEVOPS_BASE_URL");
+        let token_env = env_map.get("GITAI_DEVOPS_TOKEN");
+
+        // Extract values from file_account_config if it exists
+        let file_platform = file_account_config.as_ref().map(|c| c.devops_platform.clone());
+        let file_base_url = file_account_config.as_ref().map(|c| c.base_url.clone());
+        let file_token = file_account_config.as_ref().map(|c| c.token.clone());
+        let file_timeout = file_account_config.as_ref().and_then(|c| c.timeout);
+        let file_retry_count = file_account_config.as_ref().and_then(|c| c.retry_count);
+
+        // Determine final values, giving priority to environment variables
+        let devops_platform = devops_platform_env.map(|s| s.to_string()).or(file_platform);
+        let base_url = base_url_env.map(|s| s.to_string()).or(file_base_url);
+        let token = token_env.map(|s| s.to_string()).or(file_token);
+
+        // Optional fields: only take from file config if no env override is present for mandatory fields.
+        // The user story implies env vars only for platform, base_url, token.
+        // So, timeout and retry_count will come from file_account_config if it exists.
+        let timeout = file_timeout;
+        let retry_count = file_retry_count;
+
+        // Check if any of the core fields were specified at all (either env or file)
+        if devops_platform.is_none() && base_url.is_none() && token.is_none() {
+            // If no core fields are found from any source, it means no account config is intended.
+            return Ok(None);
+        }
+
+        // If some core fields are present, then all three (platform, url, token) must be resolvable.
+        let final_devops_platform = devops_platform.ok_or_else(|| ConfigError::Missing("account.devops_platform (and GITAI_DEVOPS_PLATFORM not set)".to_string()))?;
+        let final_base_url = base_url.ok_or_else(|| ConfigError::Missing("account.base_url (and GITAI_DEVOPS_BASE_URL not set)".to_string()))?;
+        let final_token = token.ok_or_else(|| ConfigError::Missing("account.token (and GITAI_DEVOPS_TOKEN not set)".to_string()))?;
+
+        Ok(Some(Self {
+            devops_platform: final_devops_platform,
+            base_url: final_base_url,
+            token: final_token,
+            timeout, // Will be None if not in file_account_config
+            retry_count, // Will be None if not in file_account_config
+        }))
+    }
+
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Validate platform support
+        match self.devops_platform.to_lowercase().as_str() {
+            "coding" | "jira" | "azure-devops" => { /* Platform is supported */ }
+            _ => return Err(ConfigError::UnsupportedPlatform(self.devops_platform.clone())),
+        }
+
+        // Validate URL format
+        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
+            return Err(ConfigError::InvalidUrl(self.base_url.clone()));
+        }
+
+        // Validate token format (presence)
+        if self.token.is_empty() {
+            return Err(ConfigError::EmptyToken);
+        }
+
+        Ok(())
+    }
 }
 
 /// Tree-sitter Configuration
@@ -108,6 +204,16 @@ pub struct PartialAIConfig {
     api_key: Option<String>,
 }
 
+/// Partial loading helper struct for Account configuration
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct PartialAccountConfig {
+    pub devops_platform: Option<String>,
+    pub base_url: Option<String>,
+    pub token: Option<String>,
+    pub timeout: Option<u64>,
+    pub retry_count: Option<u32>,
+}
+
 /// Partial loading helper structure for Tree-sitter configuration
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct PartialTreeSitterConfig {
@@ -131,6 +237,9 @@ pub struct AppConfig {
     #[serde(default)]
     pub tree_sitter: TreeSitterConfig,
 
+    #[serde(default)]
+    pub account: Option<AccountConfig>,
+
     #[serde(skip)]
     pub prompts: HashMap<String, String>,
 }
@@ -139,6 +248,7 @@ pub struct AppConfig {
 pub struct PartialAppConfig {
     ai: Option<PartialAIConfig>,
     tree_sitter: Option<PartialTreeSitterConfig>,
+    account: Option<PartialAccountConfig>,
 }
 
 impl AppConfig {
