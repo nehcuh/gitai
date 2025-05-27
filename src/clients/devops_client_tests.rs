@@ -3,7 +3,6 @@ use super::DevOpsClient; // Assuming devops_client_tests.rs is in the same direc
 use crate::errors::DevOpsError;
 use crate::types::devops::{DevOpsResponse, IssueTypeDetail, WorkItem};
 use httpmock::prelude::*;
-use std::time::Duration;
 
 // Helper function to create a common IssueTypeDetail
 fn common_issue_type_detail() -> IssueTypeDetail {
@@ -258,6 +257,7 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
             ));
             then.status(500);
         })
+        .times(1) // Expect this mock to be called once
         .await;
 
     // Second call succeeds
@@ -269,18 +269,16 @@ async fn test_get_work_item_retry_success_on_second_attempt() {
             ));
             then.status(200).json_body_obj(&success_response);
         })
+        .times(1) // Expect this mock to be called once
         .await;
     
-    // The client's retry logic should handle this sequence.
-    // We expect the first call to hit mock_500, then retry, hit mock_200.
-    // To ensure this, we make mock_500 expect only 1 hit.
-    mock_500.expect_hits_async(1).await;
-    mock_200.expect_hits_async(1).await;
-
-
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_ok(), "Result was: {:?}", result.err());
     assert_eq!(result.unwrap(), mock_item);
+
+    // Assert that mocks were called as expected
+    mock_500.assert_async().await;
+    mock_200.assert_async().await;
 }
 
 #[tokio::test]
@@ -421,12 +419,9 @@ async fn test_get_work_items_empty_list() {
 
 #[tokio::test]
 async fn test_get_work_item_network_error() {
-    let server = MockServer::start_async().await;
-    let base_url = server.base_url(); // Get base_url before stopping
-    let client = DevOpsClient::new(base_url, "token".to_string());
+    // Intentionally use a non-existent server address for this test
+    let client = DevOpsClient::new("http://localhost:12345".to_string(), "token".to_string());
     
-    server.stop_async().await; // Stop the server
-
     let result = client.get_work_item(1, 1).await;
     assert!(result.is_err());
     match result.unwrap_err() {

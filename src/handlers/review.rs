@@ -439,7 +439,7 @@ fn extract_language_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AIConfig, AccountConfig, AppConfig, TreeSitterConfig};
+    use crate::config::{AIConfig, AppConfig, TreeSitterConfig}; // Removed AccountConfig
     use crate::errors::AppError;
     use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
     use std::collections::HashMap;

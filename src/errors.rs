@@ -31,7 +31,7 @@ pub enum DevOpsError {
     ServerError { status_code: u16 },
     
     #[error("Response data parsing failed: {0}")]
-    ParseError(#[from] serde_json::Error),
+    ParseError(reqwest::Error), // Changed from serde_json::Error, removed #[from]
     
     #[error("Request timed out")]
     TimeoutError,

@@ -1,13 +1,13 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct DevOpsResponse {
     pub code: i32,
     pub msg: Option<String>,
     pub data: Option<WorkItem>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkItem {
     pub id: u32,
     pub name: String,
@@ -20,7 +20,7 @@ pub struct WorkItem {
     pub priority: u32,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct IssueTypeDetail {
     pub id: u32,
     pub name: String,

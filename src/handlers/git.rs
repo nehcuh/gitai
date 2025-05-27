@@ -1,7 +1,6 @@
 use std::process::Command;
 
 use crate::{
-    config::AppConfig,
     errors::{AppError, GitError},
     types::{general::CommandOutput, git::ReviewArgs},
 };

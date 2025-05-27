@@ -1,6 +1,4 @@
-use crate::{
-    config::AppConfig, errors::AppError, types::general::CommandOutput, utils::generate_gitai_help,
-};
+use crate::{config::AppConfig, errors::AppError, utils::generate_gitai_help};
 
 use super::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling};
 
