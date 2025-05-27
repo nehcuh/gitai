@@ -38,6 +38,10 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
         }
     }
 }
@@ -81,7 +85,11 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --output=FILE    输出文件\n");
     help.push_str("      --tree-sitter    使用 Tree-sitter 进行增强代码分析（默认）\n");
     help.push_str("      --commit1=COMMIT 第一个提交引用\n");
-    help.push_str("      --commit2=COMMIT 第二个提交引用（如果比较两个提交）\n\n");
+    help.push_str("      --commit2=COMMIT 第二个提交引用（如果比较两个提交）\n");
+    help.push_str("      --stories=IDs    用户故事 ID 列表 (例如: 123,456)\n");
+    help.push_str("      --tasks=IDs      任务 ID 列表 (例如: 789,101)\n");
+    help.push_str("      --defects=IDs    缺陷 ID 列表 (例如: 202,303)\n");
+    help.push_str("      --space-id=ID    DevOps 空间/项目 ID (当指定工作项 ID 时必须提供)\n\n");
 
     help.push_str("标准 git 命令:\n");
     help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
@@ -167,6 +175,10 @@ mod tests {
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -183,6 +195,10 @@ mod tests {
             "--tree-sitter",
             "--commit1", "abc123",
             "--commit2", "def456",
+            "--stories=1,2,3",
+            "--tasks=4,5",
+            "--defects=6",
+            "--space-id=12345",
             "--", "--extra", "flag"
         ]);
         let expected = ReviewArgs {
@@ -195,6 +211,10 @@ mod tests {
             passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
             commit1: Some("abc123".to_string()),
             commit2: Some("def456".to_string()),
+            stories: Some(vec![1, 2, 3]),
+            tasks: Some(vec![4, 5]),
+            defects: Some(vec![6]),
+            space_id: Some(12345),
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -212,6 +232,62 @@ mod tests {
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
+        };
+        assert_eq!(construct_review_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_review_args_with_some_work_items() {
+        let args = make_args(vec![
+            "gitai", "review",
+            "--stories=7,8",
+            "--space-id=98765",
+        ]);
+        let expected = ReviewArgs {
+            depth: "medium".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+            stories: Some(vec![7, 8]),
+            tasks: None,
+            defects: None,
+            space_id: Some(98765),
+        };
+        assert_eq!(construct_review_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_review_args_with_empty_work_item_lists() {
+        let args = make_args(vec![
+            "gitai", "review",
+            "--stories=",
+            "--tasks=",
+            "--defects=",
+            "--space-id=123",
+        ]);
+        let expected = ReviewArgs {
+            depth: "medium".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+            stories: Some(vec![]),
+            tasks: Some(vec![]),
+            defects: Some(vec![]),
+            space_id: Some(123),
         };
         assert_eq!(construct_review_args(&args), expected);
     }

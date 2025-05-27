@@ -99,6 +99,22 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "COMMIT")]
     pub commit2: Option<String>,
 
+    /// Stories associated with the review
+    #[clap(long, value_name = "STORIES", use_delimiter = true, value_delimiter = ',')]
+    pub stories: Option<Vec<u32>>,
+
+    /// Tasks associated with the review
+    #[clap(long, value_name = "TASKS", use_delimiter = true, value_delimiter = ',')]
+    pub tasks: Option<Vec<u32>>,
+
+    /// Defects associated with the review
+    #[clap(long, value_name = "DEFECTS", use_delimiter = true, value_delimiter = ',')]
+    pub defects: Option<Vec<u32>>,
+
+    /// Space ID for the review
+    #[clap(long, value_name = "SPACE_ID")]
+    pub space_id: Option<u32>,
+
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,

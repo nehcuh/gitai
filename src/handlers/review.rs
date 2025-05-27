@@ -19,6 +19,17 @@ pub async fn handle_review(
     config: &mut AppConfig,
     review_args: ReviewArgs,
 ) -> Result<(), AppError> {
+    // Validate arguments
+    if (review_args.stories.is_some()
+        || review_args.tasks.is_some()
+        || review_args.defects.is_some())
+        && review_args.space_id.is_none()
+    {
+        return Err(AppError::Generic(
+            "When specifying stories, tasks, or defects, --space-id is required.".to_string(),
+        ));
+    }
+
     let start_time = Instant::now();
     tracing::info!(
         "开始执行代码评审，参数: depth={}, format={}, tree_sitter={}",
@@ -337,6 +348,134 @@ fn extract_language_info(
             .into_iter()
             .collect::<Vec<_>>()
             .join(", ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AIConfig, AppConfig, TreeSitterConfig};
+    use crate::errors::AppError;
+    use crate::types::git::ReviewArgs;
+    use std::collections::HashMap;
+
+    fn default_review_args() -> ReviewArgs {
+        ReviewArgs {
+            depth: "medium".to_string(),
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: vec![],
+            commit1: None,
+            commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
+        }
+    }
+
+    fn minimal_app_config() -> AppConfig {
+        AppConfig {
+            ai: AIConfig::default(),
+            tree_sitter: TreeSitterConfig::default(),
+            prompts: HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_stories_without_space_id() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            stories: Some(vec![1]),
+            ..default_review_args()
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_tasks_without_space_id() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            tasks: Some(vec![1]),
+            ..default_review_args()
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_defects_without_space_id() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            defects: Some(vec![1]),
+            ..default_review_args()
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        assert!(matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required."));
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_stories_with_space_id_ok() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            stories: Some(vec![1]),
+            space_id: Some(123),
+            ..default_review_args()
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        // Expecting a different error because validation should pass, and git diff will fail.
+        // Or Ok(()) if somehow the diff doesn't run or returns empty.
+        match result {
+            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
+                panic!("Validation should have passed, but failed with space_id error.");
+            }
+            _ => {
+                // This is an acceptable outcome, as the validation itself passed.
+                // The function fails later due to other reasons (e.g., git diff error).
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_empty_stories_with_space_id_ok() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            stories: Some(vec![]),
+            space_id: Some(123),
+            ..default_review_args()
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        match result {
+            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
+                panic!("Validation should have passed for empty stories with space_id, but failed.");
+            }
+            _ => {}
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_review_validation_no_work_items_no_space_id_ok() {
+        let mut config = minimal_app_config();
+        let review_args = ReviewArgs {
+            ..default_review_args() // All work items and space_id are None by default
+        };
+
+        let result = handle_review(&mut config, review_args).await;
+        match result {
+            Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required." => {
+                panic!("Validation should have passed for no work items and no space_id, but failed.");
+            }
+            _ => {}
+        }
     }
 }
 
