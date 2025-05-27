@@ -37,7 +37,7 @@ pub async fn handle_review(
 
     // DevOps Client Instantiation & Work Item Fetching
     let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
-        .unwrap_or_else(|_| "https://codingcorp.devops.cmschina.com.cn".to_string());
+        .unwrap_or_else(|_| "https://codingcorp.devops.xxx.com.cn".to_string());
     let devops_token = env::var("DEV_DEVOPS_API_TOKEN")
         .unwrap_or_else(|_| "your_placeholder_token".to_string());
 

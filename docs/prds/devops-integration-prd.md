@@ -58,7 +58,7 @@ gitai review --space-id=726226 --stories=99 --depth=deep --format=json
 [account]
 # DevOps 平台配置
 devops_platform = "coding"  # 支持 coding, jira, azure-devops 等
-base_url = "https://codingcorp.devops.cmschina.com.cn"
+base_url = "https://codingcorp.devops.xxx.com.cn"
 token = "c4e9e27573a4437d6ecad5119b2ebe026f5fdbc8"
 ```
 

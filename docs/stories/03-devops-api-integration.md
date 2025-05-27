@@ -27,7 +27,7 @@
 #### 请求格式
 ```http
 GET /external/collaboration/api/project/{space_id}/issues/{issue_id}
-Host: codingcorp.devops.cmschina.com.cn
+Host: codingcorp.devops.xxx.com.cn
 Accept: application/json
 Authorization: token {token}
 Content-Type: application/json
