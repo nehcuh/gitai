@@ -34,28 +34,82 @@ Content-Type: application/json
 ```
 
 #### 响应格式
+所有 DevOps API 响应都包含 `code`，`msg` 和 `data` 三个顶层字段。其中 `data` 字段的内部结构会根据工作项的类型（如用户故事、缺陷、任务）而有所不同。
+
+##### 通用 `data` 结构建议
+由于 `data` 内部字段差异较大，建议在代码中将 `data` 字段首先解析为通用的 JSON 对象（例如，在 Rust 中使用 `serde_json::Value`）。然后，根据具体的业务需求，从中提取所需的字段。
+
+对于不同类型的工作项，我们通常关注以下核心信息：
+- **项目/产品名称**: 通常在 `data.program.display_name` 中。
+- **工作项类型**: 在 `data.issueTypeDetail.name` 中，例如 "用户故事", "缺陷", "任务"。
+- **工作项标题**: 在 `data.name` 中。
+- **工作项描述**: 在 `data.description` 中。
+
+以下是针对不同工作项类型 `data` 字段的简化示例，重点展示上述核心信息：
+
+##### 用户故事 (User Story) `data` 示例 (部分字段)
 ```json
 {
   "code": 0,
   "msg": null,
   "data": {
-    "id": 1255140,
-    "projectId": 726226,
-    "code": 99,
-    "type": "REQUIREMENT",
+    // ... 其他用户故事特有字段 ...
+    "name": "封装 requests 函数到用户自定义函数", // 工作项标题
+    "description": "# 描述\n- 作为 普通用户...",     // 工作项描述
     "issueTypeDetail": {
-      "id": 39,
-      "name": "用户故事",
-      "iconType": "story",
-      "issueType": "REQUIREMENT",
-      "type": "requirement"
+      "name": "用户故事" // 工作项类型
+      // ...
     },
-    "name": "封装 requests 函数到用户自定义函数",
-    "description": "# 描述\n- 作为 普通用户\n- 我可以 通过添加指定 url，headers，method，payload\n- 这样我就可以 直接获取指定 url 的 json 格式返回值",
-    "issueStatusName": "未开始",
-    "priority": 1,
-    "creator": { /* ... */ },
-    "assignee": { /* ... */ }
+    "program": {
+      "display_name": "金科中心代码扫描引擎项目预研" // 项目/产品名称
+      // ...
+    }
+    // ... 其他用户故事特有字段 ...
+  }
+}
+```
+
+##### 缺陷 (Defect) `data` 示例 (部分字段)
+```json
+{
+  "code": 0,
+  "msg": null,
+  "data": {
+    // ... 其他缺陷特有字段 ...
+    "name": "交易运营部-公募T0账单-资金信息汇总未统计理财持仓市值。", // 工作项标题
+    "description": "![picture](/api/project/726365/files/3439204/imagePreview)\n ", // 工作项描述
+    "issueTypeDetail": {
+      "name": "缺陷" // 工作项类型
+      // ...
+    },
+    "program": {
+      "display_name": "T7.6券结(含券结ETF)融资行权业务回归及单客户上线" // 项目/产品名称
+      // ...
+    }
+    // ... 其他缺陷特有字段 ...
+  }
+}
+```
+
+##### 任务 (Task) `data` 示例 (部分字段)
+```json
+{
+  "code": 0,
+  "msg": null,
+  "data": {
+    // ... 其他任务特有字段 ...
+    "name": "交易网关9502超时优化", // 工作项标题
+    "description": "2024年5月，柜台反馈...", // 工作项描述
+    "issueTypeDetail": {
+      "name": "任务" // 工作项类型
+      // ...
+    },
+    "program": {
+      // "display_name" 可能为 null 或不存在于所有任务类型中，需注意处理
+      "display_name": null // 项目/产品名称 (示例中为null)
+      // ...
+    }
+    // ... 其他任务特有字段 ...
   }
 }
 ```
@@ -130,31 +184,93 @@ gitai review --space-id=726226 --stories=99 --tasks=200 --defects=301
 pub struct DevOpsResponse {
     pub code: i32,
     pub msg: Option<String>,
-    pub data: Option<WorkItem>,
+    // The 'data' field is flexible and will be parsed further based on context
+    // using serde_json::Value allows handling different structures for stories, defects, tasks etc.
+    pub data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct WorkItem {
-    pub id: u32,
-    pub name: String,
-    pub description: String,
+// Represents common information to be extracted from the 'data' field (serde_json::Value) 
+// of any work item type (story, defect, task).
+// Fields are Option<> to gracefully handle missing data.
+#[derive(Debug, Deserialize, Default)]
+pub struct WorkItemCommonInfo {
+    pub id: Option<u32>, // Unique ID of the work item
+    pub code: Option<u32>, // Work item's own code/identifier (e.g., 99 for story, 833118 for defect)
+    
+    // "卡片标题" (Work item title)
+    pub name: Option<String>, 
+    
+    // "卡片内容" (Work item description)
+    pub description: Option<String>, 
+    
+    // Top-level type of the work item, e.g., "REQUIREMENT", "DEFECT", "MISSION"
+    #[serde(rename = "type")] 
+    pub item_type: Option<String>, 
+    
+    // Contains "卡片类型" (e.g., "用户故事", "缺陷") via its 'name' field
     #[serde(rename = "issueTypeDetail")]
-    pub issue_type_detail: IssueTypeDetail,
-    pub r#type: String,
+    pub issue_type_detail: Option<IssueTypeDetail>, 
+    
+    // Contains context for the work item, like "program.display_name"
+    pub program: Option<ProgramInfo>, 
+    
     #[serde(rename = "issueStatusName")]
-    pub status_name: String,
-    pub priority: u32,
+    pub status_name: Option<String>, // e.g., "未开始", "已预审"
+    pub priority: Option<u32>,
+    
+    // Consider adding other common fields like 'creator', 'assignee', 'createdAt', 'updatedAt'
+    // if they are consistently needed and available across different work item types.
+    // Example:
+    // pub creator: Option<UserInfo>,
+    // pub assignee: Option<UserInfo>,
+    // #[serde(rename = "createdAt")]
+    // pub created_at: Option<u64>, // Assuming timestamp
 }
 
-#[derive(Debug, Deserialize)]
+// Detailed information about the issue type (e.g., "用户故事", "缺陷", "任务")
+#[derive(Debug, Deserialize, Default)]
 pub struct IssueTypeDetail {
-    pub id: u32,
-    pub name: String,
+    pub id: Option<u32>,
+    // "卡片类型" (e.g., "用户故事", "缺陷", "任务")
+    pub name: Option<String>, 
     #[serde(rename = "iconType")]
-    pub icon_type: String,
-    #[serde(rename = "issueType")]
-    pub issue_type: String,
+    pub icon_type: Option<String>, // e.g., "story", "defect", "mission"
+    // This field often mirrors WorkItemCommonInfo.item_type (e.g., "REQUIREMENT", "DEFECT")
+    #[serde(rename = "issueType")] 
+    pub type_category: Option<String>, 
 }
+
+// Information about the program/project the work item belongs to
+#[derive(Debug, Deserialize, Default)]
+pub struct ProgramInfo {
+    pub id: Option<u32>,
+    // Context for the work item, e.g., "金科中心代码扫描引擎项目预研"
+    #[serde(alias = "display_name")] 
+    pub display_name: Option<String>, 
+    // Internal name of the program/project
+    pub name: Option<String>, 
+    // pub html_url: Option<String>, // Example of another potentially useful field
+}
+
+// Example UserInfo struct if creator/assignee details are needed
+// #[derive(Debug, Deserialize, Default)]
+// pub struct UserInfo {
+//     pub id: Option<u32>,
+//     pub name: Option<String>,
+//     #[serde(rename = "globalKey")]
+//     pub global_key: Option<String>,
+//     pub avatar: Option<String>,
+// }
+
+// Note on usage:
+// 1. Deserialize the entire JSON response into `DevOpsResponse`.
+// 2. If `response.data` is `Some(value)`, this `value` is a `serde_json::Value`.
+// 3. You can then attempt to deserialize this `value` into `WorkItemCommonInfo`:
+//    `let specific_item_info: Result<WorkItemCommonInfo, _> = serde_json::from_value(value.clone());`
+//    Or, access fields directly: `value["name"].as_str()`, `value["program"]["display_name"].as_str()`.
+//    This approach allows extracting the common fields defined in `WorkItemCommonInfo` while
+//    still retaining the flexibility to access any other specific fields from the `serde_json::Value`
+//    that might be unique to a particular work item type.
 ```
 
 ### API 客户端实现
