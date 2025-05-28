@@ -1,5 +1,5 @@
-mod config;
 pub mod clients;
+mod config;
 mod errors;
 mod handlers;
 mod tree_sitter_analyzer;
@@ -8,7 +8,8 @@ mod utils;
 
 use handlers::git::passthrough_to_git;
 use handlers::review::handle_review;
-use utils::construct_review_args;
+use handlers::commit::handle_commit;
+use utils::{construct_review_args, construct_commit_args};
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -72,18 +73,12 @@ async fn main() -> Result<(), AppError> {
     }
 
     // commit 处理
-    // if args.iter().any(|arg| arg == "commit" || arg = "cm") {
-    //     if args.iter().any(|arg| {
-    //         arg == "-t"
-    //             || arg == "--tree-sitter"
-    //             || arg == "-l"
-    //             || arg == "--level"
-    //             || arg == "-r"
-    //             || arg == "--review"
-    //     }) {
-    //         todo!()
-    //     }
-    // }
+    if args.iter().any(|arg| arg == "commit" || arg == "cm") {
+        tracing::info!("检测到commit命令");
+        let commit_args = construct_commit_args(&args);
+        handle_commit(&config, commit_args).await?;
+        return Ok(());
+    }
 
     // 标准 git 指令处理
     // 1. 当全局 ai 标识启用时，同时捕捉标准输出和标准错误，利用 AI 解释

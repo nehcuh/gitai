@@ -71,6 +71,64 @@ pub fn passthrough_to_git_with_error_handling(
     })
 }
 
+/// Check if current directory is a git repository
+pub fn is_git_repository() -> Result<bool, AppError> {
+    let result = Command::new("git")
+        .args(&["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .map_err(|e| AppError::IO("检查Git仓库状态失败".to_string(), e))?;
+    
+    Ok(result.status.success())
+}
+
+/// Get the status of staged files
+pub async fn get_staged_files_status() -> Result<String, AppError> {
+    let args = vec!["status".to_string(), "--porcelain".to_string(), "--cached".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
+    Ok(result.stdout)
+}
+
+/// Get diff of staged changes
+pub async fn get_staged_diff() -> Result<String, AppError> {
+    let args = vec!["diff".to_string(), "--cached".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    Ok(result.stdout)
+}
+
+/// Auto-stage tracked modified files
+pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
+    let args = vec!["add".to_string(), "-u".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    
+    if !result.status.success() {
+        return Err(AppError::Git(GitError::CommandFailed {
+            command: "git add -u".to_string(),
+            status_code: result.status.code(),
+            stdout: result.stdout,
+            stderr: result.stderr,
+        }));
+    }
+    
+    Ok(())
+}
+
+/// Execute git commit with message
+pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> {
+    let args = vec!["commit".to_string(), "-m".to_string(), message.to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    
+    if !result.status.success() {
+        return Err(AppError::Git(GitError::CommandFailed {
+            command: format!("git commit -m \"{}\"", message),
+            status_code: result.status.code(),
+            stdout: result.stdout,
+            stderr: result.stderr,
+        }));
+    }
+    
+    Ok(())
+}
+
 /// Extract diff information for review
 ///
 /// This function gets the diff between specified commits or the current staged changes

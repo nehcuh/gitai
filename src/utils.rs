@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs};
+use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs};
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
     // 重构review命令参数以便使用clap解析
@@ -42,6 +42,43 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
             tasks: None,
             defects: None,
             space_id: None,
+        }
+    }
+}
+
+pub fn construct_commit_args(args: &[String]) -> CommitArgs {
+    // 重构commit命令参数以便使用clap解析
+    let mut commit_args_vec = vec!["gitai".to_string(), "commit".to_string()];
+
+    // 获取commit之后的所有其他参数
+    let commit_index = args
+        .iter()
+        .position(|a| a == "commit" || a == "cm")
+        .unwrap_or(0);
+    if commit_index + 1 < args.len() {
+        commit_args_vec.extend_from_slice(&args[commit_index + 1..]);
+    }
+
+    tracing::debug!("重构的commit命令: {:?}", commit_args_vec);
+
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&commit_args_vec) {
+        match parsed_args.command {
+            GitaiSubCommand::Commit(commit_args) => {
+                tracing::debug!("解析出来的 commit 结构为: {:?}", commit_args);
+                return commit_args;
+            }
+            _ => panic!("无法解析 git commit 命令,命令为: {:?}", args),
+        }
+    } else {
+        tracing::warn!("解析commit命令失败");
+        // 创建默认的CommitArgs
+        CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
         }
     }
 }
@@ -156,7 +193,7 @@ pub fn generate_gitai_help() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
+    use crate::types::git::{CommaSeparatedU32List, ReviewArgs, CommitArgs};
 
     fn make_args(vec: Vec<&str>) -> Vec<String> {
         vec.into_iter().map(String::from).collect()
@@ -290,5 +327,69 @@ mod tests {
             space_id: Some(123),
         };
         assert_eq!(construct_review_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_default() {
+        let args = make_args(vec!["gitai", "commit"]);
+        let expected = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_with_options() {
+        let args = make_args(vec![
+            "gitai", "commit",
+            "-t",
+            "-l", "deep",
+            "-a",
+            "-m", "test commit message",
+            "-r",
+            "--", "--extra", "flag"
+        ]);
+        let expected = CommitArgs {
+            tree_sitter: true,
+            depth: Some("deep".to_string()),
+            auto_stage: true,
+            message: Some("test commit message".to_string()),
+            review: true,
+            passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_alias_cm() {
+        let args = make_args(vec!["gitai", "cm", "-m", "quick commit"]);
+        let expected = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: Some("quick commit".to_string()),
+            review: false,
+            passthrough_args: vec![],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_auto_stage_only() {
+        let args = make_args(vec!["gitai", "commit", "-a"]);
+        let expected = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: true,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
     }
 }
