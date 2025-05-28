@@ -895,13 +895,40 @@ impl AppConfig {
         // --- End Review Configuration Loading ---
 
         // --- Account Configuration Loading ---
+        // Helper function to check if a value is a placeholder
+        let is_placeholder = |value: &Option<String>| -> bool {
+            match value {
+                Some(s) => {
+                    let s = s.trim();
+                    s.is_empty() || 
+                    s == "YOUR_DEVOPS_API_TOKEN" || 
+                    s == "YOUR_API_KEY_IF_NEEDED" ||
+                    s.starts_with("YOUR_") ||
+                    s == "your-devops-instance.com" ||
+                    s.contains("your-devops-instance")
+                }
+                None => true,
+            }
+        };
+
         let file_loaded_account_config: Option<AccountConfig> =
-            partial_config.account.map(|p_acc| AccountConfig {
-                devops_platform: p_acc.devops_platform.unwrap_or_default(),
-                base_url: p_acc.base_url.unwrap_or_default(),
-                token: p_acc.token.unwrap_or_default(),
-                timeout: p_acc.timeout.or(AccountConfig::default().timeout),
-                retry_count: p_acc.retry_count.or(AccountConfig::default().retry_count),
+            partial_config.account.and_then(|p_acc| {
+                // Check if any of the required fields have meaningful values
+                if is_placeholder(&p_acc.devops_platform) && 
+                   is_placeholder(&p_acc.base_url) && 
+                   is_placeholder(&p_acc.token) {
+                    tracing::debug!("账户配置中只包含占位符值，将忽略文件中的账户配置");
+                    None
+                } else {
+                    // Only create AccountConfig if we have at least some meaningful values
+                    Some(AccountConfig {
+                        devops_platform: p_acc.devops_platform.unwrap_or_default(),
+                        base_url: p_acc.base_url.unwrap_or_default(),
+                        token: p_acc.token.unwrap_or_default(),
+                        timeout: p_acc.timeout.or(AccountConfig::default().timeout),
+                        retry_count: p_acc.retry_count.or(AccountConfig::default().retry_count),
+                    })
+                }
             });
 
         let mut env_map = HashMap::new();

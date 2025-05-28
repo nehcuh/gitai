@@ -41,17 +41,32 @@ pub async fn handle_review(
     }
 
     // DevOps Client Instantiation & Work Item Fetching
-    let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
-        .unwrap_or_else(|_| "https://codingcorp.devops.xxx.com.cn".to_string());
-    let devops_token =
-        env::var("DEV_DEVOPS_API_TOKEN").unwrap_or_else(|_| "your_placeholder_token".to_string());
+    let devops_client = match &config.account {
+        Some(account_config) => {
+            tracing::info!(
+                "使用配置文件中的 DevOps 配置: platform={}, base_url={}",
+                account_config.devops_platform,
+                account_config.base_url
+            );
+            DevOpsClient::new(account_config.base_url.clone(), account_config.token.clone())
+        },
+        None => {
+            // Fallback to environment variables if no config found
+            let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
+                .unwrap_or_else(|_| "https://codingcorp.devops.xxx.com.cn".to_string());
+            let devops_token = env::var("DEV_DEVOPS_API_TOKEN")
+                .unwrap_or_else(|_| "your_placeholder_token".to_string());
 
-    if devops_token == "your_placeholder_token" {
-        tracing::warn!(
-            "Using placeholder DevOps API token. Please set DEV_DEVOPS_API_TOKEN environment variable."
-        );
-    }
-    let devops_client = DevOpsClient::new(devops_base_url, devops_token);
+            if devops_token == "your_placeholder_token" {
+                tracing::warn!(
+                    "未找到 DevOps 配置且环境变量使用占位符。请在 ~/.config/gitai/config.toml 中配置 [account] 部分或设置环境变量。"
+                );
+            } else {
+                tracing::info!("使用环境变量中的 DevOps 配置（配置文件中未找到 [account] 配置）");
+            }
+            DevOpsClient::new(devops_base_url, devops_token)
+        }
+    };
 
     let mut all_work_item_ids: Vec<u32> = Vec::new();
     if let Some(stories) = &review_args.stories {
