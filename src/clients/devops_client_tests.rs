@@ -18,8 +18,10 @@ fn common_issue_type_detail() -> IssueTypeDetail {
 fn create_mock_work_item(id: u32, name: &str, description: &str) -> WorkItem {
     WorkItem {
         id,
+        code: None,
         name: name.to_string(),
         description: description.to_string(),
+        project_name: None,
         issue_type_detail: common_issue_type_detail(),
         r#type: "REQUIREMENT".to_string(),
         status_name: "New".to_string(),

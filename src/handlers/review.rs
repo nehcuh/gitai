@@ -2,12 +2,14 @@ use crate::{
     clients::devops_client::DevOpsClient, // Added
     config::{AppConfig, TreeSitterConfig},
     errors::{AIError, AppError}, // DevOpsError import removed
+    handlers::analysis::AIAnalysisEngine,
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
     },
     types::{
-        devops::WorkItem, // Added
+        ai::{AnalysisDepth, AnalysisRequest, OutputFormat},
+        devops::{AnalysisWorkItem, WorkItem}, // Added AnalysisWorkItem
         git::{GitDiff, ReviewArgs},
     },
 };
@@ -16,6 +18,7 @@ use super::{
     ai::{create_review_prompt, execute_review_request},
     git::extract_diff_for_review,
 };
+use std::sync::Arc;
 use chrono;
 use colored::Colorize;
 use std::{collections::HashMap, env, fs, io::Write, time::Instant}; // env was already here
@@ -155,32 +158,26 @@ pub async fn handle_review(
     let language_info = extract_language_info(&git_diff, &analysis_results);
     tracing::debug!("检测到的语言: {}", language_info);
 
-    // Generate AI prompt with enhanced context
-    let prompt_result: Result<String, AppError> = generate_ai_review_prompt(
-        config,
-        &diff_text,
-        &analysis_text,
-        &review_args,
-        &git_diff,
-        &language_info,
-        &fetched_work_items, // Pass the fetched items
-    )
-    .await;
-    let prompt: String = prompt_result?;
-
-    // Try to send to AI
-    let ai_start = Instant::now();
-    tracing::info!("发送至 AI 进行代码评审");
-    let ai_response = match send_review_to_ai(config, &prompt).await {
-        Ok(response) => {
-            tracing::info!("AI评审完成，耗时: {:?}", ai_start.elapsed());
-            tracing::debug!("AI响应长度: {} 字符", response.len());
-            response
+    let ai_response = if !fetched_work_items.is_empty() {
+        // Enhanced AI analysis with work items
+        tracing::info!("执行增强型 AI 分析（结合工作项需求）");
+        let ai_start = Instant::now();
+        
+        match perform_enhanced_ai_analysis(config, &diff_text, &fetched_work_items, &review_args).await {
+            Ok(response) => {
+                tracing::info!("增强型 AI 分析完成，耗时: {:?}", ai_start.elapsed());
+                response
+            }
+            Err(e) => {
+                tracing::warn!("增强型 AI 分析失败: {}，回退到标准评审", e);
+                // Fallback to standard review
+                perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
+            }
         }
-        Err(e) => {
-            tracing::warn!("AI请求失败: {}，生成离线评审结果", e);
-            generate_fallback_review(&analysis_text, &git_diff, &analysis_results)
-        }
+    } else {
+        // Standard AI review without work items
+        tracing::info!("执行标准 AI 代码评审");
+        perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
     };
 
     // Format and output the review
@@ -571,9 +568,406 @@ mod tests {
             _ => {}
         }
     }
+
+    #[test]
+    fn test_format_enhanced_analysis_result() {
+        use crate::types::ai::*;
+        
+        let analysis_result = AnalysisResult {
+            overall_score: 85,
+            requirement_consistency: RequirementAnalysis {
+                completion_score: 80,
+                accuracy_score: 90,
+                missing_features: vec!["错误处理".to_string()],
+                extra_implementations: vec!["额外日志".to_string()],
+            },
+            code_quality: CodeQualityAnalysis {
+                quality_score: 85,
+                maintainability_score: 80,
+                performance_score: 75,
+                security_score: 90,
+                structure_assessment: "代码结构良好".to_string(),
+            },
+            deviations: vec![
+                Deviation {
+                    severity: DeviationSeverity::Medium,
+                    category: "Logic Error".to_string(),
+                    description: "缺少空值检查".to_string(),
+                    file_location: Some("src/main.rs:42".to_string()),
+                    suggestion: "添加输入验证".to_string(),
+                }
+            ],
+            recommendations: vec![
+                Recommendation {
+                    priority: 1,
+                    title: "改进错误处理".to_string(),
+                    description: "添加更完善的错误处理机制".to_string(),
+                    expected_impact: "提高系统稳定性".to_string(),
+                    effort_estimate: "Medium".to_string(),
+                }
+            ],
+            risk_assessment: RiskAssessment {
+                risk_level: DeviationSeverity::Medium,
+                business_impact: "中等业务影响".to_string(),
+                technical_risks: vec!["系统稳定性风险".to_string()],
+                mitigation_strategies: vec!["增加测试覆盖".to_string()],
+            },
+        };
+
+        let formatted = format_enhanced_analysis_result(&analysis_result);
+        
+        assert!(formatted.contains("增强型 AI 代码评审报告"));
+        assert!(formatted.contains("总体评分**: 85/100"));
+        assert!(formatted.contains("需求实现一致性分析"));
+        assert!(formatted.contains("代码质量分析"));
+        assert!(formatted.contains("发现的偏离和问题"));
+        assert!(formatted.contains("改进建议"));
+        assert!(formatted.contains("风险评估"));
+        assert!(formatted.contains("错误处理"));
+        assert!(formatted.contains("src/main.rs:42"));
+    }
+
+    #[test]
+    fn test_perform_enhanced_ai_analysis_data_conversion() {
+        use crate::types::devops::*;
+        
+        let work_item = WorkItem {
+            id: 123,
+            code: Some(99),
+            name: "测试功能".to_string(),
+            description: "实现测试功能".to_string(),
+            project_name: Some(Program {
+                display_name: Some("测试项目".to_string()),
+            }),
+            issue_type_detail: IssueTypeDetail {
+                id: 1,
+                name: "用户故事".to_string(),
+                icon_type: "story".to_string(),
+                issue_type: "REQUIREMENT".to_string(),
+            },
+            r#type: "REQUIREMENT".to_string(),
+            status_name: "进行中".to_string(),
+            priority: 1,
+        };
+
+        let work_items = vec![work_item];
+        
+        // Convert to AnalysisWorkItems
+        let analysis_work_items: Vec<AnalysisWorkItem> = work_items
+            .iter()
+            .map(|item| item.into())
+            .collect();
+
+        assert_eq!(analysis_work_items.len(), 1);
+        let analysis_item = &analysis_work_items[0];
+        
+        assert_eq!(analysis_item.id, Some(123));
+        assert_eq!(analysis_item.code, Some(99));
+        assert_eq!(analysis_item.project_name, Some("测试项目".to_string()));
+        assert_eq!(analysis_item.item_type_name, Some("用户故事".to_string()));
+        assert_eq!(analysis_item.title, Some("测试功能".to_string()));
+        assert_eq!(analysis_item.description, Some("实现测试功能".to_string()));
+    }
+
+    #[test]
+    fn test_analysis_depth_parsing() {
+        use crate::types::ai::AnalysisDepth;
+        
+        // Test depth parsing logic
+        let basic_depth = match "basic" {
+            "basic" => AnalysisDepth::Basic,
+            "deep" => AnalysisDepth::Deep,
+            _ => AnalysisDepth::Normal,
+        };
+        assert!(matches!(basic_depth, AnalysisDepth::Basic));
+
+        let deep_depth = match "deep" {
+            "basic" => AnalysisDepth::Basic,
+            "deep" => AnalysisDepth::Deep,
+            _ => AnalysisDepth::Normal,
+        };
+        assert!(matches!(deep_depth, AnalysisDepth::Deep));
+
+        let normal_depth = match "medium" {
+            "basic" => AnalysisDepth::Basic,
+            "deep" => AnalysisDepth::Deep,
+            _ => AnalysisDepth::Normal,
+        };
+        assert!(matches!(normal_depth, AnalysisDepth::Normal));
+    }
+
+    #[test]
+    fn test_output_format_parsing() {
+        use crate::types::ai::OutputFormat;
+        
+        // Test output format parsing logic
+        let json_format = match "json" {
+            "json" => OutputFormat::Json,
+            "markdown" => OutputFormat::Markdown,
+            "html" => OutputFormat::Html,
+            _ => OutputFormat::Text,
+        };
+        assert!(matches!(json_format, OutputFormat::Json));
+
+        let markdown_format = match "markdown" {
+            "json" => OutputFormat::Json,
+            "markdown" => OutputFormat::Markdown,
+            "html" => OutputFormat::Html,
+            _ => OutputFormat::Text,
+        };
+        assert!(matches!(markdown_format, OutputFormat::Markdown));
+
+        let text_format = match "text" {
+            "json" => OutputFormat::Json,
+            "markdown" => OutputFormat::Markdown,
+            "html" => OutputFormat::Html,
+            _ => OutputFormat::Text,
+        };
+        assert!(matches!(text_format, OutputFormat::Text));
+    }
+
+    #[test]
+    fn test_enhanced_analysis_result_formatting_edge_cases() {
+        use crate::types::ai::*;
+        
+        // Test with empty collections
+        let minimal_result = AnalysisResult {
+            overall_score: 50,
+            requirement_consistency: RequirementAnalysis {
+                completion_score: 50,
+                accuracy_score: 50,
+                missing_features: vec![],
+                extra_implementations: vec![],
+            },
+            code_quality: CodeQualityAnalysis {
+                quality_score: 50,
+                maintainability_score: 50,
+                performance_score: 50,
+                security_score: 50,
+                structure_assessment: "基本评估".to_string(),
+            },
+            deviations: vec![],
+            recommendations: vec![],
+            risk_assessment: RiskAssessment {
+                risk_level: DeviationSeverity::Low,
+                business_impact: "低影响".to_string(),
+                technical_risks: vec![],
+                mitigation_strategies: vec![],
+            },
+        };
+
+        let formatted = format_enhanced_analysis_result(&minimal_result);
+        
+        // Should still contain main sections even if they're empty
+        assert!(formatted.contains("增强型 AI 代码评审报告"));
+        assert!(formatted.contains("总体评分**: 50/100"));
+        assert!(formatted.contains("需求实现一致性分析"));
+        assert!(formatted.contains("代码质量分析"));
+        assert!(formatted.contains("风险评估"));
+        
+        // Should not contain sections for empty collections
+        assert!(!formatted.contains("发现的偏离和问题"));
+        assert!(!formatted.contains("改进建议"));
+    }
 }
 
 /// Generate AI review prompt using review.md template
+/// Performs enhanced AI analysis combining work items and code changes
+async fn perform_enhanced_ai_analysis(
+    config: &AppConfig,
+    diff_text: &str,
+    work_items: &[WorkItem],
+    review_args: &ReviewArgs,
+) -> Result<String, AppError> {
+    tracing::debug!("Starting enhanced AI analysis with {} work items", work_items.len());
+    
+    // Convert WorkItems to AnalysisWorkItems
+    let analysis_work_items: Vec<AnalysisWorkItem> = work_items
+        .iter()
+        .map(|item| item.into())
+        .collect();
+    
+    // Parse analysis depth from review args
+    let analysis_depth = match review_args.depth.as_str() {
+        "basic" => AnalysisDepth::Basic,
+        "deep" => AnalysisDepth::Deep,
+        _ => AnalysisDepth::Normal,
+    };
+    
+    // Parse output format from review args
+    let output_format = match review_args.format.as_str() {
+        "json" => OutputFormat::Json,
+        "markdown" => OutputFormat::Markdown,
+        "html" => OutputFormat::Html,
+        _ => OutputFormat::Text,
+    };
+    
+    // Create analysis request
+    let analysis_request = AnalysisRequest {
+        work_items: analysis_work_items,
+        git_diff: diff_text.to_string(),
+        focus_areas: review_args.focus.as_ref().map(|f| vec![f.clone()]),
+        analysis_depth,
+        output_format,
+    };
+    
+    // Create and use AI analysis engine
+    let config_arc = Arc::new(config.clone());
+    let analysis_engine = AIAnalysisEngine::new(config_arc);
+    
+    match analysis_engine.analyze_with_requirements(analysis_request).await {
+        Ok(analysis_result) => {
+            tracing::debug!("AI analysis completed with score: {}", analysis_result.overall_score);
+            Ok(format_enhanced_analysis_result(&analysis_result))
+        }
+        Err(e) => {
+            tracing::error!("Enhanced AI analysis failed: {:?}", e);
+            Err(e)
+        }
+    }
+}
+
+/// Performs standard AI review without enhanced analysis
+async fn perform_standard_ai_review(
+    config: &AppConfig,
+    diff_text: &str,
+    analysis_text: &str,
+    review_args: &ReviewArgs,
+    git_diff: &GitDiff,
+    language_info: &str,
+    work_items: &[WorkItem],
+    analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+) -> Result<String, AppError> {
+    // Generate AI prompt with enhanced context
+    let prompt_result: Result<String, AppError> = generate_ai_review_prompt(
+        config,
+        diff_text,
+        analysis_text,
+        review_args,
+        git_diff,
+        language_info,
+        work_items,
+    )
+    .await;
+    let prompt: String = prompt_result?;
+
+    // Try to send to AI
+    let ai_start = Instant::now();
+    tracing::info!("发送至 AI 进行代码评审");
+    match send_review_to_ai(config, &prompt).await {
+        Ok(response) => {
+            tracing::info!("AI评审完成，耗时: {:?}", ai_start.elapsed());
+            tracing::debug!("AI响应长度: {} 字符", response.len());
+            Ok(response)
+        }
+        Err(e) => {
+            tracing::warn!("AI请求失败: {}，生成离线评审结果", e);
+            Ok(generate_fallback_review(analysis_text, git_diff, &analysis_results))
+        }
+    }
+}
+
+/// Formats enhanced analysis result for output
+fn format_enhanced_analysis_result(analysis_result: &crate::types::ai::AnalysisResult) -> String {
+    let mut output = String::new();
+    
+    output.push_str("========== 增强型 AI 代码评审报告 ==========\n\n");
+    
+    // Overall score
+    output.push_str(&format!("📊 **总体评分**: {}/100\n\n", analysis_result.overall_score));
+    
+    // Requirement consistency
+    output.push_str("## 📋 需求实现一致性分析\n");
+    output.push_str(&format!("- 完整性评分: {}/100\n", analysis_result.requirement_consistency.completion_score));
+    output.push_str(&format!("- 准确性评分: {}/100\n", analysis_result.requirement_consistency.accuracy_score));
+    
+    if !analysis_result.requirement_consistency.missing_features.is_empty() {
+        output.push_str("- 缺失功能:\n");
+        for feature in &analysis_result.requirement_consistency.missing_features {
+            output.push_str(&format!("  - {}\n", feature));
+        }
+    }
+    
+    if !analysis_result.requirement_consistency.extra_implementations.is_empty() {
+        output.push_str("- 额外实现:\n");
+        for extra in &analysis_result.requirement_consistency.extra_implementations {
+            output.push_str(&format!("  - {}\n", extra));
+        }
+    }
+    output.push('\n');
+    
+    // Code quality
+    output.push_str("## 🔧 代码质量分析\n");
+    output.push_str(&format!("- 整体质量: {}/100\n", analysis_result.code_quality.quality_score));
+    output.push_str(&format!("- 可维护性: {}/100\n", analysis_result.code_quality.maintainability_score));
+    output.push_str(&format!("- 性能评估: {}/100\n", analysis_result.code_quality.performance_score));
+    output.push_str(&format!("- 安全性评估: {}/100\n", analysis_result.code_quality.security_score));
+    output.push_str(&format!("- 结构评估: {}\n\n", analysis_result.code_quality.structure_assessment));
+    
+    // Deviations
+    if !analysis_result.deviations.is_empty() {
+        output.push_str("## ⚠️ 发现的偏离和问题\n");
+        for (i, deviation) in analysis_result.deviations.iter().enumerate() {
+            let severity_icon = match deviation.severity {
+                crate::types::ai::DeviationSeverity::Critical => "🔴",
+                crate::types::ai::DeviationSeverity::High => "🟠",
+                crate::types::ai::DeviationSeverity::Medium => "🟡",
+                crate::types::ai::DeviationSeverity::Low => "🟢",
+            };
+            
+            output.push_str(&format!("{}. {} **{}** - {}\n", 
+                i + 1, severity_icon, deviation.category, deviation.description));
+            
+            if let Some(location) = &deviation.file_location {
+                output.push_str(&format!("   📍 位置: {}\n", location));
+            }
+            
+            output.push_str(&format!("   💡 建议: {}\n\n", deviation.suggestion));
+        }
+    }
+    
+    // Recommendations
+    if !analysis_result.recommendations.is_empty() {
+        output.push_str("## 💡 改进建议\n");
+        for (i, rec) in analysis_result.recommendations.iter().enumerate() {
+            output.push_str(&format!("{}. **{}** (优先级: {})\n", 
+                i + 1, rec.title, rec.priority));
+            output.push_str(&format!("   - 描述: {}\n", rec.description));
+            output.push_str(&format!("   - 预期影响: {}\n", rec.expected_impact));
+            output.push_str(&format!("   - 工作量估算: {}\n\n", rec.effort_estimate));
+        }
+    }
+    
+    // Risk assessment
+    output.push_str("## 🎯 风险评估\n");
+    let risk_icon = match analysis_result.risk_assessment.risk_level {
+        crate::types::ai::DeviationSeverity::Critical => "🔴",
+        crate::types::ai::DeviationSeverity::High => "🟠",
+        crate::types::ai::DeviationSeverity::Medium => "🟡",
+        crate::types::ai::DeviationSeverity::Low => "🟢",
+    };
+    
+    output.push_str(&format!("- {} 风险等级: {:?}\n", risk_icon, analysis_result.risk_assessment.risk_level));
+    output.push_str(&format!("- 业务影响: {}\n", analysis_result.risk_assessment.business_impact));
+    
+    if !analysis_result.risk_assessment.technical_risks.is_empty() {
+        output.push_str("- 技术风险:\n");
+        for risk in &analysis_result.risk_assessment.technical_risks {
+            output.push_str(&format!("  - {}\n", risk));
+        }
+    }
+    
+    if !analysis_result.risk_assessment.mitigation_strategies.is_empty() {
+        output.push_str("- 缓解策略:\n");
+        for strategy in &analysis_result.risk_assessment.mitigation_strategies {
+            output.push_str(&format!("  - {}\n", strategy));
+        }
+    }
+    
+    output.push_str("\n========================================\n");
+    output
+}
+
 async fn generate_ai_review_prompt(
     _config: &AppConfig,
     diff_text: &str,
