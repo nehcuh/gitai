@@ -95,6 +95,30 @@ pub async fn get_staged_diff() -> Result<String, AppError> {
     Ok(result.stdout)
 }
 
+/// Get diff for commit analysis (staged changes with fallback to unstaged)
+pub async fn get_diff_for_commit() -> Result<String, AppError> {
+    // First try to get staged changes
+    let staged_diff = get_staged_diff().await?;
+    
+    if !staged_diff.trim().is_empty() {
+        tracing::debug!("使用已暂存的变更进行提交分析");
+        return Ok(staged_diff);
+    }
+    
+    // If no staged changes, check for unstaged changes
+    let args = vec!["diff".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    
+    if !result.stdout.trim().is_empty() {
+        tracing::debug!("使用未暂存的变更进行提交分析");
+        return Ok(result.stdout);
+    }
+    
+    Err(AppError::Generic(
+        "没有检测到任何变更可用于提交分析".to_string()
+    ))
+}
+
 /// Auto-stage tracked modified files
 pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
     let args = vec!["add".to_string(), "-u".to_string()];

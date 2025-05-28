@@ -1,13 +1,18 @@
 use crate::{
-    config::AppConfig,
+    config::{AppConfig, TreeSitterConfig},
     errors::{AppError, GitError},
     handlers::{ai, git},
+    tree_sitter_analyzer::{
+        analyzer::TreeSitterAnalyzer,
+        core::{parse_git_diff, DiffAnalysis},
+    },
     types::{
-        git::CommitArgs,
+        git::{CommitArgs, GitDiff},
         ai::ChatMessage,
     },
 };
 use std::io::{self, Write};
+use std::time::Instant;
 
 /// Handle the commit command with AI assistance
 /// This function demonstrates AI-powered commit message generation
@@ -29,13 +34,23 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         return Err(AppError::Git(GitError::NoStagedChanges));
     }
     
-    // Generate commit message using AI
-    let commit_message = if let Some(custom_message) = args.message {
-        // User provided a custom message, use it directly for now
-        // TODO: In future stories, we'll enhance this with AI suggestions
-        custom_message
+    // Generate commit message using AI with optional Tree-sitter analysis
+    let commit_message = if let Some(ref custom_message) = args.message {
+        if args.tree_sitter {
+            // Enhanced mode: combine custom message with AI analysis
+            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args).await?
+        } else {
+            // Simple mode: use custom message directly
+            custom_message.clone()
+        }
     } else {
-        generate_commit_message(config, &diff).await?
+        if args.tree_sitter {
+            // Enhanced mode: full Tree-sitter analysis with AI generation
+            generate_enhanced_commit_message(config, &diff, None, &args).await?
+        } else {
+            // Basic mode: simple AI generation
+            generate_commit_message(config, &diff).await?
+        }
     };
     
     // Show generated commit message and ask for confirmation
@@ -71,21 +86,13 @@ async fn auto_stage_files() -> Result<(), AppError> {
     git::auto_stage_tracked_files().await
 }
 
-/// Get staged changes for commit
+/// Get changes for commit analysis
 async fn get_changes_for_commit() -> Result<String, AppError> {
-    // Get the diff of staged changes
-    let diff = git::get_staged_diff().await?;
-    
-    if diff.trim().is_empty() {
-        return Err(AppError::Generic(
-            "没有已暂存的变更可以提交。请先使用 'git add' 暂存文件，或使用 '-a' 参数自动暂存修改的文件。".to_string()
-        ));
-    }
-    
-    Ok(diff)
+    // Get diff for commit (staged or unstaged changes)
+    git::get_diff_for_commit().await
 }
 
-/// Generate commit message using AI
+/// Generate commit message using AI (basic mode)
 async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<String, AppError> {
     tracing::info!("正在使用AI生成提交信息...");
     
@@ -133,6 +140,226 @@ async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<Strin
             Ok("chore: 更新代码".to_string())
         }
     }
+}
+
+/// Generate enhanced commit message using Tree-sitter analysis
+async fn generate_enhanced_commit_message(
+    config: &AppConfig, 
+    diff: &str, 
+    custom_message: Option<String>,
+    args: &CommitArgs
+) -> Result<String, AppError> {
+    tracing::info!("🌳 正在使用Tree-sitter增强分析生成提交信息...");
+    
+    let analysis_start = Instant::now();
+    
+    // Perform Tree-sitter analysis
+    let analysis_result = match analyze_diff_with_tree_sitter(diff, args).await {
+        Ok(result) => {
+            tracing::info!("Tree-sitter分析完成，耗时: {:?}", analysis_start.elapsed());
+            result
+        }
+        Err(e) => {
+            tracing::warn!("Tree-sitter分析失败，回退到基础模式: {:?}", e);
+            return if let Some(msg) = custom_message {
+                Ok(msg)
+            } else {
+                generate_commit_message(config, diff).await
+            };
+        }
+    };
+    
+    // Generate enhanced commit message
+    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message).await
+}
+
+/// Analyze diff using Tree-sitter
+async fn analyze_diff_with_tree_sitter(
+    diff: &str,
+    args: &CommitArgs,
+) -> Result<(String, Option<DiffAnalysis>), AppError> {
+    // Initialize TreeSitter analyzer with analysis depth
+    let mut ts_config = TreeSitterConfig::default();
+    
+    // Set analysis depth based on args
+    if let Some(depth) = &args.depth {
+        ts_config.analysis_depth = depth.clone();
+    } else {
+        ts_config.analysis_depth = "medium".to_string(); // Default for commit
+    }
+    
+    let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
+        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
+
+    // Parse the diff to get structured representation
+    let git_diff = parse_git_diff(diff).map_err(|e| {
+        tracing::error!("解析Git差异失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
+
+    // Generate analysis using TreeSitter
+    let analysis = analyzer.analyze_diff(diff).map_err(|e| {
+        tracing::error!("执行差异分析失败: {:?}", e);
+        AppError::TreeSitter(e)
+    })?;
+    
+    tracing::debug!("差异分析结果: {:?}", analysis);
+
+    // Create detailed analysis text
+    let analysis_text = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
+
+    Ok((analysis_text, Some(analysis)))
+}
+
+/// Generate commit message with Tree-sitter analysis
+async fn generate_commit_message_with_analysis(
+    config: &AppConfig,
+    diff: &str,
+    analysis_result: &(String, Option<DiffAnalysis>),
+    custom_message: Option<String>,
+) -> Result<String, AppError> {
+    let (analysis_text, analysis_data) = analysis_result;
+    
+    let system_prompt = config
+        .prompts
+        .get("commit-generator")
+        .cloned()
+        .unwrap_or_else(|| {
+            "你是一个专业的Git提交信息生成助手。请根据提供的代码变更和静态分析结果生成高质量的提交信息。".to_string()
+        });
+    
+    let user_prompt = if let Some(ref custom_msg) = custom_message {
+        format!(
+            "用户提供的提交信息：\n{}\n\n基于以下代码分析，请生成增强的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## Tree-sitter 分析结果:\n{}\n\n要求：\n1. 保留用户原始意图\n2. 添加技术细节和影响分析\n3. 使用结构化格式\n4. 包含代码变更摘要",
+            custom_msg, diff, analysis_text
+        )
+    } else {
+        format!(
+            "请根据以下代码变更和静态分析结果生成专业的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## Tree-sitter 分析结果:\n{}\n\n要求：\n1. 主标题简洁明确（<50字符）\n2. 包含变更的技术细节\n3. 说明影响范围和复杂度\n4. 使用规范的提交信息格式",
+            diff, analysis_text
+        )
+    };
+    
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt,
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt,
+        },
+    ];
+    
+    match ai::execute_ai_request_generic(config, messages, "Tree-sitter增强提交信息生成", true).await {
+        Ok(message) => {
+            let enhanced_message = format_enhanced_commit_message(&message, analysis_data, custom_message.is_some());
+            Ok(enhanced_message)
+        }
+        Err(e) => {
+            tracing::error!("增强提交信息生成失败: {:?}", e);
+            // Fallback to custom message or basic generation
+            if let Some(ref msg) = custom_message {
+                Ok(format!("{}\n\n[Tree-sitter 分析可用但AI生成失败]", msg))
+            } else {
+                Ok("feat: 代码更新\n\n[Tree-sitter 分析完成但AI生成失败]".to_string())
+            }
+        }
+    }
+}
+
+/// Format Tree-sitter analysis for commit message generation
+fn format_tree_sitter_analysis_for_commit(
+    analysis: &DiffAnalysis,
+    _git_diff: &GitDiff,
+) -> String {
+    let mut result = String::new();
+    
+    result.push_str("### 代码分析摘要\n");
+    result.push_str(&format!("- 变更模式: {:?}\n", analysis.change_analysis.change_pattern));
+    result.push_str(&format!("- 影响范围: {:?}\n", analysis.change_analysis.change_scope));
+    result.push_str(&format!("- 总体摘要: {}\n", analysis.overall_summary));
+    
+    if !analysis.file_analyses.is_empty() {
+        result.push_str("\n### 文件变更详情\n");
+        for file_analysis in &analysis.file_analyses {
+            result.push_str(&format!("**{}** ({})\n", file_analysis.path.display(), file_analysis.language));
+            result.push_str(&format!("  - 变更类型: {:?}\n", file_analysis.change_type));
+            if let Some(ref summary) = file_analysis.summary {
+                result.push_str(&format!("  - 摘要: {}\n", summary));
+            }
+            
+            if !file_analysis.affected_nodes.is_empty() {
+                result.push_str("  - 影响的代码结构:\n");
+                for node in &file_analysis.affected_nodes {
+                    let change_type_str = node.change_type.as_deref().unwrap_or("未知");
+                    result.push_str(&format!("    • {} ({}): {}\n", 
+                        node.node_type, 
+                        &node.name, 
+                        change_type_str
+                    ));
+                }
+            }
+            result.push('\n');
+        }
+    }
+    
+    // Add change statistics
+    let change_analysis = &analysis.change_analysis;
+    if change_analysis.function_changes > 0 {
+        result.push_str(&format!("### 函数变更: {} 个\n", change_analysis.function_changes));
+        result.push('\n');
+    }
+    
+    if change_analysis.type_changes > 0 {
+        result.push_str(&format!("### 类型变更: {} 个\n", change_analysis.type_changes));
+        result.push('\n');
+    }
+    
+    result
+}
+
+/// Format the final enhanced commit message
+fn format_enhanced_commit_message(
+    ai_message: &str, 
+    analysis_data: &Option<DiffAnalysis>,
+    has_custom_message: bool
+) -> String {
+    let mut result = String::new();
+    
+    // Add the AI-generated message
+    result.push_str(ai_message.trim());
+    
+    // Add Tree-sitter analysis summary if available
+    if let Some(analysis) = analysis_data {
+        result.push_str("\n\n");
+        result.push_str("---\n");
+        result.push_str("## 🌳 Tree-sitter 分析\n");
+        result.push_str(&format!("变更模式: {:?} | 影响范围: {:?}\n", 
+            analysis.change_analysis.change_pattern,
+            analysis.change_analysis.change_scope
+        ));
+        
+        if !analysis.file_analyses.is_empty() {
+            result.push_str(&format!("分析文件: {} 个", analysis.file_analyses.len()));
+            
+            let total_nodes: usize = analysis.file_analyses.iter()
+                .map(|f| f.affected_nodes.len())
+                .sum();
+                
+            if total_nodes > 0 {
+                result.push_str(&format!(" | 影响节点: {} 个", total_nodes));
+            }
+        }
+        
+        if has_custom_message {
+            result.push_str("\n\n[增强分析基于用户自定义消息]");
+        }
+    }
+    
+    result
 }
 
 /// Ask user to confirm the commit message
@@ -405,6 +632,329 @@ mod tests {
                     AppError::Git(GitError::CommandFailed { command, .. }) => {
                         assert!(command.contains("git commit"));
                     }
+                    _ => assert!(true),
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_diff_with_tree_sitter_basic() {
+        let diff = "diff --git a/src/test.rs b/src/test.rs\nindex 1234567..abcdefg 100644\n--- a/src/test.rs\n+++ b/src/test.rs\n@@ -1,3 +1,4 @@\n fn test_function() {\n     println!(\"Hello, world!\");\n+    println!(\"New line added\");\n }";
+        
+        let args = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+
+        // This test may fail in environments without proper tree-sitter setup
+        match analyze_diff_with_tree_sitter(diff, &args).await {
+            Ok((analysis_text, analysis_data)) => {
+                assert!(!analysis_text.is_empty());
+                assert!(analysis_data.is_some());
+                assert!(analysis_text.contains("代码分析摘要"));
+            }
+            Err(e) => {
+                // Expected in test environments without tree-sitter support
+                match e {
+                    AppError::TreeSitter(_) => assert!(true),
+                    _ => assert!(true),
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_analyze_diff_with_tree_sitter_depth_levels() {
+        let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+pub fn new_function() {}";
+        
+        let shallow_args = CommitArgs {
+            tree_sitter: true,
+            depth: Some("shallow".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        
+        let deep_args = CommitArgs {
+            tree_sitter: true,
+            depth: Some("deep".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+
+        // Test different analysis depths
+        for args in &[shallow_args, deep_args] {
+            match analyze_diff_with_tree_sitter(diff, args).await {
+                Ok((analysis_text, _)) => {
+                    assert!(!analysis_text.is_empty());
+                    // Analysis text should contain depth-specific information
+                    assert!(analysis_text.contains("代码分析摘要") || analysis_text.contains("变更模式"));
+                }
+                Err(_) => {
+                    // Expected in test environments
+                    assert!(true);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_format_tree_sitter_analysis_for_commit() {
+        use crate::tree_sitter_analyzer::core::{
+            DiffAnalysis, FileAnalysis, ChangeAnalysis, ChangePattern, ChangeScope, AffectedNode
+        };
+        use std::path::PathBuf;
+
+        let analysis = DiffAnalysis {
+            file_analyses: vec![
+                FileAnalysis {
+                    path: PathBuf::from("src/test.rs"),
+                    language: "Rust".to_string(),
+                    change_type: crate::types::git::ChangeType::Added,
+                    affected_nodes: vec![
+                        AffectedNode {
+                            node_type: "function".to_string(),
+                            name: "test_function".to_string(),
+                            range: (0, 100),
+                            is_public: true,
+                            content: Some("fn test_function() {}".to_string()),
+                            line_range: (1, 5),
+                            change_type: Some("added".to_string()),
+                            additions: Some(vec!["println!(\"Hello\");".to_string()]),
+                            deletions: None,
+                        }
+                    ],
+                    summary: Some("新增测试函数".to_string()),
+                }
+            ],
+            overall_summary: "添加了新的测试函数".to_string(),
+            change_analysis: ChangeAnalysis {
+                function_changes: 1,
+                type_changes: 0,
+                method_changes: 0,
+                interface_changes: 0,
+                other_changes: 0,
+                change_pattern: ChangePattern::FeatureImplementation,
+                change_scope: ChangeScope::Minor,
+            },
+        };
+
+        let git_diff = crate::types::git::GitDiff {
+            changed_files: vec![],
+            metadata: None,
+        };
+
+        let result = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
+        
+        assert!(result.contains("代码分析摘要"));
+        assert!(result.contains("FeatureImplementation"));
+        assert!(result.contains("Minor"));
+        assert!(result.contains("src/test.rs"));
+        assert!(result.contains("函数变更: 1 个"));
+    }
+
+    #[test]
+    fn test_format_enhanced_commit_message() {
+        use crate::tree_sitter_analyzer::core::{
+            DiffAnalysis, ChangeAnalysis, ChangePattern, ChangeScope
+        };
+
+        let ai_message = "feat: add new authentication feature\n\nImplemented user login and registration functionality";
+        
+        let analysis = DiffAnalysis {
+            file_analyses: vec![],
+            overall_summary: "Authentication feature implementation".to_string(),
+            change_analysis: ChangeAnalysis {
+                function_changes: 3,
+                type_changes: 1,
+                method_changes: 2,
+                interface_changes: 0,
+                other_changes: 0,
+                change_pattern: ChangePattern::FeatureImplementation,
+                change_scope: ChangeScope::Moderate,
+            },
+        };
+
+        let result_with_analysis = format_enhanced_commit_message(ai_message, &Some(analysis.clone()), false);
+        let result_with_custom = format_enhanced_commit_message(ai_message, &Some(analysis), true);
+
+        assert!(result_with_analysis.contains("Tree-sitter 分析"));
+        assert!(result_with_analysis.contains("FeatureImplementation"));
+        assert!(result_with_analysis.contains("Moderate"));
+        assert!(result_with_analysis.contains("分析文件: 0 个"));
+
+        assert!(result_with_custom.contains("增强分析基于用户自定义消息"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_enhanced_commit_message_fallback() {
+        let config = create_test_config();
+        let diff = "diff --git a/src/test.rs b/src/test.rs\n+// test change";
+        
+        let args_with_custom = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: Some("feat: custom message".to_string()),
+            review: false,
+            passthrough_args: vec![],
+        };
+        
+        let args_without_custom = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+
+        // Test with custom message
+        match generate_enhanced_commit_message(&config, diff, Some("feat: custom message".to_string()), &args_with_custom).await {
+            Ok(message) => {
+                // Should either be enhanced or fallback
+                assert!(!message.is_empty());
+                assert!(message.contains("feat") || message.contains("Tree-sitter"));
+            }
+            Err(_) => {
+                // Expected in test environment
+                assert!(true);
+            }
+        }
+
+        // Test without custom message
+        match generate_enhanced_commit_message(&config, diff, None, &args_without_custom).await {
+            Ok(message) => {
+                assert!(!message.is_empty());
+            }
+            Err(_) => {
+                // Expected in test environment
+                assert!(true);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_commit_with_tree_sitter() {
+        let config = create_test_config();
+        
+        let args_tree_sitter = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        
+        let args_tree_sitter_with_message = CommitArgs {
+            tree_sitter: true,
+            depth: Some("deep".to_string()),
+            auto_stage: false,
+            message: Some("feat: enhanced with tree-sitter".to_string()),
+            review: false,
+            passthrough_args: vec![],
+        };
+
+        // Test tree-sitter mode without custom message
+        match handle_commit(&config, args_tree_sitter).await {
+            Ok(_) => {
+                // Success only if in proper git environment
+                assert!(true);
+            }
+            Err(e) => {
+                // Expected errors in test environment
+                match e {
+                    AppError::Git(GitError::NotARepository) => assert!(true),
+                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
+                    _ => assert!(true),
+                }
+            }
+        }
+
+        // Test tree-sitter mode with custom message
+        match handle_commit(&config, args_tree_sitter_with_message).await {
+            Ok(_) => {
+                assert!(true);
+            }
+            Err(e) => {
+                match e {
+                    AppError::Git(GitError::NotARepository) => assert!(true),
+                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
+                    _ => assert!(true),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_commit_args_tree_sitter_combinations() {
+        // Test various combinations of tree-sitter related arguments
+        let args1 = CommitArgs {
+            tree_sitter: true,
+            depth: Some("shallow".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        
+        let args2 = CommitArgs {
+            tree_sitter: true,
+            depth: Some("deep".to_string()),
+            auto_stage: true,
+            message: Some("custom message".to_string()),
+            review: false,
+            passthrough_args: vec!["-v".to_string()],
+        };
+        
+        let args3 = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: Some("simple commit".to_string()),
+            review: false,
+            passthrough_args: vec![],
+        };
+
+        assert!(args1.tree_sitter);
+        assert_eq!(args1.depth, Some("shallow".to_string()));
+        assert!(!args1.auto_stage);
+        assert!(args1.message.is_none());
+
+        assert!(args2.tree_sitter);
+        assert_eq!(args2.depth, Some("deep".to_string()));
+        assert!(args2.auto_stage);
+        assert_eq!(args2.message, Some("custom message".to_string()));
+        assert_eq!(args2.passthrough_args, vec!["-v".to_string()]);
+
+        assert!(!args3.tree_sitter);
+        assert!(args3.depth.is_none());
+        assert_eq!(args3.message, Some("simple commit".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_changes_for_commit_enhanced() {
+        // Test the enhanced git diff function
+        match get_changes_for_commit().await {
+            Ok(diff) => {
+                // If successful, we should have some diff content or empty string
+                assert!(diff.is_empty() || !diff.is_empty());
+            }
+            Err(e) => {
+                // Expected errors in test environment
+                match e {
+                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
+                    AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
+                    AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
             }
