@@ -1,6 +1,9 @@
 use clap::Parser;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs};
+use crate::errors::AppError;
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
     // 重构review命令参数以便使用clap解析
@@ -188,6 +191,199 @@ pub fn generate_gitai_help() -> String {
         ",
     );
     help
+}
+
+/// Get the current Git repository name
+pub fn get_git_repo_name() -> Result<String, AppError> {
+    let output = Command::new("git")
+        .args(&["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(|e| AppError::IO("Failed to get git repository path".to_string(), e))?;
+    
+    if !output.status.success() {
+        return Err(AppError::Generic("Not in a Git repository".to_string()));
+    }
+    
+    let binding = String::from_utf8_lossy(&output.stdout);
+    let repo_path = binding.trim();
+    let repo_name = Path::new(repo_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| AppError::Generic("Failed to extract repository name".to_string()))?;
+    
+    Ok(repo_name.to_string())
+}
+
+/// Get the current commit ID (HEAD)
+pub fn get_current_commit_id() -> Result<String, AppError> {
+    let output = Command::new("git")
+        .args(&["rev-parse", "--short", "HEAD"])
+        .output()
+        .map_err(|e| AppError::IO("Failed to get current commit ID".to_string(), e))?;
+    
+    if !output.status.success() {
+        return Err(AppError::Generic("Failed to get current commit ID".to_string()));
+    }
+    
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Expand tilde (~) in file paths to user home directory
+pub fn expand_tilde_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let path = path.as_ref();
+    if path.starts_with("~") {
+        if let Some(home_dir) = dirs::home_dir() {
+            if path == Path::new("~") {
+                return home_dir;
+            }
+            if let Ok(stripped) = path.strip_prefix("~/") {
+                return home_dir.join(stripped);
+            }
+        }
+    }
+    path.to_path_buf()
+}
+
+/// Generate the review file path for the current repository and commit
+pub fn generate_review_file_path(
+    storage_base_path: &str,
+    format: &str,
+) -> Result<PathBuf, AppError> {
+    let repo_name = get_git_repo_name()?;
+    let commit_id = get_current_commit_id()?;
+    
+    let expanded_base = expand_tilde_path(storage_base_path);
+    let file_extension = match format.to_lowercase().as_str() {
+        "json" => "json",
+        "html" => "html",
+        "markdown" | "md" => "md",
+        _ => "txt",
+    };
+    
+    let filename = format!("review_{}.{}", commit_id, file_extension);
+    let file_path = expanded_base.join(&repo_name).join(filename);
+    
+    Ok(file_path)
+}
+
+/// Find the most recent review file for the current repository
+pub fn find_latest_review_file(storage_base_path: &str) -> Result<Option<PathBuf>, AppError> {
+    let repo_name = get_git_repo_name()?;
+    let expanded_base = expand_tilde_path(storage_base_path);
+    let repo_dir = expanded_base.join(&repo_name);
+    
+    if !repo_dir.exists() {
+        return Ok(None);
+    }
+    
+    let mut review_files = Vec::new();
+    
+    for entry in std::fs::read_dir(&repo_dir)
+        .map_err(|e| AppError::IO(format!("Failed to read review directory: {:?}", repo_dir), e))?
+    {
+        let entry = entry.map_err(|e| AppError::IO("Failed to read directory entry".to_string(), e))?;
+        let path = entry.path();
+        
+        if path.is_file() {
+            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                if filename.starts_with("review_") && 
+                   (filename.ends_with(".md") || filename.ends_with(".txt") || 
+                    filename.ends_with(".json") || filename.ends_with(".html")) {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            review_files.push((path, modified));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if review_files.is_empty() {
+        return Ok(None);
+    }
+    
+    // Sort by modification time, most recent first
+    review_files.sort_by(|a, b| b.1.cmp(&a.1));
+    
+    Ok(Some(review_files[0].0.clone()))
+}
+
+/// Read and parse review file content
+pub fn read_review_file(file_path: &Path) -> Result<String, AppError> {
+    if !file_path.exists() {
+        return Err(AppError::Generic(format!("Review file does not exist: {:?}", file_path)));
+    }
+    
+    std::fs::read_to_string(file_path)
+        .map_err(|e| AppError::IO(format!("Failed to read review file: {:?}", file_path), e))
+}
+
+/// Extract key insights from review content for commit message integration
+pub fn extract_review_insights(review_content: &str) -> String {
+    let mut insights = Vec::new();
+    
+    // Extract lines that look like important findings or suggestions
+    for line in review_content.lines() {
+        let line = line.trim();
+        
+        // Skip empty lines and basic headers
+        if line.is_empty() || line.starts_with('#') && line.len() < 50 {
+            continue;
+        }
+        
+        // Look for key indicators of important content
+        if line.starts_with("- ") || line.starts_with("* ") {
+            // Bullet points are often key findings
+            if line.len() > 10 && (
+                line.to_lowercase().contains("fix") ||
+                line.to_lowercase().contains("issue") ||
+                line.to_lowercase().contains("improve") ||
+                line.to_lowercase().contains("security") ||
+                line.to_lowercase().contains("performance") ||
+                line.to_lowercase().contains("bug") ||
+                line.to_lowercase().contains("error") ||
+                line.contains("建议") || line.contains("问题") || line.contains("改进") ||
+                line.contains("优化") || line.contains("修复")
+            ) {
+                insights.push(line.to_string());
+            }
+        } else if line.contains("建议") || line.contains("问题") || line.contains("改进") ||
+                  line.contains("优化") || line.contains("修复") {
+            // Chinese keywords for suggestions and issues
+            insights.push(line.to_string());
+        }
+    }
+    
+    if insights.is_empty() {
+        // If no specific insights found, try to get a summary section
+        let lines: Vec<&str> = review_content.lines().collect();
+        let mut summary_start = None;
+        
+        for (i, line) in lines.iter().enumerate() {
+            if line.to_lowercase().contains("summary") || 
+               line.to_lowercase().contains("总结") ||
+               line.to_lowercase().contains("摘要") {
+                summary_start = Some(i + 1);
+                break;
+            }
+        }
+        
+        if let Some(start) = summary_start {
+            for line in lines.iter().skip(start).take(5) {
+                let line = line.trim();
+                if !line.is_empty() && !line.starts_with('#') {
+                    insights.push(line.to_string());
+                }
+            }
+        }
+    }
+    
+    if insights.is_empty() {
+        "基于代码审查结果".to_string()
+    } else {
+        insights.join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -391,5 +587,79 @@ mod tests {
             passthrough_args: vec![],
         };
         assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_expand_tilde_path() {
+        // Test with tilde
+        let path = expand_tilde_path("~/Documents/test");
+        assert!(path.to_string_lossy().contains("Documents/test"));
+        
+        // Test with just tilde
+        let path = expand_tilde_path("~");
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(path, home);
+        }
+        
+        // Test without tilde
+        let path = expand_tilde_path("/absolute/path");
+        assert_eq!(path, Path::new("/absolute/path"));
+        
+        // Test relative path without tilde
+        let path = expand_tilde_path("relative/path");
+        assert_eq!(path, Path::new("relative/path"));
+    }
+
+    #[test]
+    fn test_extract_review_insights() {
+        let review_content = r#"
+# 代码评审报告
+
+## 主要发现
+
+- 需要修复安全漏洞在登录模块
+- 性能问题需要优化数据库查询
+- 代码质量良好
+
+## 建议
+
+改进错误处理机制
+
+## 总结
+
+整体代码质量不错，但需要注意安全性问题。
+        "#;
+        
+        let insights = extract_review_insights(review_content);
+        assert!(insights.contains("修复安全漏洞"));
+        assert!(insights.contains("性能问题需要优化"));
+        assert!(insights.contains("改进错误处理机制"));
+    }
+
+    #[test]
+    fn test_extract_review_insights_empty() {
+        let review_content = "# Simple Header\n\nSome basic text without insights.";
+        let insights = extract_review_insights(review_content);
+        assert_eq!(insights, "基于代码审查结果");
+    }
+
+    #[test]
+    fn test_extract_review_insights_with_english_keywords() {
+        let review_content = r#"
+## Issues Found
+
+- Fix memory leak in authentication module
+- Improve error handling
+- Security vulnerability in input validation
+
+## Performance Analysis
+
+The code has performance issues that need attention.
+        "#;
+        
+        let insights = extract_review_insights(review_content);
+        assert!(insights.contains("Fix memory leak"));
+        assert!(insights.contains("Improve error handling"));
+        assert!(insights.contains("Security vulnerability"));
     }
 }

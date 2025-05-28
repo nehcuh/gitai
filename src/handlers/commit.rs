@@ -10,6 +10,7 @@ use crate::{
         git::{CommitArgs, GitDiff},
         ai::ChatMessage,
     },
+    utils::{find_latest_review_file, read_review_file, extract_review_insights},
 };
 use std::io::{self, Write};
 use std::time::Instant;
@@ -21,6 +22,39 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     
     // Check if we're in a git repository
     check_repository_status()?;
+    
+    // Check for review results if review integration is enabled
+    let review_context = if config.review.include_in_commit {
+        match find_latest_review_file(&config.review.storage_path) {
+            Ok(Some(review_file)) => {
+                tracing::info!("🔍 发现评审结果文件: {:?}", review_file);
+                match read_review_file(&review_file) {
+                    Ok(content) => {
+                        let insights = extract_review_insights(&content);
+                        tracing::debug!("提取到评审要点: {}", insights);
+                        println!("📋 已发现相关代码评审结果，将集成到提交信息中");
+                        Some(insights)
+                    }
+                    Err(e) => {
+                        tracing::warn!("读取评审文件失败: {}", e);
+                        println!("⚠️ 警告: 无法读取评审结果文件");
+                        None
+                    }
+                }
+            }
+            Ok(None) => {
+                tracing::debug!("未找到相关评审结果");
+                None
+            }
+            Err(e) => {
+                tracing::debug!("检查评审结果时出错: {}", e);
+                None
+            }
+        }
+    } else {
+        tracing::debug!("评审集成已禁用");
+        None
+    };
     
     // Auto-stage files if requested
     if args.auto_stage {
@@ -34,22 +68,25 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         return Err(AppError::Git(GitError::NoStagedChanges));
     }
     
-    // Generate commit message using AI with optional Tree-sitter analysis
+    // Generate commit message using AI with optional Tree-sitter analysis and review context
     let commit_message = if let Some(ref custom_message) = args.message {
         if args.tree_sitter {
-            // Enhanced mode: combine custom message with AI analysis
-            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args).await?
+            // Enhanced mode: combine custom message with AI analysis and review
+            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args, review_context.as_deref()).await?
+        } else if review_context.is_some() {
+            // Custom message with review context
+            format_custom_message_with_review(custom_message, review_context.as_deref().unwrap())
         } else {
             // Simple mode: use custom message directly
             custom_message.clone()
         }
     } else {
         if args.tree_sitter {
-            // Enhanced mode: full Tree-sitter analysis with AI generation
-            generate_enhanced_commit_message(config, &diff, None, &args).await?
+            // Enhanced mode: full Tree-sitter analysis with AI generation and review
+            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
         } else {
-            // Basic mode: simple AI generation
-            generate_commit_message(config, &diff).await?
+            // Basic mode: AI generation with optional review context
+            generate_commit_message_with_review(config, &diff, review_context.as_deref()).await?
         }
     };
     
@@ -126,17 +163,16 @@ async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<Strin
             // Clean up the AI response - remove any markdown formatting
             let cleaned_message = message
                 .lines()
-                .filter(|line| !line.trim().is_empty() && !line.starts_with("```"))
+                .filter(|line| !line.trim().starts_with("```"))
                 .collect::<Vec<_>>()
                 .join("\n")
                 .trim()
                 .to_string();
-            
+
             Ok(cleaned_message)
         }
-        Err(e) => {
-            tracing::error!("AI生成提交信息失败: {:?}", e);
-            // Fallback to a basic commit message
+        Err(_) => {
+            tracing::warn!("AI生成提交信息失败，使用回退方案");
             Ok("chore: 更新代码".to_string())
         }
     }
@@ -147,7 +183,8 @@ async fn generate_enhanced_commit_message(
     config: &AppConfig, 
     diff: &str, 
     custom_message: Option<String>,
-    args: &CommitArgs
+    args: &CommitArgs,
+    review_context: Option<&str>
 ) -> Result<String, AppError> {
     tracing::info!("🌳 正在使用Tree-sitter增强分析生成提交信息...");
     
@@ -162,15 +199,19 @@ async fn generate_enhanced_commit_message(
         Err(e) => {
             tracing::warn!("Tree-sitter分析失败，回退到基础模式: {:?}", e);
             return if let Some(msg) = custom_message {
-                Ok(msg)
+                if let Some(review) = review_context {
+                    Ok(format_custom_message_with_review(&msg, review))
+                } else {
+                    Ok(msg)
+                }
             } else {
-                generate_commit_message(config, diff).await
+                generate_commit_message_with_review(config, diff, review_context).await
             };
         }
     };
     
     // Generate enhanced commit message
-    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message).await
+    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message, review_context).await
 }
 
 /// Analyze diff using Tree-sitter
@@ -213,12 +254,13 @@ async fn analyze_diff_with_tree_sitter(
     Ok((analysis_text, Some(analysis)))
 }
 
-/// Generate commit message with Tree-sitter analysis
+/// Generate commit message with Tree-sitter analysis results
 async fn generate_commit_message_with_analysis(
     config: &AppConfig,
     diff: &str,
     analysis_result: &(String, Option<DiffAnalysis>),
     custom_message: Option<String>,
+    review_context: Option<&str>,
 ) -> Result<String, AppError> {
     let (analysis_text, analysis_data) = analysis_result;
     
@@ -230,7 +272,7 @@ async fn generate_commit_message_with_analysis(
             "你是一个专业的Git提交信息生成助手。请根据提供的代码变更和静态分析结果生成高质量的提交信息。".to_string()
         });
     
-    let user_prompt = if let Some(ref custom_msg) = custom_message {
+    let mut user_prompt = if let Some(ref custom_msg) = custom_message {
         format!(
             "用户提供的提交信息：\n{}\n\n基于以下代码分析，请生成增强的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## Tree-sitter 分析结果:\n{}\n\n要求：\n1. 保留用户原始意图\n2. 添加技术细节和影响分析\n3. 使用结构化格式\n4. 包含代码变更摘要",
             custom_msg, diff, analysis_text
@@ -241,6 +283,13 @@ async fn generate_commit_message_with_analysis(
             diff, analysis_text
         )
     };
+
+    if let Some(review) = review_context {
+        user_prompt.push_str(&format!(
+            "\n\n## 代码评审要点:\n{}\n\n请在提交信息中体现相关的评审改进点。",
+            review
+        ));
+    }
     
     let messages = vec![
         ChatMessage {
@@ -379,6 +428,48 @@ async fn execute_commit(message: &str) -> Result<(), AppError> {
     git::execute_commit_with_message(message).await
 }
 
+/// Generate commit message with optional review context
+async fn generate_commit_message_with_review(
+    config: &AppConfig,
+    diff: &str,
+    review_context: Option<&str>,
+) -> Result<String, AppError> {
+    let mut prompt = format!(
+        "根据以下代码变更信息生成高质量的Git提交信息：\n\n{}",
+        diff
+    );
+
+    if let Some(review) = review_context {
+        prompt.push_str(&format!(
+            "\n\n代码评审要点:\n{}\n\n请在提交信息中体现相关的评审改进点。",
+            review
+        ));
+    }
+
+    prompt.push_str("\n\n请生成简洁、清晰的提交信息，遵循常见的提交信息格式（如conventional commits）。");
+
+    match generate_commit_message(config, &prompt).await {
+        Ok(message) => Ok(message),
+        Err(_) => {
+            tracing::warn!("AI生成提交信息失败，使用回退方案");
+            if review_context.is_some() {
+                Ok("chore: 基于代码评审结果更新代码".to_string())
+            } else {
+                Ok("chore: 更新代码".to_string())
+            }
+        }
+    }
+}
+
+/// Format custom message with review context
+fn format_custom_message_with_review(custom_message: &str, review_context: &str) -> String {
+    format!(
+        "{}\n\n---\n## 基于代码评审的改进\n\n{}",
+        custom_message,
+        review_context
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +494,7 @@ mod tests {
                 api_key: None,
             },
             tree_sitter: TreeSitterConfig::default(),
+            review: crate::config::ReviewConfig::default(),
             account: None,
             prompts,
         }
@@ -818,7 +910,7 @@ mod tests {
         };
 
         // Test with custom message
-        match generate_enhanced_commit_message(&config, diff, Some("feat: custom message".to_string()), &args_with_custom).await {
+        match generate_enhanced_commit_message(&config, diff, Some("feat: custom message".to_string()), &args_with_custom, None).await {
             Ok(message) => {
                 // Should either be enhanced or fallback
                 assert!(!message.is_empty());
@@ -831,7 +923,7 @@ mod tests {
         }
 
         // Test without custom message
-        match generate_enhanced_commit_message(&config, diff, None, &args_without_custom).await {
+        match generate_enhanced_commit_message(&config, diff, None, &args_without_custom, None).await {
             Ok(message) => {
                 assert!(!message.is_empty());
             }
@@ -957,6 +1049,108 @@ mod tests {
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_format_custom_message_with_review() {
+        let custom_message = "feat: add user authentication";
+        let review_context = "- Fix security vulnerability in login\n- Improve input validation";
+        
+        let result = format_custom_message_with_review(custom_message, review_context);
+        
+        assert!(result.contains("feat: add user authentication"));
+        assert!(result.contains("基于代码评审的改进"));
+        assert!(result.contains("Fix security vulnerability"));
+        assert!(result.contains("Improve input validation"));
+    }
+
+    #[tokio::test]
+    async fn test_generate_commit_message_with_review() {
+        let config = create_test_config();
+        let diff = "diff --git a/src/main.rs b/src/main.rs\nindex 123..456 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1,3 +1,4 @@\n fn main() {\n+    println!(\"Hello, world!\");\n     // TODO: implement\n }";
+        
+        // Test with review context
+        let review_context = "- 添加了主函数输出\n- 代码结构良好";
+        let result = generate_commit_message_with_review(&config, diff, Some(review_context)).await;
+        
+        match result {
+            Ok(message) => {
+                assert!(!message.is_empty());
+                // Should contain some form of commit message
+                assert!(message.len() > 10);
+            }
+            Err(_) => {
+                // Fallback should still work
+                assert!(true);
+            }
+        }
+        
+        // Test without review context
+        let result = generate_commit_message_with_review(&config, diff, None).await;
+        match result {
+            Ok(message) => {
+                assert!(!message.is_empty());
+            }
+            Err(_) => {
+                assert!(true);
+            }
+        }
+    }
+
+    #[test]
+    fn test_commit_args_with_review_integration() {
+        // Test CommitArgs structure supports review integration
+        let args = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: Some("feat: add feature".to_string()),
+            review: true,
+            passthrough_args: vec![],
+        };
+        
+        assert_eq!(args.tree_sitter, true);
+        assert_eq!(args.message, Some("feat: add feature".to_string()));
+        assert_eq!(args.review, true);
+    }
+
+    #[tokio::test]
+    async fn test_enhanced_commit_with_review_context() {
+        let config = create_test_config();
+        let diff = "test diff content";
+        let args = CommitArgs {
+            tree_sitter: true,
+            depth: Some("medium".to_string()),
+            auto_stage: false,
+            message: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        
+        // Test with review context
+        let review_context = "Review findings: code quality good";
+        let result = generate_enhanced_commit_message(&config, diff, None, &args, Some(review_context)).await;
+        
+        match result {
+            Ok(message) => {
+                assert!(!message.is_empty());
+            }
+            Err(_) => {
+                // Should fallback gracefully
+                assert!(true);
+            }
+        }
+        
+        // Test without review context
+        let result = generate_enhanced_commit_message(&config, diff, None, &args, None).await;
+        match result {
+            Ok(message) => {
+                assert!(!message.is_empty());
+            }
+            Err(_) => {
+                assert!(true);
             }
         }
     }

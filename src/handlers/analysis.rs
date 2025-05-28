@@ -383,6 +383,7 @@ mod tests {
                 api_key: Some("test-key".to_string()),
             },
             tree_sitter: Default::default(),
+            review: Default::default(),
             account: None,
             prompts: HashMap::new(),
         })

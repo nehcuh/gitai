@@ -200,6 +200,42 @@ impl Default for TreeSitterConfig {
     }
 }
 
+/// Configuration for review functionality
+#[derive(Deserialize, Debug, Clone)]
+pub struct ReviewConfig {
+    /// Whether to automatically save review results to local files
+    #[serde(default = "default_auto_save")]
+    pub auto_save: bool,
+
+    /// Base path for storing review results (supports ~ expansion)
+    #[serde(default = "default_storage_path")]
+    pub storage_path: String,
+
+    /// Default format for saved review files
+    #[serde(default = "default_review_format")]
+    pub format: String,
+
+    /// Maximum age in hours to keep review results
+    #[serde(default = "default_max_age_hours")]
+    pub max_age_hours: u32,
+
+    /// Whether to include review results in commit message generation
+    #[serde(default = "default_include_in_commit")]
+    pub include_in_commit: bool,
+}
+
+impl Default for ReviewConfig {
+    fn default() -> Self {
+        Self {
+            auto_save: default_auto_save(),
+            storage_path: default_storage_path(),
+            format: default_review_format(),
+            max_age_hours: default_max_age_hours(),
+            include_in_commit: default_include_in_commit(),
+        }
+    }
+}
+
 fn default_analysis_depth() -> String {
     "medium".to_string()
 }
@@ -213,11 +249,31 @@ fn default_languages() -> Vec<String> {
         "rust".to_string(),
         "c".to_string(),
         "cpp".to_string(),
-        "java".to_string(),
-        "javascrip".to_string(),
-        "python".to_string(),
         "go".to_string(),
+        "javascript".to_string(),
+        "python".to_string(),
+        "java".to_string(),
     ]
+}
+
+fn default_auto_save() -> bool {
+    true
+}
+
+fn default_storage_path() -> String {
+    "~/.gitai/review_results".to_string()
+}
+
+fn default_review_format() -> String {
+    "markdown".to_string()
+}
+
+fn default_max_age_hours() -> u32 {
+    168 // 7 days
+}
+
+fn default_include_in_commit() -> bool {
+    true
 }
 
 /// Partial loading helper struct for AI configuration
@@ -256,6 +312,21 @@ pub struct PartialTreeSitterConfig {
     languages: Option<Vec<String>>,
 }
 
+/// Partial loading helper structure for review configuration
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialReviewConfig {
+    #[serde(default)]
+    pub auto_save: Option<bool>,
+    #[serde(default)]
+    pub storage_path: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub max_age_hours: Option<u32>,
+    #[serde(default)]
+    pub include_in_commit: Option<bool>,
+}
+
 /// Application overall configuration
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
@@ -265,6 +336,9 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub tree_sitter: TreeSitterConfig,
+
+    #[serde(default)]
+    pub review: ReviewConfig,
 
     #[serde(default)]
     pub account: Option<AccountConfig>,
@@ -277,6 +351,7 @@ pub struct AppConfig {
 pub struct PartialAppConfig {
     ai: Option<PartialAIConfig>,
     tree_sitter: Option<PartialTreeSitterConfig>,
+    review: Option<PartialReviewConfig>,
     account: Option<PartialAccountConfig>,
 }
 
@@ -673,6 +748,11 @@ impl AppConfig {
             partial_config.tree_sitter = Some(PartialTreeSitterConfig::default());
         }
 
+        if partial_config.review.is_none() {
+            tracing::info!("配置文件中未找到 Review 配置部分，使用默认值");
+            partial_config.review = Some(PartialReviewConfig::default());
+        }
+
         let mut prompts = HashMap::new();
         let prompt_start_time = std::time::Instant::now();
 
@@ -777,6 +857,43 @@ impl AppConfig {
             tracing::debug!("Tree-sitter 支持的语言: {}", languages.join(", "));
         }
 
+        // --- Review Configuration Loading ---
+        let partial_review_config = partial_config.review.unwrap_or_default();
+
+        let auto_save = partial_review_config
+            .auto_save
+            .unwrap_or_else(default_auto_save);
+        let storage_path = partial_review_config
+            .storage_path
+            .unwrap_or_else(default_storage_path);
+        let format = partial_review_config
+            .format
+            .unwrap_or_else(default_review_format);
+        let max_age_hours = partial_review_config
+            .max_age_hours
+            .unwrap_or_else(default_max_age_hours);
+        let include_in_commit = partial_review_config
+            .include_in_commit
+            .unwrap_or_else(default_include_in_commit);
+
+        let review_config = ReviewConfig {
+            auto_save,
+            storage_path: storage_path.clone(),
+            format: format.clone(),
+            max_age_hours,
+            include_in_commit,
+        };
+
+        tracing::debug!(
+            "Review 配置: 自动保存: {}, 存储路径: {}, 格式: {}, 最大保留时间: {}小时, 包含在提交中: {}",
+            auto_save,
+            storage_path,
+            format,
+            max_age_hours,
+            include_in_commit
+        );
+        // --- End Review Configuration Loading ---
+
         // --- Account Configuration Loading ---
         let file_loaded_account_config: Option<AccountConfig> =
             partial_config.account.map(|p_acc| AccountConfig {
@@ -837,6 +954,7 @@ impl AppConfig {
         let config = Self {
             ai: ai_config,
             tree_sitter: tree_sitter_config,
+            review: review_config,
             account: final_account_config,
             prompts,
         };
