@@ -10,6 +10,7 @@ use crate::{
 use std::io::{self, Write};
 
 /// Handle the commit command with AI assistance
+/// This function demonstrates AI-powered commit message generation
 pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), AppError> {
     tracing::info!("开始处理智能提交命令");
     
