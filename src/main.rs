@@ -6,10 +6,11 @@ mod tree_sitter_analyzer;
 mod types;
 mod utils;
 
-use handlers::git::passthrough_to_git;
-use handlers::review::handle_review;
 use handlers::commit::handle_commit;
-use utils::{construct_review_args, construct_commit_args};
+use handlers::git::passthrough_to_git;
+use handlers::intelligent_git::handle_intelligent_git_command;
+use handlers::review::handle_review;
+use utils::{construct_commit_args, construct_review_args};
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -82,7 +83,16 @@ async fn main() -> Result<(), AppError> {
 
     // 标准 git 指令处理
     // 1. 当全局 ai 标识启用时，同时捕捉标准输出和标准错误，利用 AI 解释
-    // 2. 当没有指定全局 ai 标识时，标准输出直接转发，捕获标准错误并提供 AI 解释
+    // 2. 当没有指定全局 ai 标识时，如果没有报错，则标准输出直接输出，如果有错误，则捕获标准错误并提供 AI 解释
+    
+    match handle_intelligent_git_command(&config, &args, use_ai).await {
+        Ok(_) => {},
+        Err(AppError::Git(crate::errors::GitError::CommandFailed { status_code, .. })) => {
+            // Maintain same exit status as original git command
+            std::process::exit(status_code.unwrap_or(1));
+        }
+        Err(e) => return Err(e),
+    }
 
     Ok(())
 }

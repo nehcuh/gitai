@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use gitai::{
-    config::{AppConfig, AIConfig, TreeSitterConfig},
+    config::{AppConfig, AIConfig, TreeSitterConfig, ReviewConfig},
     handlers::commit::handle_commit,
     types::git::CommitArgs,
     errors::{AppError, GitError},
@@ -22,6 +22,7 @@ fn create_test_config() -> AppConfig {
             api_key: None,
         },
         tree_sitter: TreeSitterConfig::default(),
+        review: Default::default(),
         account: None,
         prompts,
     }
