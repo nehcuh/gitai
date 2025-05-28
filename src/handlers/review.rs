@@ -38,11 +38,13 @@ pub async fn handle_review(
     // DevOps Client Instantiation & Work Item Fetching
     let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
         .unwrap_or_else(|_| "https://codingcorp.devops.xxx.com.cn".to_string());
-    let devops_token = env::var("DEV_DEVOPS_API_TOKEN")
-        .unwrap_or_else(|_| "your_placeholder_token".to_string());
+    let devops_token =
+        env::var("DEV_DEVOPS_API_TOKEN").unwrap_or_else(|_| "your_placeholder_token".to_string());
 
     if devops_token == "your_placeholder_token" {
-        tracing::warn!("Using placeholder DevOps API token. Please set DEV_DEVOPS_API_TOKEN environment variable.");
+        tracing::warn!(
+            "Using placeholder DevOps API token. Please set DEV_DEVOPS_API_TOKEN environment variable."
+        );
     }
     let devops_client = DevOpsClient::new(devops_base_url, devops_token);
 
@@ -76,7 +78,7 @@ pub async fn handle_review(
         let results = devops_client
             .get_work_items(space_id, &all_work_item_ids)
             .await;
-        
+
         for result in results {
             match result {
                 Ok(item) => {
@@ -92,7 +94,8 @@ pub async fn handle_review(
                     println!("Description:\n{}", item.description);
                     fetched_work_items.push(item);
                 }
-                Err(e) => { // Type of e is inferred
+                Err(e) => {
+                    // Type of e is inferred
                     tracing::warn!("Failed to fetch a work item: {:?}", e);
                     println!("Failed to fetch work item: {:?}", e);
                     // Depending on requirements, one might choose to return an error here
@@ -101,17 +104,6 @@ pub async fn handle_review(
             }
         }
     }
-
-    // if review_args.stories.is_none()
-    //     && review_args.tasks.is_none()
-    //     && review_args.defects.is_none()
-    //     && review_args.space_id.is_some()
-    // {
-    //     return Err(AppError::Generic(
-    //         "When not specifying stories, tasks, or defects, --space-id is not supported."
-    //             .to_string(),
-    //     ));
-    // }
 
     let start_time = Instant::now();
     tracing::info!(
@@ -617,7 +609,10 @@ async fn generate_ai_review_prompt(
         create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
 
     // Append work items summary to the prompt
-    Ok(format!("{}{}", prompt_without_work_items, work_items_summary))
+    Ok(format!(
+        "{}{}",
+        prompt_without_work_items, work_items_summary
+    ))
 }
 
 /// Send review request to AI

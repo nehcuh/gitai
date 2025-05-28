@@ -118,13 +118,84 @@ gitai review --space-id=726226 --stories=99 --depth=deep --format=json --output=
 
 ### 数据结构定义
 ```rust
+/// Represents a work item (e.g., User Story, Defect, Task) prepared for AI analysis.
+/// This struct is populated by extracting specific fields from the DevOps API response
+/// as defined in User Story 03, where the response structure is:
+/// ```
+/// {
+///   "code": 0,
+///   "msg": null,
+///   "data": { ... } // serde_json::Value containing work item details
+/// }
+/// ```
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WorkItem {
+    /// DevOps work item unique identifier
+    /// Source: DevOps API response `data.id`
+    /// Example: 1255140 (用户故事), 1455437 (缺陷), 1323273 (任务)
+    pub id: Option<u32>,
+    
+    /// DevOps work item code/number used for reference
+    /// Source: DevOps API response `data.code`
+    /// Example: 99 (用户故事), 833118 (缺陷), 655911 (任务)
+    pub code: Option<u32>,
+    
+    /// Project/Product context name for AI to understand business domain
+    /// Source: DevOps API response `data.program.display_name`
+    /// Example: "金科中心代码扫描引擎项目预研" (用户故事)
+    ///          "T7.6券结(含券结ETF)融资行权业务回归及单客户上线" (缺陷)
+    ///          null or missing (任务 - handle gracefully)
+    pub project_name: Option<String>,
+    
+    /// Human-readable work item type for AI analysis strategy differentiation
+    /// Source: DevOps API response `data.issueTypeDetail.name`
+    /// Expected values: "用户故事", "缺陷", "任务"
+    /// This field helps AI apply different analysis approaches for different work item types
+    pub item_type_name: Option<String>,
+    
+    /// Work item title/summary - the main subject of the work item
+    /// Source: DevOps API response `data.name`
+    /// Example: "封装 requests 函数到用户自定义函数" (用户故事)
+    ///          "交易运营部-公募T0账单-资金信息汇总未统计理财持仓市值。" (缺陷)
+    ///          "交易网关9502超时优化" (任务)
+    pub title: Option<String>,
+    
+    /// Detailed work item description - contains requirements, acceptance criteria, etc.
+    /// Source: DevOps API response `data.description`
+    /// This is the primary content AI will use to understand requirements and compare against code
+    /// May contain markdown formatting, images, and structured content
+    pub description: Option<String>,
+    
+    /// Optional: Raw DevOps work item type for fine-grained AI analysis strategy
+    /// Source: DevOps API response `data.type`
+    /// Values: "REQUIREMENT", "DEFECT", "MISSION"
+    /// Uncomment if AI needs to differentiate analysis based on DevOps internal categorization
+    // pub devops_raw_type: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AnalysisRequest {
+    /// Collection of work items to be analyzed together.
+    /// Each WorkItem is constructed by processing the DevOps API response as detailed in User Story 03.
+    /// 
+    /// Construction process:
+    /// 1. Call DevOps API to get response: `{"code": 0, "msg": null, "data": {...}}`
+    /// 2. Parse `data` field as `serde_json::Value` (since structure varies by work item type)
+    /// 3. Extract fields to populate WorkItem struct:
+    ///    - `WorkItem.id` ← `data["id"].as_u64()`
+    ///    - `WorkItem.code` ← `data["code"].as_u64()`
+    ///    - `WorkItem.project_name` ← `data["program"]["display_name"].as_str()`
+    ///    - `WorkItem.item_type_name` ← `data["issueTypeDetail"]["name"].as_str()`
+    ///    - `WorkItem.title` ← `data["name"].as_str()`
+    ///    - `WorkItem.description` ← `data["description"].as_str()`
+    /// 
+    /// Note: Handle missing fields gracefully using Option types, as some fields
+    /// may be null or absent in certain work item types (e.g., program.display_name in tasks).
     pub work_items: Vec<WorkItem>,
     pub git_diff: String,
     pub focus_areas: Option<Vec<String>>,
-    pub analysis_depth: AnalysisDepth,
-    pub output_format: OutputFormat,
+    pub analysis_depth: AnalysisDepth, // Assuming AnalysisDepth enum is defined elsewhere
+    pub output_format: OutputFormat,   // Assuming OutputFormat enum is defined elsewhere
 }
 
 #[derive(Debug, Serialize, Deserialize)]
