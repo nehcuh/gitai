@@ -72,17 +72,15 @@ async fn auto_stage_files() -> Result<(), AppError> {
 
 /// Get staged changes for commit
 async fn get_changes_for_commit() -> Result<String, AppError> {
-    // First check if there are staged changes
-    let status = git::get_staged_files_status().await?;
+    // Get the diff of staged changes
+    let diff = git::get_staged_diff().await?;
     
-    if status.trim().is_empty() {
+    if diff.trim().is_empty() {
         return Err(AppError::Generic(
             "没有已暂存的变更可以提交。请先使用 'git add' 暂存文件，或使用 '-a' 参数自动暂存修改的文件。".to_string()
         ));
     }
     
-    // Get the diff of staged changes
-    let diff = git::get_staged_diff().await?;
     Ok(diff)
 }
 

@@ -83,7 +83,7 @@ pub fn is_git_repository() -> Result<bool, AppError> {
 
 /// Get the status of staged files
 pub async fn get_staged_files_status() -> Result<String, AppError> {
-    let args = vec!["status".to_string(), "--porcelain".to_string(), "--cached".to_string()];
+    let args = vec!["diff".to_string(), "--cached".to_string(), "--name-only".to_string()];
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }
