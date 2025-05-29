@@ -32,6 +32,11 @@ async fn main() -> Result<(), AppError> {
 
     // Handling cmd args
     let mut args: Vec<String> = std::env::args().collect();
+    
+    // Remove program name from arguments
+    if !args.is_empty() {
+        args.remove(0);
+    }
 
     // 检测是否需要弃用 AI
     if args.iter().any(|arg| arg == "--noai") {
@@ -51,7 +56,7 @@ async fn main() -> Result<(), AppError> {
     // Filter ai flags
     args.retain(|arg| arg != "--ai" && arg != "--noai");
 
-    if args.len() <= 1 {
+    if args.is_empty() {
         println!("{}", generate_gitai_help());
         return Ok(());
     }
