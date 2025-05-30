@@ -145,18 +145,11 @@ fn read_and_detect_language(path: &Path) -> Result<Option<(String, String)>, App
     let language = match extension {
         "rs" => "rust",
         "py" => "python",
-        "js" | "jsx" => "javascript",
-        "ts" | "tsx" => "typescript",
+        "js" | "jsx" | "ts" | "tsx" => "js", // Use "js" to match language registry
         "java" => "java",
         "cpp" | "cc" | "cxx" => "cpp",
         "c" => "c",
         "go" => "go",
-        "php" => "php",
-        "rb" => "ruby",
-        "cs" => "csharp",
-        "swift" => "swift",
-        "kt" => "kotlin",
-        "scala" => "scala",
         _ => return Ok(None), // Skip unsupported file types
     };
 

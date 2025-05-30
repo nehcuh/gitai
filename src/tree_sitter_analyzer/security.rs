@@ -111,13 +111,12 @@ impl TreeSitterSecurityScanner {
                   function: (identifier) @func
                   arguments: (arguments
                     (binary_expression
-                      operator: "+"
-                      left: (string_literal) @sql_string
+                      left: (string) @sql_string
                       right: (_) @user_input)))
                 (#match? @func "(query|execute|exec)")
                 (#match? @sql_string "(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string(), "java".to_string()],
+            languages: vec!["js".to_string(), "java".to_string()],
             cwe_id: Some("CWE-89".to_string()),
             owasp_category: Some("A03:2021 – Injection".to_string()),
             recommendation: "Use parameterized queries or prepared statements instead of string concatenation".to_string(),
@@ -136,7 +135,7 @@ impl TreeSitterSecurityScanner {
                   right: (_) @value)
                 (#eq? @prop "innerHTML")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string()],
+            languages: vec!["js".to_string()],
             cwe_id: Some("CWE-79".to_string()),
             owasp_category: Some("A03:2021 – Injection".to_string()),
             recommendation: "Use textContent instead of innerHTML, or sanitize user input properly".to_string(),
@@ -153,12 +152,11 @@ impl TreeSitterSecurityScanner {
                   function: (identifier) @func
                   arguments: (arguments
                     (binary_expression
-                      operator: "+"
-                      left: (string_literal)
+                      left: (string)
                       right: (_) @user_input)))
                 (#match? @func "(exec|system|spawn|execSync)")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()],
+            languages: vec!["js".to_string(), "python".to_string()],
             cwe_id: Some("CWE-78".to_string()),
             owasp_category: Some("A03:2021 – Injection".to_string()),
             recommendation: "Use parameterized command execution or input validation/sanitization".to_string(),
@@ -173,11 +171,11 @@ impl TreeSitterSecurityScanner {
             query: r#"
                 (variable_declarator
                   name: (identifier) @var_name
-                  value: (string_literal) @secret_value)
+                  value: (string) @secret_value)
                 (#match? @var_name "(?i)(password|secret|key|token|api_key|private_key)")
                 (#match? @secret_value "[A-Za-z0-9+/]{20,}")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string(), "python".to_string(), "java".to_string()],
+            languages: vec!["js".to_string(), "python".to_string(), "java".to_string()],
             cwe_id: Some("CWE-798".to_string()),
             owasp_category: Some("A02:2021 – Cryptographic Failures".to_string()),
             recommendation: "Use environment variables or secure configuration management for secrets".to_string(),
@@ -197,7 +195,7 @@ impl TreeSitterSecurityScanner {
                 (#match? @crypto_obj "(crypto|Crypto)")
                 (#match? @method "(md5|sha1|des|rc4)")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()],
+            languages: vec!["js".to_string(), "python".to_string()],
             cwe_id: Some("CWE-327".to_string()),
             owasp_category: Some("A02:2021 – Cryptographic Failures".to_string()),
             recommendation: "Use strong cryptographic algorithms like SHA-256, AES, or modern alternatives".to_string(),
@@ -231,13 +229,12 @@ impl TreeSitterSecurityScanner {
                     property: (property_identifier) @method)
                   arguments: (arguments
                     (binary_expression
-                      operator: "+"
                       left: (_)
                       right: (_) @user_path)))
                 (#match? @fs_obj "(fs|path|File)")
                 (#match? @method "(readFile|writeFile|open|join)")
             "#.to_string(),
-            languages: vec!["javascript".to_string(), "typescript".to_string(), "python".to_string()],
+            languages: vec!["js".to_string(), "python".to_string()],
             cwe_id: Some("CWE-22".to_string()),
             owasp_category: Some("A01:2021 – Broken Access Control".to_string()),
             recommendation: "Validate and sanitize file paths, use allowlists for permitted directories".to_string(),
