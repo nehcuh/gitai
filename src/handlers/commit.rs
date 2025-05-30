@@ -10,7 +10,7 @@ use crate::{
         git::{CommitArgs, GitDiff},
         ai::ChatMessage,
     },
-    utils::{find_latest_review_file, read_review_file, extract_review_insights},
+    utils::{find_latest_review_file, read_review_file, extract_review_insights, add_issue_prefix_to_commit_message},
 };
 use std::io::{self, Write};
 use std::time::Instant;
@@ -90,21 +90,24 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         }
     };
     
+    // Add issue ID prefix if provided
+    let final_commit_message = add_issue_prefix_to_commit_message(&commit_message, args.issue_id.as_ref());
+    
     // Show generated commit message and ask for confirmation
     println!("\n🤖 生成的提交信息:");
     println!("┌─────────────────────────────────────────────┐");
-    for line in commit_message.lines() {
+    for line in final_commit_message.lines() {
         println!("│ {:<43} │", line);
     }
     println!("└─────────────────────────────────────────────┘");
     
-    if !confirm_commit_message(&commit_message)? {
+    if !confirm_commit_message(&final_commit_message)? {
         println!("❌ 提交已取消");
         return Ok(());
     }
     
     // Execute the commit
-    execute_commit(&commit_message).await?;
+    execute_commit(&final_commit_message).await?;
     println!("✅ 提交成功!");
     
     Ok(())
@@ -531,6 +534,7 @@ mod tests {
             depth: None,
             auto_stage: false,
             message: Some("test message".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -547,6 +551,7 @@ mod tests {
             depth: Some("deep".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -563,6 +568,7 @@ mod tests {
             depth: None,
             auto_stage: true,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec!["--verbose".to_string()],
         };
@@ -600,6 +606,7 @@ mod tests {
             depth: None,
             auto_stage: false,
             message: Some("feat: custom commit message".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -633,6 +640,7 @@ mod tests {
             depth: None,
             auto_stage: true,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -739,6 +747,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -769,6 +778,7 @@ mod tests {
             depth: Some("shallow".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -778,6 +788,7 @@ mod tests {
             depth: Some("deep".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -896,6 +907,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: Some("feat: custom message".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -905,6 +917,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -943,6 +956,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -952,6 +966,7 @@ mod tests {
             depth: Some("deep".to_string()),
             auto_stage: false,
             message: Some("feat: enhanced with tree-sitter".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -995,6 +1010,7 @@ mod tests {
             depth: Some("shallow".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -1004,6 +1020,7 @@ mod tests {
             depth: Some("deep".to_string()),
             auto_stage: true,
             message: Some("custom message".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec!["-v".to_string()],
         };
@@ -1013,6 +1030,7 @@ mod tests {
             depth: None,
             auto_stage: false,
             message: Some("simple commit".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -1107,6 +1125,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: Some("feat: add feature".to_string()),
+            issue_id: None,
             review: true,
             passthrough_args: vec![],
         };
@@ -1125,6 +1144,7 @@ mod tests {
             depth: Some("medium".to_string()),
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };

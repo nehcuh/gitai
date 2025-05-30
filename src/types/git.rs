@@ -80,6 +80,10 @@ pub struct CommitArgs {
     #[clap(short, long, value_name = "MESSAGE")]
     pub message: Option<String>,
 
+    /// Issue IDs to include as prefix in commit message (e.g., "#123,#354")
+    #[clap(long = "issue-id", value_name = "ISSUE_IDS")]
+    pub issue_id: Option<String>,
+
     /// Perform code review before commit
     #[clap(short = 'r', long = "review")]
     pub review: bool,

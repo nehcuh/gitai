@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use gitai::{
-    config::{AppConfig, AIConfig, TreeSitterConfig, ReviewConfig},
+    config::{AppConfig, AIConfig, TreeSitterConfig},
     handlers::commit::handle_commit,
     types::git::CommitArgs,
     errors::{AppError, GitError},
@@ -36,6 +36,7 @@ async fn test_commit_with_custom_message() {
         depth: None,
         auto_stage: false,
         message: Some("feat: add new integration test".to_string()),
+        issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
@@ -76,6 +77,7 @@ async fn test_commit_with_auto_stage() {
         depth: None,
         auto_stage: true,
         message: None,
+        issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
@@ -109,6 +111,7 @@ async fn test_commit_argument_parsing() {
         depth: Some("deep".to_string()),
         auto_stage: true,
         message: Some("test: integration test commit".to_string()),
+        issue_id: None,
         review: false,
         passthrough_args: vec!["--verbose".to_string()],
     };
@@ -143,6 +146,7 @@ async fn test_commit_error_handling() {
         depth: None,
         auto_stage: false,
         message: None,
+        issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
@@ -181,6 +185,7 @@ async fn test_commit_mode_combinations() {
         depth: Some("medium".to_string()),
         auto_stage: false,
         message: Some("feat: test tree-sitter with message".to_string()),
+        issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
@@ -191,6 +196,7 @@ async fn test_commit_mode_combinations() {
         depth: Some("shallow".to_string()),
         auto_stage: true,
         message: None,
+        issue_id: None,
         review: false,
         passthrough_args: vec![],
     };

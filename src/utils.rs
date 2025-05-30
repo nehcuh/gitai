@@ -80,6 +80,7 @@ pub fn construct_commit_args(args: &[String]) -> CommitArgs {
             depth: None,
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         }
@@ -114,6 +115,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("                      可选值: shallow, medium (默认), deep\n\n");
     help.push_str("      -a, --all       自动暂存所有已跟踪的修改文件（类似 git commit -a）\n");
     help.push_str("      -m, --message   直接传递消息给提交\n");
+    help.push_str("      --issue-id=ISSUE_IDS\n");
+    help.push_str("                      在提交信息前添加issue ID前缀 (例如: \"#123,#354\")\n");
     help.push_str("      -r, --review        在提交前执行代码评审\n\n");
 
     help.push_str("  review (rv)          执行 AI 辅助的代码评审\n");
@@ -320,11 +323,56 @@ pub fn read_review_file(file_path: &Path) -> Result<String, AppError> {
 }
 
 /// Extract key insights from review content for commit message integration
-pub fn extract_review_insights(review_content: &str) -> String {
+/// Parse comma-separated issue IDs from a string (e.g., "#123,#354" or "123,354")
+pub fn parse_issue_ids(issue_id_str: &str) -> Vec<String> {
+    if issue_id_str.trim().is_empty() {
+        return Vec::new();
+    }
+    
+    issue_id_str
+        .split(',')
+        .map(|id| {
+            let trimmed = id.trim();
+            if trimmed.starts_with('#') {
+                trimmed.to_string()
+            } else {
+                format!("#{}", trimmed)
+            }
+        })
+        .filter(|id| id.len() > 1) // Filter out empty or just "#" entries
+        .collect()
+}
+
+/// Format issue IDs as a prefix for commit messages
+pub fn format_issue_prefix(issue_ids: &[String]) -> String {
+    if issue_ids.is_empty() {
+        String::new()
+    } else {
+        format!("{} ", issue_ids.join(","))
+    }
+}
+
+/// Add issue ID prefix to commit message if issue IDs are provided
+pub fn add_issue_prefix_to_commit_message(commit_message: &str, issue_id_option: Option<&String>) -> String {
+    match issue_id_option {
+        Some(issue_id_str) => {
+            let issue_ids = parse_issue_ids(issue_id_str);
+            if issue_ids.is_empty() {
+                commit_message.to_string()
+            } else {
+                let prefix = format_issue_prefix(&issue_ids);
+                format!("{}{}", prefix, commit_message)
+            }
+        }
+        None => commit_message.to_string(),
+    }
+}
+
+pub fn extract_review_insights(content: &str) -> String {
     let mut insights = Vec::new();
     
     // Extract lines that look like important findings or suggestions
-    for line in review_content.lines() {
+    for line in content.lines() {
         let line = line.trim();
         
         // Skip empty lines and basic headers
@@ -357,7 +405,7 @@ pub fn extract_review_insights(review_content: &str) -> String {
     
     if insights.is_empty() {
         // If no specific insights found, try to get a summary section
-        let lines: Vec<&str> = review_content.lines().collect();
+        let lines: Vec<&str> = content.lines().collect();
         let mut summary_start = None;
         
         for (i, line) in lines.iter().enumerate() {
@@ -533,6 +581,7 @@ mod tests {
             depth: None,
             auto_stage: false,
             message: None,
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -555,6 +604,7 @@ mod tests {
             depth: Some("deep".to_string()),
             auto_stage: true,
             message: Some("test commit message".to_string()),
+            issue_id: None,
             review: true,
             passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
         };
@@ -569,6 +619,7 @@ mod tests {
             depth: None,
             auto_stage: false,
             message: Some("quick commit".to_string()),
+            issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
@@ -583,6 +634,37 @@ mod tests {
             depth: None,
             auto_stage: true,
             message: None,
+            issue_id: None,
+            review: false,
+            passthrough_args: vec![],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_with_issue_id() {
+        let args = make_args(vec!["gitai", "commit", "--issue-id", "#123,#456", "-m", "test message"]);
+        let expected = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: Some("test message".to_string()),
+            issue_id: Some("#123,#456".to_string()),
+            review: false,
+            passthrough_args: vec![],
+        };
+        assert_eq!(construct_commit_args(&args), expected);
+    }
+
+    #[test]
+    fn test_construct_commit_args_issue_id_without_hash() {
+        let args = make_args(vec!["gitai", "commit", "--issue-id", "123,456"]);
+        let expected = CommitArgs {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: None,
+            issue_id: Some("123,456".to_string()),
             review: false,
             passthrough_args: vec![],
         };
@@ -661,5 +743,71 @@ The code has performance issues that need attention.
         assert!(insights.contains("Fix memory leak"));
         assert!(insights.contains("Improve error handling"));
         assert!(insights.contains("Security vulnerability"));
+    }
+
+    #[test]
+    fn test_parse_issue_ids() {
+        // Test with hash prefixes
+        let result = parse_issue_ids("#123,#456");
+        assert_eq!(result, vec!["#123", "#456"]);
+
+        // Test without hash prefixes
+        let result = parse_issue_ids("123,456");
+        assert_eq!(result, vec!["#123", "#456"]);
+
+        // Test mixed format
+        let result = parse_issue_ids("#123,456,#789");
+        assert_eq!(result, vec!["#123", "#456", "#789"]);
+
+        // Test with spaces
+        let result = parse_issue_ids(" #123 , 456 , #789 ");
+        assert_eq!(result, vec!["#123", "#456", "#789"]);
+
+        // Test empty string
+        let result = parse_issue_ids("");
+        assert_eq!(result, Vec::<String>::new());
+
+        // Test single issue
+        let result = parse_issue_ids("123");
+        assert_eq!(result, vec!["#123"]);
+    }
+
+    #[test]
+    fn test_format_issue_prefix() {
+        // Test with multiple issues
+        let issues = vec!["#123".to_string(), "#456".to_string()];
+        let result = format_issue_prefix(&issues);
+        assert_eq!(result, "#123,#456 ");
+
+        // Test with single issue
+        let issues = vec!["#123".to_string()];
+        let result = format_issue_prefix(&issues);
+        assert_eq!(result, "#123 ");
+
+        // Test with empty vector
+        let issues: Vec<String> = vec![];
+        let result = format_issue_prefix(&issues);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_add_issue_prefix_to_commit_message() {
+        let commit_message = "feat: add new feature";
+
+        // Test with issue IDs
+        let result = add_issue_prefix_to_commit_message(commit_message, Some(&"#123,#456".to_string()));
+        assert_eq!(result, "#123,#456 feat: add new feature");
+
+        // Test without issue IDs
+        let result = add_issue_prefix_to_commit_message(commit_message, None);
+        assert_eq!(result, "feat: add new feature");
+
+        // Test with empty issue ID string
+        let result = add_issue_prefix_to_commit_message(commit_message, Some(&"".to_string()));
+        assert_eq!(result, "feat: add new feature");
+
+        // Test with single issue ID
+        let result = add_issue_prefix_to_commit_message(commit_message, Some(&"123".to_string()));
+        assert_eq!(result, "#123 feat: add new feature");
     }
 }
