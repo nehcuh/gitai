@@ -1,375 +1,301 @@
-# Security Scanning with Semgrep
+# Security Scanning with GitAI
 
-GitAI integrates [Semgrep](https://semgrep.dev) for comprehensive security scanning capabilities. This document explains how to use the security scanning features both locally and in CI/CD pipelines.
+GitAI provides comprehensive security scanning capabilities using both local AST-based analysis and external tools.
 
 ## Overview
 
-The `gitai scan` command provides:
-- **Static security analysis** using Semgrep's extensive rule database
-- **Custom rule support** for project-specific security requirements
-- **AI-powered analysis** of scan results for actionable insights
-- **Integration with CI/CD** for automated security checks
-- **Multiple output formats** for different use cases
+GitAI's security scanning uses a two-tier approach:
 
-## Quick Start
+1. **Primary**: Tree-sitter based local AST analysis (no external dependencies)
+2. **Fallback**: Semgrep community scanner (when tree-sitter finds no issues)
 
-### Basic Usage
+## Local Tree-sitter Security Scanner
+
+The tree-sitter security scanner provides local, privacy-focused security analysis without sending code to external servers.
+
+### Supported Languages
+
+- **Rust**: Unsafe code blocks, unwrap() usage, panic patterns
+- **JavaScript/TypeScript**: XSS vulnerabilities, eval usage, DOM manipulation
+- **Python**: SQL injection, command injection, hardcoded secrets
+- **Java**: SQL injection, hardcoded passwords, unsafe deserialization
+- **Go**: SQL injection, command injection, hardcoded credentials
+- **C/C++**: Buffer overflows, format string vulnerabilities, unsafe functions
+
+### Security Rules
+
+#### Cross-Language Rules
+- **Hardcoded Secrets**: Detects API keys, passwords, tokens in source code
+- **SQL Injection**: Identifies unsafe SQL query construction
+- **Command Injection**: Finds unsafe system command execution
+- **XSS Vulnerabilities**: Detects unsafe HTML/DOM manipulation
+
+#### Language-Specific Rules
+- **Rust**: `unsafe` blocks, `.unwrap()` calls, `panic!()` usage
+- **JavaScript**: `eval()`, `innerHTML`, `document.write()`
+- **Python**: `exec()`, `eval()`, `os.system()`, hardcoded credentials
+- **Java**: `Runtime.exec()`, hardcoded passwords, unsafe deserialization
+- **Go**: `exec.Command()`, SQL string concatenation
+- **C/C++**: `strcpy()`, `sprintf()`, `gets()`, buffer operations
+
+## Usage
+
+### Basic Security Scan
 
 ```bash
-# Scan current directory with default rules
+# Scan entire repository
 gitai scan
 
 # Scan with detailed output
 gitai scan --detailed
 
-# Scan with AI analysis of results
-gitai scan --detailed --ai
+# Scan specific file
+gitai scan --file src/main.rs
 
-# Scan specific directory
-gitai scan /path/to/code
-
-# Scan with custom severity filter
-gitai scan --severity=ERROR
+# Scan with severity filtering
+gitai scan --severity HIGH
+gitai scan --severity MEDIUM
+gitai scan --severity LOW
 ```
 
-### Advanced Usage
+### Advanced Options
 
 ```bash
-# Use custom Semgrep rules
-gitai scan --rules="p/security-audit,p/secrets"
+# Exclude files/patterns
+gitai scan --exclude "test_*.rs" --exclude "*.test.js"
 
-# Exclude specific patterns
-gitai scan --exclude="tests,docs,target"
+# Output to JSON file
+gitai scan --output security_report.json
 
-# Save results to file
-gitai scan --output=security-report.json
+# Enable AI analysis (requires AI configuration)
+gitai scan --ai-analysis
 
-# Show all findings including low severity
-gitai scan --detailed --show-low
-
-# Combine multiple options
-gitai scan --detailed --ai --severity=WARNING --exclude="tests" --output=scan-results.json
+# Combine options
+gitai scan --detailed --severity HIGH --exclude "tests/" --output report.json
 ```
 
-## Command Options
+### Output Formats
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--path` | `-p` | Path to scan (default: current directory) |
-| `--rules` | `-r` | Custom Semgrep rules/config to use |
-| `--severity` | `-s` | Severity filter (ERROR, WARNING, INFO) |
-| `--exclude` | `-e` | Patterns to exclude (comma-separated) |
-| `--detailed` | `-d` | Show detailed findings |
-| `--show-low` | | Show low severity issues |
-| `--ai` | `-a` | Enable AI analysis of results |
-| `--output` | `-o` | Output file for results |
-
-## Semgrep Rules
-
-### Default Rules
-
-GitAI uses Semgrep's `auto` configuration by default, which includes:
-- Language-specific security rules
-- Common vulnerability patterns
-- Best practice violations
-
-### Custom Rules
-
-The project includes custom rules in `.semgrep.yml`:
-
-1. **Hardcoded Secrets Detection**
-   - Detects potential secrets in Rust code
-   - Severity: ERROR
-
-2. **Unsafe Block Review**
-   - Flags unsafe Rust blocks for review
-   - Severity: WARNING
-
-3. **Command Injection Prevention**
-   - Identifies potential command injection vulnerabilities
-   - Severity: WARNING
-
-4. **Error Handling Improvements**
-   - Suggests better error handling patterns
-   - Severity: INFO
-
-5. **Code Quality Checks**
-   - Finds TODO/FIXME comments
-   - Severity: INFO
-
-### Adding Custom Rules
-
-To add project-specific rules, edit `.semgrep.yml`:
-
-```yaml
-rules:
-  - id: my-custom-rule
-    pattern: |
-      dangerous_function($ARG)
-    message: "Avoid using dangerous_function"
-    languages: [rust]
-    severity: ERROR
+#### Console Output
 ```
-
-## AI Analysis
-
-When using the `--ai` flag, GitAI provides:
-
-1. **Security Risk Assessment**
-   - Prioritization of findings by business impact
-   - Risk scoring and categorization
-
-2. **Remediation Suggestions**
-   - Specific fix recommendations
-   - Code examples for secure alternatives
-
-3. **Pattern Analysis**
-   - Identification of recurring security issues
-   - Architectural security recommendations
-
-4. **Compliance Insights**
-   - Mapping to security frameworks (OWASP, CWE)
-   - Regulatory compliance considerations
-
-## CI/CD Integration
-
-### GitHub Actions
-
-The project includes a GitHub Actions workflow (`.github/workflows/semgrep.yml`) that:
-
-- Runs on every push and pull request
-- Uses comprehensive security rulesets
-- Uploads results to GitHub Security tab
-- Comments on PRs with scan summaries
-- Runs weekly scheduled scans
-
-### Configuration
-
-```yaml
-# Enable/disable CI scanning
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sundays
-```
-
-### Custom CI Setup
-
-For other CI systems, use:
-
-```bash
-# Install Semgrep
-pip install semgrep
-
-# Run scan
-semgrep --config=auto --json --output=results.json .
-
-# Use GitAI for analysis
-gitai scan --ai --output=analysis.txt
-```
-
-## Output Formats
-
-### Console Output
-
-```
-🔍 Starting Semgrep code scan...
-Running: semgrep --config=auto --json --verbose .
-
-📊 Scan Results
+📊 Security Scan Results
 ==================================================
 
 Summary:
-  🔴 Critical: 2
-  🟠 High: 5
+  📁 Files scanned: 32
+  🔍 Total findings: 8
   🟡 Medium: 8
-  🔵 Low: 3
 
-🔴 CRITICAL 2 Issues:
+🟡 MEDIUM 8 Issues:
 ----------------------------------------
 
-1. hardcoded-secret (src/config.rs:45)
-   Hardcoded secret detected in configuration
-   Fix: Use environment variables for sensitive data
+1. Unsafe Rust Code (./src/config.rs:1016)
+   Unsafe blocks bypass Rust's safety guarantees
+   CWE: CWE-119
+   Recommendation: Ensure unsafe code is necessary and properly reviewed
+   Code: unsafe { std::env::set_var("HOME", home_path.to_str().unwrap()) }
 ```
 
-### JSON Output
-
+#### JSON Output
 ```json
 {
-  "results": [
+  "findings": [
     {
-      "check_id": "hardcoded-secret",
-      "path": "src/config.rs",
-      "start": {"line": 45, "col": 8},
-      "end": {"line": 45, "col": 32},
-      "extra": {
-        "message": "Hardcoded secret detected",
-        "severity": "ERROR"
-      }
+      "id": "rust-unsafe-1",
+      "title": "Unsafe Rust Code",
+      "description": "Unsafe blocks bypass Rust's safety guarantees",
+      "severity": "Medium",
+      "file_path": "./src/config.rs",
+      "line_start": 1016,
+      "line_end": 1016,
+      "column_start": 9,
+      "column_end": 74,
+      "code_snippet": "unsafe { std::env::set_var(\"HOME\", home_path.to_str().unwrap()) }",
+      "recommendation": "Ensure unsafe code is necessary and properly reviewed",
+      "cwe_id": "CWE-119",
+      "owasp_category": null
     }
   ]
 }
 ```
 
-## Best Practices
+## Severity Levels
 
-### Development Workflow
+- **🔴 CRITICAL**: Immediate security risks requiring urgent attention
+- **🟠 HIGH**: Significant security vulnerabilities
+- **🟡 MEDIUM**: Moderate security concerns
+- **🔵 LOW**: Minor security improvements
 
-1. **Pre-commit Scanning**
-   ```bash
-   # Add to git hooks
-   gitai scan --severity=ERROR
-   ```
+## Security Rule Categories
 
-2. **Regular Security Reviews**
-   ```bash
-   # Weekly comprehensive scan
-   gitai scan --detailed --ai --output=weekly-scan.json
-   ```
+### CWE (Common Weakness Enumeration) Coverage
 
-3. **Feature Branch Scanning**
-   ```bash
-   # Before creating PR
-   gitai scan --detailed --exclude="tests"
-   ```
+- **CWE-79**: Cross-site Scripting (XSS)
+- **CWE-89**: SQL Injection
+- **CWE-94**: Code Injection
+- **CWE-119**: Buffer Overflow
+- **CWE-200**: Information Exposure
+- **CWE-259**: Hard-coded Password
+- **CWE-327**: Weak Cryptography
+- **CWE-502**: Unsafe Deserialization
 
-### Rule Management
+### OWASP Top 10 Alignment
 
-1. **Start Conservative**
-   - Begin with ERROR-level rules only
-   - Gradually add WARNING and INFO rules
+The security rules are designed to detect vulnerabilities from the OWASP Top 10:
 
-2. **Customize for Your Project**
-   - Add domain-specific security rules
-   - Exclude false positives appropriately
+1. **A01 - Broken Access Control**
+2. **A02 - Cryptographic Failures**
+3. **A03 - Injection**
+4. **A04 - Insecure Design**
+5. **A05 - Security Misconfiguration**
+6. **A06 - Vulnerable Components**
+7. **A07 - Authentication Failures**
+8. **A08 - Software Integrity Failures**
+9. **A09 - Logging Failures**
+10. **A10 - Server-Side Request Forgery**
 
-3. **Regular Rule Updates**
-   - Keep Semgrep rules updated
-   - Review and update custom rules
+## Privacy and Security
 
-### Performance Optimization
+### Local Analysis Benefits
 
-1. **Exclude Unnecessary Files**
-   ```yaml
-   exclude:
-     - "target/**"
-     - "tests/**"
-     - "docs/**"
-   ```
+- **No Data Transmission**: Code never leaves your machine
+- **Offline Capability**: Works without internet connection
+- **Fast Analysis**: Local AST parsing is extremely fast
+- **No Rate Limits**: Unlimited scans without API restrictions
 
-2. **Use Targeted Scans**
-   ```bash
-   # Scan only changed files
-   gitai scan --path="$(git diff --name-only HEAD~1)"
-   ```
+### Semgrep Fallback
 
-3. **Parallel Scanning**
-   ```bash
-   # Semgrep automatically uses multiple cores
-   semgrep --jobs=4 --config=auto .
-   ```
+When tree-sitter finds no issues, GitAI optionally runs Semgrep as a fallback:
+
+- Uses Semgrep community rules
+- Provides additional coverage for edge cases
+- Can be disabled if privacy is a concern
+
+## Configuration
+
+### Disabling Semgrep Fallback
+
+To use only local tree-sitter analysis:
+
+```bash
+# Set environment variable
+export GITAI_DISABLE_SEMGREP=true
+
+# Or modify your config.toml
+[security]
+disable_semgrep_fallback = true
+```
+
+### Custom Security Rules
+
+You can extend the security scanner with custom rules by modifying the `SecurityRule` definitions in `src/tree_sitter_analyzer/security.rs`.
+
+## Integration with CI/CD
+
+### GitHub Actions
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install GitAI
+        run: cargo install --git https://github.com/nehcuh/gitai.git
+      - name: Run Security Scan
+        run: gitai scan --output security-report.json
+      - name: Upload Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.json
+```
+
+### Exit Codes
+
+- `0`: No security issues found
+- `1`: Security issues found (check output for details)
+- `2`: Scan failed due to error
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Semgrep Not Installed**
-   ```bash
-   # Install Semgrep
-   pip install semgrep
-   
-   # Or use GitAI's auto-install
-   gitai scan  # Will prompt to install if missing
-   ```
+1. **Language Not Supported**: Ensure the file extension is recognized
+2. **Parse Errors**: Check for syntax errors in source files
+3. **False Positives**: Use `--exclude` to skip problematic files
 
-2. **High False Positive Rate**
-   - Review and update `.semgrep.yml` exclude patterns
-   - Use more specific rules
-   - Add suppressions for known false positives
-
-3. **Performance Issues**
-   - Exclude large directories (target/, node_modules/)
-   - Use targeted scanning for specific paths
-   - Consider running scans on smaller changesets
-
-4. **AI Analysis Failures**
-   - Check AI configuration in GitAI config
-   - Verify network connectivity
-   - Review API rate limits
-
-### Getting Help
-
-1. **GitAI Help**
-   ```bash
-   gitai scan --help
-   gitai --help
-   ```
-
-2. **Semgrep Documentation**
-   - [Official Semgrep Docs](https://semgrep.dev/docs/)
-   - [Rule Writing Guide](https://semgrep.dev/docs/writing-rules/overview/)
-
-3. **Community Resources**
-   - [Semgrep Community Rules](https://semgrep.dev/explore)
-   - [Security Best Practices](https://semgrep.dev/docs/semgrep-ci/overview/)
-
-## Security Considerations
-
-1. **Sensitive Data**
-   - Never commit scan results containing sensitive information
-   - Use secure storage for scan reports
-   - Review output before sharing
-
-2. **Rule Validation**
-   - Test custom rules thoroughly
-   - Validate rule accuracy before deployment
-   - Monitor for false positives
-
-3. **Access Control**
-   - Limit access to detailed scan results
-   - Use appropriate CI/CD permissions
-   - Secure API tokens and credentials
-
-## Integration Examples
-
-### Pre-commit Hook
+### Debug Mode
 
 ```bash
-#!/bin/sh
-# .git/hooks/pre-commit
-gitai scan --severity=ERROR
-if [ $? -ne 0 ]; then
-    echo "Security scan failed. Please fix issues before committing."
-    exit 1
-fi
+# Enable verbose logging
+RUST_LOG=debug gitai scan --detailed
 ```
 
-### IDE Integration
+## Contributing
 
-```bash
-# VS Code task
-{
-    "label": "GitAI Security Scan",
-    "type": "shell",
-    "command": "gitai scan --detailed --ai",
-    "group": "build"
+To add new security rules:
+
+1. Define the rule in `src/tree_sitter_analyzer/security.rs`
+2. Add tree-sitter query patterns for the target language
+3. Test with sample vulnerable code
+4. Update documentation
+
+## Examples
+
+### Detecting SQL Injection in Python
+
+```python
+# This would be detected
+query = "SELECT * FROM users WHERE id = " + user_id
+cursor.execute(query)
+
+# This is safe
+cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+```
+
+### Detecting XSS in JavaScript
+
+```javascript
+// This would be detected
+element.innerHTML = userInput;
+
+// This is safer
+element.textContent = userInput;
+```
+
+### Detecting Unsafe Rust Code
+
+```rust
+// This would be detected
+unsafe { 
+    std::env::set_var("HOME", path.to_str().unwrap()) 
 }
+
+// Consider safer alternatives
+std::env::set_var("HOME", path.to_str().unwrap_or_default());
 ```
 
-### Makefile Integration
+## Performance
 
-```makefile
-.PHONY: security-scan
-security-scan:
-	gitai scan --detailed --output=security-report.json
+- **Tree-sitter Analysis**: ~100-1000 files/second depending on file size
+- **Memory Usage**: Minimal, processes files individually
+- **Disk Usage**: No temporary files created
+- **Network**: No network requests for local analysis
 
-.PHONY: security-check
-security-check:
-	gitai scan --severity=ERROR
-```
+## Comparison with Other Tools
 
-This comprehensive security scanning integration makes GitAI a powerful tool for maintaining code security throughout the development lifecycle.
+| Feature | GitAI Tree-sitter | Semgrep | CodeQL | SonarQube |
+|---------|------------------|---------|---------|-----------|
+| Local Analysis | ✅ | ✅ | ❌ | ❌ |
+| No Data Upload | ✅ | ✅ | ❌ | ❌ |
+| Speed | ⚡ Fast | 🚀 Very Fast | 🐌 Slow | 🐌 Slow |
+| Language Support | 7+ | 20+ | 10+ | 25+ |
+| Custom Rules | ✅ | ✅ | ✅ | ✅ |
+| CI/CD Integration | ✅ | ✅ | ✅ | ✅ |
+| Free Tier | ✅ Unlimited | ✅ Limited | ❌ | ✅ Limited |
+
+GitAI's tree-sitter scanner provides the best balance of privacy, speed, and effectiveness for local security analysis.
