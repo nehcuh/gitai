@@ -1,0 +1,16 @@
+{
+  "findings": [],
+  "summary": {
+    "total_files_scanned": 80,
+    "total_findings": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0,
+    "info_count": 0
+  },
+  "scan_time": {
+    "secs_since_epoch": 1748647287,
+    "nanos_since_epoch": 446316263
+  }
+}

@@ -14,10 +14,39 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::collections::HashMap;
 use chrono;
+use serde::{Deserialize, Serialize};
 
-/// Handle the scan command using Tree-sitter AST analysis with Semgrep fallback
+/// Semgrep finding structure
+#[derive(Debug, Deserialize, Serialize)]
+struct SemgrepFinding {
+    check_id: String,
+    path: String,
+    start: SemgrepPosition,
+    end: SemgrepPosition,
+    extra: SemgrepExtra,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SemgrepPosition {
+    line: u32,
+    col: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SemgrepExtra {
+    message: String,
+    severity: String,
+    metadata: Option<HashMap<String, Value>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SemgrepResults {
+    results: Vec<SemgrepFinding>,
+}
+
+/// Handle the scan command using Tree-sitter AST analysis with Semgrep integration
 pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppError> {
-    println!("{}", "🔍 Starting Tree-sitter security scan...".cyan().bold());
+    println!("{}", "🔍 Starting security scan with Tree-sitter and Semgrep...".cyan().bold());
 
     // Initialize tree-sitter security scanner
     let language_registry = create_language_registry();
@@ -34,16 +63,23 @@ pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppEr
 
     println!("📁 Scanning {} files with Tree-sitter AST analysis...", files.len());
 
-    // Perform security scan
-    let scan_results = scanner.scan_files(files)
+    // Perform Tree-sitter security scan
+    let mut tree_sitter_results = scanner.scan_files(files.clone())
         .map_err(|e| AppError::Tool(format!("Tree-sitter scan failed: {}", e)))?;
 
-    // Display results
-    display_tree_sitter_results(&scan_results, &args).await?;
+    // Run Semgrep scan
+    println!("🔍 Running Semgrep analysis...");
+    let semgrep_results = run_semgrep_scan(scan_path).await?;
+    
+    // Merge results
+    merge_semgrep_results(&mut tree_sitter_results, semgrep_results);
+
+    // Display combined results
+    display_tree_sitter_results(&tree_sitter_results, &args).await?;
 
     // AI analysis if requested
     if args.ai_analysis {
-        analyze_scan_with_ai(config, &scan_results).await?;
+        analyze_scan_with_ai(config, &tree_sitter_results).await?;
     }
 
     // Save results locally (always save, with default filename if not specified)
@@ -57,22 +93,16 @@ pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppEr
     };
 
     let output_content = if args.format == "json" {
-        scan_results.to_json()
+        tree_sitter_results.to_json()
             .map_err(|e| AppError::Tool(format!("Failed to serialize results to JSON: {}", e)))?
     } else {
-        scan_results.to_markdown()
+        tree_sitter_results.to_markdown()
     };
 
     fs::write(&output_file, &output_content)
         .map_err(|e| AppError::Tool(format!("Failed to write output file: {}", e)))?;
     
     println!("{} {} ({})", "📄 Results saved to:".green(), output_file, args.format.to_uppercase());
-
-    // Fallback to Semgrep if requested or if no findings and Semgrep is available
-    if (scan_results.findings.is_empty() || args.rules.is_some()) && is_semgrep_available().await {
-        println!("{}", "🔄 Running Semgrep as additional check...".cyan());
-        run_semgrep_fallback(&args).await?;
-    }
 
     Ok(())
 }
@@ -337,6 +367,92 @@ async fn analyze_scan_with_ai(config: &AppConfig, results: &SecurityScanResults)
     Ok(())
 }
 
+/// Run Semgrep scan and return results
+async fn run_semgrep_scan(scan_path: &str) -> Result<Vec<SemgrepFinding>, AppError> {
+    // Check if Semgrep is available
+    let version_check = AsyncCommand::new("semgrep")
+        .arg("--version")
+        .output()
+        .await;
+    
+    if version_check.is_err() || !version_check.unwrap().status.success() {
+        println!("{}", "⚠️  Semgrep not available, skipping Semgrep scan".yellow());
+        return Ok(Vec::new());
+    }
+
+    let mut cmd = AsyncCommand::new("semgrep");
+    cmd.arg("--config=auto")
+       .arg("--json")
+       .arg("--quiet")
+       .arg("--no-git-ignore")
+       .arg(scan_path);
+
+    let output = cmd.output().await
+        .map_err(|e| AppError::Tool(format!("Failed to execute Semgrep: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!("{} {}", "⚠️  Semgrep scan failed:".yellow(), stderr);
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let results: SemgrepResults = serde_json::from_str(&stdout)
+        .map_err(|e| AppError::Tool(format!("Failed to parse Semgrep output: {}", e)))?;
+
+    Ok(results.results)
+}
+
+/// Merge Semgrep results into Tree-sitter results
+fn merge_semgrep_results(tree_sitter_results: &mut SecurityScanResults, semgrep_findings: Vec<SemgrepFinding>) {
+    for semgrep_finding in semgrep_findings {
+        // Convert Semgrep finding to SecurityFinding
+        let severity = match semgrep_finding.extra.severity.to_lowercase().as_str() {
+            "error" => SecuritySeverity::Critical,
+            "warning" => SecuritySeverity::High,
+            "info" => SecuritySeverity::Medium,
+            _ => SecuritySeverity::Low,
+        };
+
+        let finding = SecurityFinding {
+            id: format!("semgrep-{}", semgrep_finding.check_id),
+            title: semgrep_finding.check_id.clone(),
+            description: semgrep_finding.extra.message.clone(),
+            severity,
+            file_path: PathBuf::from(&semgrep_finding.path),
+            line_start: semgrep_finding.start.line as usize,
+            line_end: semgrep_finding.end.line as usize,
+            column_start: semgrep_finding.start.col as usize,
+            column_end: semgrep_finding.end.col as usize,
+            code_snippet: "".to_string(), // Semgrep doesn't provide code snippets in JSON output
+            recommendation: format!("Review and fix the issue identified by Semgrep rule: {}", semgrep_finding.check_id),
+            cwe_id: None,
+            owasp_category: None,
+        };
+
+        tree_sitter_results.findings.push(finding);
+    }
+
+    // Update summary counts
+    tree_sitter_results.summary.total_findings = tree_sitter_results.findings.len();
+    
+    // Recalculate severity counts
+    tree_sitter_results.summary.critical_count = tree_sitter_results.findings.iter()
+        .filter(|f| matches!(f.severity, SecuritySeverity::Critical)).count();
+    tree_sitter_results.summary.high_count = tree_sitter_results.findings.iter()
+        .filter(|f| matches!(f.severity, SecuritySeverity::High)).count();
+    tree_sitter_results.summary.medium_count = tree_sitter_results.findings.iter()
+        .filter(|f| matches!(f.severity, SecuritySeverity::Medium)).count();
+    tree_sitter_results.summary.low_count = tree_sitter_results.findings.iter()
+        .filter(|f| matches!(f.severity, SecuritySeverity::Low)).count();
+    tree_sitter_results.summary.info_count = tree_sitter_results.findings.iter()
+        .filter(|f| matches!(f.severity, SecuritySeverity::Info)).count();
+}
+
 /// Check if Semgrep is available
 async fn is_semgrep_available() -> bool {
     AsyncCommand::new("semgrep")
@@ -347,7 +463,7 @@ async fn is_semgrep_available() -> bool {
         .unwrap_or(false)
 }
 
-/// Run Semgrep as fallback scanner
+/// Run Semgrep as fallback scanner (legacy function, kept for compatibility)
 async fn run_semgrep_fallback(args: &ScanArgs) -> Result<(), AppError> {
     println!("{}", "Running Semgrep fallback scan...".cyan());
 
