@@ -48,6 +48,8 @@ cargo build --release
 cp target/release/gitai /usr/local/bin/
 ```
 
+安装完成后，务必查看本地的 (配置文件)[~/.config/gitai/config.toml], 将其中的 AI 配置为自己能够使用的 AI 服务，默认配置使用的是 ollama 的服务，如果本地没有安装的话会无法使用 AI 服务
+
 ### 基本使用
 
 ```bash
@@ -435,7 +437,7 @@ gitai commit --issue-id="#FEAT-001,#FEAT-002,#BUG-003" -m "发布 v1.2.0"
     gitai review --space-id=${{ vars.SPACE_ID }} \
       --stories=${{ github.event.pull_request.body }} \
       --format=json --output=ci-review.json
-    
+
     gitai commit -a -t --review
 ```
 
@@ -531,7 +533,7 @@ gitai review  # 不使用 --tree-sitter
 # 自定义提示词模板
 cp ~/.config/gitai/prompts/commit-generator.md \
    ~/.config/gitai/prompts/commit-generator.md.backup
-   
+
 # 编辑模板
 vim ~/.config/gitai/prompts/commit-generator.md
 
@@ -624,7 +626,7 @@ Closes #123"
 ```
 
 ### 开发流程
-1. **Fork 项目** 
+1. **Fork 项目**
 2. **创建特性分支** (`git checkout -b feature/amazing-feature`)
 3. **开发和测试** (`cargo test`)
 4. **使用 GitAI 评审** (`gitai review --tree-sitter`)
