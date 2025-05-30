@@ -1,0 +1,137 @@
+name: Semgrep Security Scan
+
+on:
+  # Run on every push to main and pull requests
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  # Allow manual triggering
+  workflow_dispatch:
+  # Run weekly on Sundays at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * 0'
+
+jobs:
+  semgrep:
+    name: Security Scan with Semgrep
+    runs-on: ubuntu-latest
+    
+    # Skip any PR created by dependabot to avoid permission issues
+    if: (github.actor != 'dependabot[bot]')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for better analysis
+          fetch-depth: 0
+
+      - name: Run Semgrep
+        id: semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          # Use Semgrep's default rules plus security-focused rulesets
+          config: >-
+            auto
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/rust
+          # Generate SARIF output for GitHub Security tab
+          generateSarif: "1"
+          # Fail the build on findings (set to "0" to not fail)
+          auditOn: push
+        env:
+          # Semgrep App token for enhanced features (optional)
+          # SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        if: always()
+
+      - name: Upload Semgrep results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: |
+            semgrep.sarif
+            semgrep.json
+        if: always()
+
+  # Optional: Comment on PR with scan results summary
+  comment-pr:
+    name: Comment PR with Scan Results
+    runs-on: ubuntu-latest
+    needs: semgrep
+    if: github.event_name == 'pull_request' && always()
+    
+    steps:
+      - name: Download Semgrep results
+        uses: actions/download-artifact@v4
+        with:
+          name: semgrep-results
+          path: ./results
+        continue-on-error: true
+
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = './results/semgrep.json';
+            
+            if (!fs.existsSync(path)) {
+              console.log('No Semgrep results found');
+              return;
+            }
+            
+            try {
+              const results = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const findings = results.results || [];
+              
+              let comment = '## 🔍 Semgrep Security Scan Results\n\n';
+              
+              if (findings.length === 0) {
+                comment += '✅ **No security issues found!**\n\n';
+              } else {
+                // Group by severity
+                const severityGroups = {};
+                findings.forEach(finding => {
+                  const severity = finding.extra?.severity || 'INFO';
+                  if (!severityGroups[severity]) {
+                    severityGroups[severity] = [];
+                  }
+                  severityGroups[severity].push(finding);
+                });
+                
+                comment += `**Total findings: ${findings.length}**\n\n`;
+                
+                // Add summary by severity
+                const severityOrder = ['ERROR', 'WARNING', 'INFO'];
+                severityOrder.forEach(severity => {
+                  if (severityGroups[severity]) {
+                    const icon = severity === 'ERROR' ? '🔴' : severity === 'WARNING' ? '🟡' : '🔵';
+                    comment += `${icon} **${severity}**: ${severityGroups[severity].length}\n`;
+                  }
+                });
+                
+                comment += '\n📊 **View detailed results in the Security tab or download the artifacts.**\n\n';
+                comment += '💡 **Tip**: Use `gitai scan --detailed --ai` locally for AI-powered analysis of these findings.\n';
+              }
+              
+              comment += '\n---\n*Powered by [Semgrep](https://semgrep.dev) and GitAI*';
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.error('Error processing Semgrep results:', error);
+            }
+        continue-on-error: true

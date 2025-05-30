@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs};
+use crate::types::general::ScanArgs;
 use crate::errors::AppError;
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
@@ -87,6 +88,88 @@ pub fn construct_commit_args(args: &[String]) -> CommitArgs {
     }
 }
 
+pub fn construct_scan_args(args: &[String]) -> ScanArgs {
+    let mut scan_args = ScanArgs::default();
+    
+    // Find scan command index
+    let scan_index = args
+        .iter()
+        .position(|a| a == "scan" || a == "sc")
+        .unwrap_or(0);
+    
+    // Parse arguments after scan command
+    let mut i = scan_index + 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--path" | "-p" => {
+                if i + 1 < args.len() {
+                    scan_args.path = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--rules" | "-r" => {
+                if i + 1 < args.len() {
+                    scan_args.rules = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--severity" | "-s" => {
+                if i + 1 < args.len() {
+                    scan_args.severity = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--exclude" | "-e" => {
+                if i + 1 < args.len() {
+                    let exclude_patterns: Vec<String> = args[i + 1]
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .collect();
+                    scan_args.exclude = Some(exclude_patterns);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "--detailed" | "-d" => {
+                scan_args.detailed = true;
+                i += 1;
+            }
+            "--show-low" => {
+                scan_args.show_low_severity = true;
+                i += 1;
+            }
+            "--ai" | "-a" => {
+                scan_args.ai_analysis = true;
+                i += 1;
+            }
+            "--output" | "-o" => {
+                if i + 1 < args.len() {
+                    scan_args.output = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => {
+                // If it doesn't start with --, treat it as a path
+                if !args[i].starts_with("--") && scan_args.path.is_none() {
+                    scan_args.path = Some(args[i].clone());
+                }
+                i += 1;
+            }
+        }
+    }
+    
+    scan_args
+}
+
 /// Generates custom help information for gitai, including gitai-specific
 /// commands and options not included in standard git help.
 pub fn generate_gitai_help() -> String {
@@ -134,6 +217,17 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --defects=IDs    缺陷 ID 列表 (例如: 202,303)\n");
     help.push_str("      --space-id=ID    DevOps 空间/项目 ID (当指定工作项 ID 时必须提供)\n\n");
 
+    help.push_str("  scan (sc)            使用 Semgrep 执行代码安全扫描\n");
+    help.push_str("    选项:\n");
+    help.push_str("      -p, --path=PATH  扫描路径 (默认: 当前目录)\n");
+    help.push_str("      -r, --rules=RULES 自定义 Semgrep 规则/配置\n");
+    help.push_str("      -s, --severity=LEVEL 严重性过滤 (ERROR, WARNING, INFO)\n");
+    help.push_str("      -e, --exclude=PATTERNS 排除模式 (逗号分隔)\n");
+    help.push_str("      -d, --detailed   显示详细发现\n");
+    help.push_str("      --show-low       显示低严重性问题\n");
+    help.push_str("      -a, --ai         启用 AI 分析扫描结果\n");
+    help.push_str("      -o, --output=FILE 输出文件\n\n");
+
     help.push_str("标准 git 命令:\n");
     help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
     help.push_str("  gitai status, gitai add, gitai push, 等等\n\n");
@@ -143,6 +237,11 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  gitai review        对当前更改执行 AI 辅助代码评审\n");
     help.push_str("  gitai review --depth=deep --focus=\"性能问题\"\n");
     help.push_str("                      执行深度代码评审，重点关注性能问题\n");
+    help.push_str("  gitai scan          使用 Semgrep 扫描当前目录的安全问题\n");
+    help.push_str("  gitai scan --detailed --ai\n");
+    help.push_str("                      详细扫描并使用 AI 分析结果\n");
+    help.push_str("  gitai scan --severity=ERROR --exclude=\"tests,docs\"\n");
+    help.push_str("                      仅扫描错误级别问题，排除测试和文档目录\n");
 
     help.push_str("参考：原始 git 命令:\n");
     help.push_str(

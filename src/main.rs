@@ -10,7 +10,8 @@ use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::review::handle_review;
-use utils::{construct_commit_args, construct_review_args};
+use handlers::scan::handle_scan;
+use utils::{construct_commit_args, construct_review_args, construct_scan_args};
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -83,6 +84,14 @@ async fn main() -> Result<(), AppError> {
         tracing::info!("检测到commit命令");
         let commit_args = construct_commit_args(&args);
         handle_commit(&config, commit_args).await?;
+        return Ok(());
+    }
+
+    // scan 处理
+    if args.iter().any(|arg| arg == "scan" || arg == "sc") {
+        tracing::info!("检测到scan命令");
+        let scan_args = construct_scan_args(&args);
+        handle_scan(&config, scan_args).await?;
         return Ok(());
     }
 

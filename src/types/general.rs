@@ -92,3 +92,46 @@ impl CommandOutput {
         display
     }
 }
+
+/// Arguments for the scan command
+#[derive(Debug, Clone)]
+pub struct ScanArgs {
+    /// Path to scan (default: current directory)
+    pub path: Option<String>,
+    
+    /// Custom Semgrep rules/config to use
+    pub rules: Option<String>,
+    
+    /// Severity filter (ERROR, WARNING, INFO)
+    pub severity: Option<String>,
+    
+    /// Patterns to exclude from scanning
+    pub exclude: Option<Vec<String>>,
+    
+    /// Show detailed findings
+    pub detailed: bool,
+    
+    /// Show low severity issues
+    pub show_low_severity: bool,
+    
+    /// Enable AI analysis of results
+    pub ai_analysis: bool,
+    
+    /// Output file for results
+    pub output: Option<String>,
+}
+
+impl Default for ScanArgs {
+    fn default() -> Self {
+        Self {
+            path: None,
+            rules: None,
+            severity: None,
+            exclude: None,
+            detailed: false,
+            show_low_severity: false,
+            ai_analysis: false,
+            output: None,
+        }
+    }
+}

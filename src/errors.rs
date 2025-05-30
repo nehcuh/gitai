@@ -8,6 +8,7 @@ pub enum AppError {
     AI(AIError),
     TreeSitter(TreeSitterError),
     DevOps(DevOpsError), // Added DevOpsError variant
+    Tool(String),        // For external tool errors (like Semgrep)
     IO(String, std::io::Error), // For generic I/O errors not covered by specific types
     Generic(String),            // For simple string-based errors
 }
@@ -114,6 +115,7 @@ impl std::fmt::Display for AppError {
             AppError::AI(e) => write!(f, "AI interaction error: {}", e),
             AppError::TreeSitter(e) => write!(f, "Tree-sitter error: {}", e),
             AppError::DevOps(e) => write!(f, "DevOps API error: {}", e), // Added for DevOps
+            AppError::Tool(s) => write!(f, "Tool error: {}", s),
             AppError::IO(context, e) => write!(f, "I/O error while {}: {}", context, e),
             AppError::Generic(s) => write!(f, "Application error: {}", s),
         }
@@ -128,6 +130,7 @@ impl std::error::Error for AppError {
             AppError::AI(e) => Some(e),
             AppError::TreeSitter(e) => Some(e),
             AppError::DevOps(e) => Some(e), // Added for DevOps
+            AppError::Tool(_) => None,
             AppError::IO(_, e) => Some(e),
             AppError::Generic(_) => None,
         }

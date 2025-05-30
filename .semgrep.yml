@@ -1,0 +1,132 @@
+# Semgrep configuration for GitAI project
+# This file defines custom rules and configurations for security scanning
+
+rules:
+  # Custom rule for detecting hardcoded secrets in Rust code
+  - id: rust-hardcoded-secret
+    pattern-either:
+      - pattern: |
+          let $VAR = "$SECRET";
+      - pattern: |
+          const $VAR: &str = "$SECRET";
+      - pattern: |
+          static $VAR: &str = "$SECRET";
+    pattern-where:
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(password|secret|token|key|api_key|auth)
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: .{8,}
+    message: |
+      Potential hardcoded secret detected. Consider using environment variables 
+      or a secure configuration management system instead.
+    languages: [rust]
+    severity: ERROR
+    metadata:
+      category: security
+      subcategory: [secrets]
+      confidence: MEDIUM
+
+  # Custom rule for unsafe Rust code blocks
+  - id: rust-unsafe-block-review
+    pattern: |
+      unsafe { ... }
+    message: |
+      Unsafe block detected. Ensure this is necessary and properly reviewed for memory safety.
+      Consider if there are safe alternatives available.
+    languages: [rust]
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: [memory-safety]
+      confidence: HIGH
+
+  # Custom rule for command injection in process execution
+  - id: rust-command-injection
+    pattern-either:
+      - pattern: |
+          Command::new($CMD).arg($ARG)
+      - pattern: |
+          Command::new($CMD).args($ARGS)
+    pattern-where:
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: .*
+    message: |
+      Potential command injection vulnerability. Ensure user input is properly 
+      sanitized before being passed to Command::new() or consider using safer alternatives.
+    languages: [rust]
+    severity: WARNING
+    metadata:
+      category: security
+      subcategory: [injection]
+      confidence: MEDIUM
+
+  # Custom rule for unwrap() usage that could cause panics
+  - id: rust-unwrap-usage
+    pattern-either:
+      - pattern: $X.unwrap()
+      - pattern: $X.expect($MSG)
+    message: |
+      Usage of unwrap() or expect() can cause panics. Consider using proper error handling 
+      with match, if let, or the ? operator for better reliability.
+    languages: [rust]
+    severity: INFO
+    metadata:
+      category: reliability
+      subcategory: [error-handling]
+      confidence: HIGH
+
+  # Custom rule for TODO/FIXME comments in production code
+  - id: todo-fixme-comments
+    pattern-either:
+      - pattern-regex: (?i).*todo.*
+      - pattern-regex: (?i).*fixme.*
+      - pattern-regex: (?i).*hack.*
+    message: |
+      TODO/FIXME/HACK comment found. Consider addressing this before production deployment.
+    languages: [rust]
+    severity: INFO
+    metadata:
+      category: maintainability
+      subcategory: [code-quality]
+      confidence: HIGH
+
+# Include additional rulesets
+include:
+  # Semgrep's built-in security rules
+  - p/security-audit
+  - p/secrets
+  - p/owasp-top-ten
+  - p/rust
+  
+# Exclude patterns to reduce noise
+exclude:
+  # Test files
+  - "tests/**"
+  - "**/*test*.rs"
+  - "**/test_*.rs"
+  
+  # Generated files
+  - "target/**"
+  - "build.rs"
+  
+  # Documentation
+  - "docs/**"
+  - "*.md"
+  
+  # Configuration files
+  - "*.toml"
+  - "*.yml"
+  - "*.yaml"
+  - "*.json"
+
+# Severity levels configuration
+severity:
+  # Fail CI on ERROR level findings
+  error: true
+  # Report but don't fail on WARNING level
+  warning: false
+  # Report INFO level for awareness
+  info: false
