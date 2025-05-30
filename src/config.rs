@@ -7,6 +7,7 @@ use crate::errors::ConfigError;
 const USER_CONFIG_PATH: &str = "~/.config/gitai";
 const USER_PROMPT_PATH: &str = "~/.config/gitai/prompts";
 const USER_RULES_PATH: &str = "~/.config/gitai/rules";
+const USER_SCAN_PATH: &str = "~/.config/gitai/scan";
 
 // Fully configuration files
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -276,6 +277,145 @@ fn default_include_in_commit() -> bool {
     true
 }
 
+/// Configuration for security scanning functionality
+#[derive(Deserialize, Debug, Clone)]
+pub struct ScanConfig {
+    /// Whether to enable Tree-sitter scanning
+    #[serde(default = "default_treesitter_enabled")]
+    pub treesitter_enabled: bool,
+
+    /// Whether to enable Semgrep scanning
+    #[serde(default = "default_semgrep_enabled")]
+    pub semgrep_enabled: bool,
+
+    /// Path to custom scan rules directory
+    #[serde(default = "default_rules_path")]
+    pub rules_path: String,
+
+    /// Default output format for scan results
+    #[serde(default = "default_scan_format")]
+    pub output_format: String,
+
+    /// Base path for storing scan results
+    #[serde(default = "default_scan_storage_path")]
+    pub storage_path: String,
+
+    /// Whether to automatically save scan results
+    #[serde(default = "default_scan_auto_save")]
+    pub auto_save: bool,
+
+    /// Whether to include scan results in commit message generation
+    #[serde(default = "default_scan_include_in_commit")]
+    pub include_in_commit: bool,
+
+    /// Whether to automatically load scan results during review/commit
+    #[serde(default = "default_scan_auto_load")]
+    pub auto_load: bool,
+
+    /// Maximum age in hours to keep scan results
+    #[serde(default = "default_scan_max_age_hours")]
+    pub max_age_hours: u32,
+
+    /// Semgrep configuration options
+    #[serde(default)]
+    pub semgrep: SemgrepConfig,
+}
+
+/// Semgrep-specific configuration
+#[derive(Deserialize, Debug, Clone)]
+pub struct SemgrepConfig {
+    /// Custom Semgrep rules to use
+    #[serde(default = "default_semgrep_rules")]
+    pub rules: Vec<String>,
+
+    /// Semgrep configuration file path
+    #[serde(default)]
+    pub config_file: Option<String>,
+
+    /// Additional Semgrep command line options
+    #[serde(default)]
+    pub extra_args: Vec<String>,
+
+    /// Timeout for Semgrep execution in seconds
+    #[serde(default = "default_semgrep_timeout")]
+    pub timeout: u64,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            treesitter_enabled: default_treesitter_enabled(),
+            semgrep_enabled: default_semgrep_enabled(),
+            rules_path: default_rules_path(),
+            output_format: default_scan_format(),
+            storage_path: default_scan_storage_path(),
+            auto_save: default_scan_auto_save(),
+            include_in_commit: default_scan_include_in_commit(),
+            auto_load: default_scan_auto_load(),
+            max_age_hours: default_scan_max_age_hours(),
+            semgrep: SemgrepConfig::default(),
+        }
+    }
+}
+
+impl Default for SemgrepConfig {
+    fn default() -> Self {
+        Self {
+            rules: default_semgrep_rules(),
+            config_file: None,
+            extra_args: vec![],
+            timeout: default_semgrep_timeout(),
+        }
+    }
+}
+
+// Default functions for scan configuration
+fn default_treesitter_enabled() -> bool {
+    true
+}
+
+fn default_semgrep_enabled() -> bool {
+    true
+}
+
+fn default_rules_path() -> String {
+    "~/.config/gitai/scan".to_string()
+}
+
+fn default_scan_format() -> String {
+    "json".to_string()
+}
+
+fn default_scan_storage_path() -> String {
+    "~/gitai/scan_results".to_string()
+}
+
+fn default_scan_auto_save() -> bool {
+    true
+}
+
+fn default_scan_include_in_commit() -> bool {
+    false
+}
+
+fn default_scan_auto_load() -> bool {
+    true
+}
+
+fn default_scan_max_age_hours() -> u32 {
+    168 // 7 days
+}
+
+fn default_semgrep_rules() -> Vec<String> {
+    vec![
+        "auto".to_string(), // Use Semgrep's default rules
+    ]
+}
+
+fn default_semgrep_timeout() -> u64 {
+    300 // 5 minutes
+}
+
 /// Partial loading helper struct for AI configuration
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct PartialAIConfig {
@@ -327,6 +467,44 @@ pub struct PartialReviewConfig {
     pub include_in_commit: Option<bool>,
 }
 
+/// Partial loading helper structure for scan configuration
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialScanConfig {
+    #[serde(default)]
+    pub treesitter_enabled: Option<bool>,
+    #[serde(default)]
+    pub semgrep_enabled: Option<bool>,
+    #[serde(default)]
+    pub rules_path: Option<String>,
+    #[serde(default)]
+    pub output_format: Option<String>,
+    #[serde(default)]
+    pub storage_path: Option<String>,
+    #[serde(default)]
+    pub auto_save: Option<bool>,
+    #[serde(default)]
+    pub include_in_commit: Option<bool>,
+    #[serde(default)]
+    pub auto_load: Option<bool>,
+    #[serde(default)]
+    pub max_age_hours: Option<u32>,
+    #[serde(default)]
+    pub semgrep: Option<PartialSemgrepConfig>,
+}
+
+/// Partial loading helper structure for Semgrep configuration
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialSemgrepConfig {
+    #[serde(default)]
+    pub rules: Option<Vec<String>>,
+    #[serde(default)]
+    pub config_file: Option<String>,
+    #[serde(default)]
+    pub extra_args: Option<Vec<String>>,
+    #[serde(default)]
+    pub timeout: Option<u64>,
+}
+
 /// Application overall configuration
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
@@ -341,6 +519,9 @@ pub struct AppConfig {
     pub review: ReviewConfig,
 
     #[serde(default)]
+    pub scan: ScanConfig,
+
+    #[serde(default)]
     pub account: Option<AccountConfig>,
 
     #[serde(skip)]
@@ -352,6 +533,7 @@ pub struct PartialAppConfig {
     ai: Option<PartialAIConfig>,
     tree_sitter: Option<PartialTreeSitterConfig>,
     review: Option<PartialReviewConfig>,
+    scan: Option<PartialScanConfig>,
     account: Option<PartialAccountConfig>,
 }
 
@@ -626,6 +808,9 @@ impl AppConfig {
 
         tracing::info!("加载 AST Query 配置");
         Self::initialize_rules()?;
+        
+        tracing::info!("初始化扫描规则配置");
+        Self::initialize_scan_rules()?;
 
         let (user_config_path, user_prompt_paths) = match Self::initialize_config() {
             Ok(result) => {
@@ -693,6 +878,64 @@ impl AppConfig {
         Ok(())
     }
 
+    fn initialize_scan_rules() -> Result<(), ConfigError> {
+        // Create scan rules directory
+        let scan_rules_base = Self::extract_file_path(USER_SCAN_PATH, "")?;
+        std::fs::create_dir_all(&scan_rules_base)
+            .map_err(|e| ConfigError::FileWrite(scan_rules_base.to_string_lossy().into(), e))?;
+
+        // Create scan results directory
+        let scan_results_base = Self::extract_file_path(&default_scan_storage_path(), "")?;
+        std::fs::create_dir_all(&scan_results_base)
+            .map_err(|e| ConfigError::FileWrite(scan_results_base.to_string_lossy().into(), e))?;
+
+        // Copy default scan rule files from assets
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
+        let assets_scan_dir = PathBuf::from(manifest_dir).join("assets/scan");
+
+        // Skip if assets directory doesn't exist (e.g., in tests)
+        if !assets_scan_dir.exists() {
+            tracing::debug!(
+                "Assets scan directory {:?} does not exist, skipping scan rules initialization",
+                assets_scan_dir
+            );
+            return Ok(());
+        }
+
+        // Copy tree-sitter rule files
+        let scan_rule_files = [
+            ("javascript.scm", "javascript"),
+            ("java.scm", "java"),
+            ("python.scm", "python"),
+            ("rust.scm", "rust"),
+        ];
+
+        for (file_name, _lang) in &scan_rule_files {
+            let src = assets_scan_dir.join(file_name);
+            let dst = scan_rules_base.join(file_name);
+            
+            if src.exists() && !dst.exists() {
+                std::fs::copy(&src, &dst)
+                    .map_err(|e| ConfigError::FileWrite(dst.to_string_lossy().into(), e))?;
+                tracing::debug!("已复制扫描规则文件: {:?} -> {:?}", src, dst);
+            }
+        }
+
+        // Copy Semgrep configuration file
+        let semgrep_src = assets_scan_dir.join("semgrep.yml");
+        let semgrep_dst = scan_rules_base.join("semgrep.yml");
+        
+        if semgrep_src.exists() && !semgrep_dst.exists() {
+            std::fs::copy(&semgrep_src, &semgrep_dst)
+                .map_err(|e| ConfigError::FileWrite(semgrep_dst.to_string_lossy().into(), e))?;
+            tracing::debug!("已复制 Semgrep 配置文件: {:?} -> {:?}", semgrep_src, semgrep_dst);
+        }
+
+        tracing::info!("扫描规则初始化完成");
+        Ok(())
+    }
+
     fn load_config_from_file(
         config_path: &std::path::Path,
         prompt_paths: &HashMap<String, PathBuf>,
@@ -751,6 +994,11 @@ impl AppConfig {
         if partial_config.review.is_none() {
             tracing::info!("配置文件中未找到 Review 配置部分，使用默认值");
             partial_config.review = Some(PartialReviewConfig::default());
+        }
+
+        if partial_config.scan.is_none() {
+            tracing::info!("配置文件中未找到 Scan 配置部分，使用默认值");
+            partial_config.scan = Some(PartialScanConfig::default());
         }
 
         let mut prompts = HashMap::new();
@@ -894,6 +1142,92 @@ impl AppConfig {
         );
         // --- End Review Configuration Loading ---
 
+        // --- Scan Configuration Loading ---
+        let partial_scan_config = partial_config.scan.unwrap_or_default();
+
+        let treesitter_enabled = partial_scan_config
+            .treesitter_enabled
+            .unwrap_or_else(default_treesitter_enabled);
+        let semgrep_enabled = partial_scan_config
+            .semgrep_enabled
+            .unwrap_or_else(default_semgrep_enabled);
+        let rules_path = partial_scan_config
+            .rules_path
+            .unwrap_or_else(default_rules_path);
+        let output_format = partial_scan_config
+            .output_format
+            .unwrap_or_else(default_scan_format);
+        let scan_storage_path = partial_scan_config
+            .storage_path
+            .unwrap_or_else(default_scan_storage_path);
+        let scan_auto_save = partial_scan_config
+            .auto_save
+            .unwrap_or_else(default_scan_auto_save);
+        let scan_include_in_commit = partial_scan_config
+            .include_in_commit
+            .unwrap_or_else(default_scan_include_in_commit);
+        let scan_auto_load = partial_scan_config
+            .auto_load
+            .unwrap_or_else(default_scan_auto_load);
+        let scan_max_age_hours = partial_scan_config
+            .max_age_hours
+            .unwrap_or_else(default_scan_max_age_hours);
+
+        // Handle Semgrep configuration
+        let partial_semgrep_config = partial_scan_config.semgrep.unwrap_or_default();
+        let semgrep_rules = partial_semgrep_config
+            .rules
+            .unwrap_or_else(default_semgrep_rules);
+        let semgrep_config_file = partial_semgrep_config.config_file;
+        let semgrep_extra_args = partial_semgrep_config.extra_args.unwrap_or_default();
+        let semgrep_timeout = partial_semgrep_config
+            .timeout
+            .unwrap_or_else(default_semgrep_timeout);
+
+        let semgrep_config = SemgrepConfig {
+            rules: semgrep_rules.clone(),
+            config_file: semgrep_config_file.clone(),
+            extra_args: semgrep_extra_args.clone(),
+            timeout: semgrep_timeout,
+        };
+
+        let scan_config = ScanConfig {
+            treesitter_enabled,
+            semgrep_enabled,
+            rules_path: rules_path.clone(),
+            output_format: output_format.clone(),
+            storage_path: scan_storage_path.clone(),
+            auto_save: scan_auto_save,
+            include_in_commit: scan_include_in_commit,
+            auto_load: scan_auto_load,
+            max_age_hours: scan_max_age_hours,
+            semgrep: semgrep_config,
+        };
+
+        tracing::debug!(
+            "Scan 配置: Tree-sitter启用: {}, Semgrep启用: {}, 规则路径: {}, 输出格式: {}, 存储路径: {}, 自动保存: {}, 包含在提交中: {}, 自动加载: {}, 最大保留时间: {}小时",
+            treesitter_enabled,
+            semgrep_enabled,
+            rules_path,
+            output_format,
+            scan_storage_path,
+            scan_auto_save,
+            scan_include_in_commit,
+            scan_auto_load,
+            scan_max_age_hours
+        );
+
+        if semgrep_enabled {
+            tracing::debug!(
+                "Semgrep 配置: 规则: {:?}, 配置文件: {:?}, 额外参数: {:?}, 超时: {}秒",
+                semgrep_rules,
+                semgrep_config_file,
+                semgrep_extra_args,
+                semgrep_timeout
+            );
+        }
+        // --- End Scan Configuration Loading ---
+
         // --- Account Configuration Loading ---
         // Helper function to check if a value is a placeholder
         let is_placeholder = |value: &Option<String>| -> bool {
@@ -982,6 +1316,7 @@ impl AppConfig {
             ai: ai_config,
             tree_sitter: tree_sitter_config,
             review: review_config,
+            scan: scan_config,
             account: final_account_config,
             prompts,
         };

@@ -1,0 +1,76 @@
+rules:
+  - id: hardcoded-secret
+    pattern-either:
+      - pattern: |
+          $VAR = "..."
+      - pattern: |
+          $VAR := "..."
+      - pattern: |
+          const $VAR = "..."
+      - pattern: |
+          let $VAR = "..."
+    metavariable-regex:
+      metavariable: $VAR
+      regex: (?i)(password|secret|key|token|api_key)
+    message: Potential hardcoded secret found
+    languages: [javascript, typescript, python, java, go, rust]
+    severity: WARNING
+
+  - id: sql-injection
+    pattern-either:
+      - pattern: |
+          $CURSOR.execute("..." + $VAR + "...")
+      - pattern: |
+          $CURSOR.execute(f"...{$VAR}...")
+      - pattern: |
+          $CURSOR.query("..." + $VAR + "...")
+      - pattern: |
+          $DB.exec("..." + $VAR + "...")
+    message: Potential SQL injection vulnerability
+    languages: [python, javascript, typescript, java, go]
+    severity: ERROR
+
+  - id: command-injection
+    pattern-either:
+      - pattern: |
+          os.system($VAR)
+      - pattern: |
+          subprocess.call($VAR, shell=True)
+      - pattern: |
+          exec($VAR)
+      - pattern: |
+          eval($VAR)
+    message: Potential command injection vulnerability
+    languages: [python]
+    severity: ERROR
+
+  - id: xss-vulnerability
+    pattern-either:
+      - pattern: |
+          document.write($VAR)
+      - pattern: |
+          $ELEMENT.innerHTML = $VAR
+      - pattern: |
+          $ELEMENT.outerHTML = $VAR
+    message: Potential XSS vulnerability
+    languages: [javascript, typescript]
+    severity: ERROR
+
+  - id: weak-random
+    pattern-either:
+      - pattern: Math.random()
+      - pattern: random.random()
+      - pattern: rand()
+    message: Use of weak random number generator
+    languages: [javascript, typescript, python, c, cpp]
+    severity: WARNING
+
+  - id: unsafe-deserialization
+    pattern-either:
+      - pattern: pickle.loads($VAR)
+      - pattern: pickle.load($VAR)
+      - pattern: yaml.load($VAR)
+      - pattern: JSON.parse($VAR)
+    message: Potentially unsafe deserialization
+    languages: [python, javascript, typescript]
+    severity: WARNING

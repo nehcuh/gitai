@@ -48,10 +48,8 @@ struct SemgrepResults {
 pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppError> {
     println!("{}", "🔍 Starting security scan with Tree-sitter and Semgrep...".cyan().bold());
 
-    // Initialize tree-sitter security scanner
-    let language_registry = create_language_registry();
-    let scanner = TreeSitterSecurityScanner::new(language_registry);
-
+    let scan_config = &config.scan;
+    
     // Collect files to scan
     let scan_path = args.path.as_deref().unwrap_or(".");
     let files = collect_source_files(scan_path, &args.exclude)?;
@@ -61,48 +59,63 @@ pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppEr
         return Ok(());
     }
 
-    println!("📁 Scanning {} files with Tree-sitter AST analysis...", files.len());
+    let mut combined_results = SecurityScanResults::new();
 
-    // Perform Tree-sitter security scan
-    let mut tree_sitter_results = scanner.scan_files(files.clone())
-        .map_err(|e| AppError::Tool(format!("Tree-sitter scan failed: {}", e)))?;
+    // Perform Tree-sitter security scan if enabled
+    if scan_config.treesitter_enabled {
+        println!("📁 Scanning {} files with Tree-sitter AST analysis...", files.len());
+        
+        let language_registry = create_language_registry();
+        let scanner = TreeSitterSecurityScanner::new(language_registry);
+        
+        let tree_sitter_results = scanner.scan_files(files.clone())
+            .map_err(|e| AppError::Tool(format!("Tree-sitter scan failed: {}", e)))?;
+        
+        combined_results = tree_sitter_results;
+    }
 
-    // Run Semgrep scan
-    println!("🔍 Running Semgrep analysis...");
-    let semgrep_results = run_semgrep_scan(scan_path).await?;
-    
-    // Merge results
-    merge_semgrep_results(&mut tree_sitter_results, semgrep_results);
+    // Run Semgrep scan if enabled
+    if scan_config.semgrep_enabled {
+        println!("🔍 Running Semgrep analysis...");
+        let semgrep_results = run_semgrep_scan_with_config(scan_path, scan_config).await?;
+        merge_semgrep_results(&mut combined_results, semgrep_results);
+    }
 
     // Display combined results
-    display_tree_sitter_results(&tree_sitter_results, &args).await?;
+    display_tree_sitter_results(&combined_results, &args).await?;
 
     // AI analysis if requested
     if args.ai_analysis {
-        analyze_scan_with_ai(config, &tree_sitter_results).await?;
+        analyze_scan_with_ai(config, &combined_results).await?;
     }
 
-    // Save results locally (always save, with default filename if not specified)
-    let output_file = if let Some(file) = &args.output {
-        file.clone()
-    } else {
-        // Generate default filename based on format and timestamp
-        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let extension = if args.format == "json" { "json" } else { "md" };
-        format!("security_scan_{}.{}", timestamp, extension)
-    };
+    // Save results if auto_save is enabled or output is specified
+    if scan_config.auto_save || args.output.is_some() {
+        let output_file = generate_output_filename(&args, scan_config, scan_path)?;
+        let output_format = if args.format.is_empty() { 
+            &scan_config.output_format 
+        } else { 
+            &args.format 
+        };
+        
+        let output_content = if output_format == "json" {
+            combined_results.to_json()
+                .map_err(|e| AppError::Tool(format!("Failed to serialize results to JSON: {}", e)))?
+        } else {
+            combined_results.to_markdown()
+        };
 
-    let output_content = if args.format == "json" {
-        tree_sitter_results.to_json()
-            .map_err(|e| AppError::Tool(format!("Failed to serialize results to JSON: {}", e)))?
-    } else {
-        tree_sitter_results.to_markdown()
-    };
+        // Ensure output directory exists
+        if let Some(parent) = Path::new(&output_file).parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| AppError::Tool(format!("Failed to create output directory: {}", e)))?;
+        }
 
-    fs::write(&output_file, &output_content)
-        .map_err(|e| AppError::Tool(format!("Failed to write output file: {}", e)))?;
-    
-    println!("{} {} ({})", "📄 Results saved to:".green(), output_file, args.format.to_uppercase());
+        fs::write(&output_file, &output_content)
+            .map_err(|e| AppError::Tool(format!("Failed to write output file: {}", e)))?;
+        
+        println!("{} {} ({})", "📄 Results saved to:".green(), output_file, output_format.to_uppercase());
+    }
 
     Ok(())
 }
@@ -365,6 +378,137 @@ async fn analyze_scan_with_ai(config: &AppConfig, results: &SecurityScanResults)
     }
 
     Ok(())
+}
+
+/// Generate output filename based on configuration and arguments
+fn generate_output_filename(args: &ScanArgs, scan_config: &crate::config::ScanConfig, scan_path: &str) -> Result<String, AppError> {
+    if let Some(output) = &args.output {
+        return Ok(output.clone());
+    }
+
+    // Get repository name from scan path
+    let repo_name = if scan_path == "." {
+        std::env::current_dir()
+            .map_err(|e| AppError::Tool(format!("Failed to get current directory: {}", e)))?
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string()
+    } else {
+        Path::new(scan_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string()
+    };
+
+    // Get current commit ID if in a git repository
+    let commit_id = get_current_commit_id().unwrap_or_else(|| {
+        chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string()
+    });
+
+    // Expand storage path
+    let storage_path = shellexpand::tilde(&scan_config.storage_path);
+    let extension = if scan_config.output_format == "json" { "json" } else { "md" };
+    
+    let filename = format!("scan_{}.{}", commit_id, extension);
+    let full_path = Path::new(storage_path.as_ref())
+        .join(&repo_name)
+        .join(filename);
+
+    Ok(full_path.to_string_lossy().to_string())
+}
+
+/// Get current git commit ID
+fn get_current_commit_id() -> Option<String> {
+    use std::process::Command;
+    
+    let output = Command::new("git")
+        .args(&["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    
+    if output.status.success() {
+        let commit_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !commit_id.is_empty() {
+            return Some(commit_id);
+        }
+    }
+    
+    None
+}
+
+/// Run Semgrep scan with configuration and return results
+async fn run_semgrep_scan_with_config(scan_path: &str, scan_config: &crate::config::ScanConfig) -> Result<Vec<SemgrepFinding>, AppError> {
+    // Check if Semgrep is available
+    let version_check = AsyncCommand::new("semgrep")
+        .arg("--version")
+        .output()
+        .await;
+    
+    if version_check.is_err() || !version_check.unwrap().status.success() {
+        println!("{}", "⚠️  Semgrep not available, skipping Semgrep scan".yellow());
+        return Ok(Vec::new());
+    }
+
+    let mut cmd = AsyncCommand::new("semgrep");
+    
+    // Use custom config file if specified, otherwise use auto
+    if let Some(config_file) = &scan_config.semgrep.config_file {
+        let config_path = shellexpand::tilde(config_file);
+        if Path::new(config_path.as_ref()).exists() {
+            cmd.arg(format!("--config={}", config_path));
+        } else {
+            println!("{} {}", "⚠️  Semgrep config file not found, using auto:".yellow(), config_file);
+            cmd.arg("--config=auto");
+        }
+    } else {
+        // Check for default config file in scan rules directory
+        let default_config = Path::new(&shellexpand::tilde(&scan_config.rules_path).as_ref()).join("semgrep.yml");
+        if default_config.exists() {
+            cmd.arg(format!("--config={}", default_config.display()));
+        } else {
+            cmd.arg("--config=auto");
+        }
+    }
+    
+    // Add custom rules if specified
+    for rule in &scan_config.semgrep.rules {
+        cmd.arg("--config").arg(rule);
+    }
+    
+    cmd.arg("--json")
+       .arg("--quiet")
+       .arg("--no-git-ignore");
+    
+    // Add extra arguments
+    for arg in &scan_config.semgrep.extra_args {
+        cmd.arg(arg);
+    }
+    
+    // Set timeout
+    cmd.arg("--timeout").arg(scan_config.semgrep.timeout.to_string());
+    
+    cmd.arg(scan_path);
+
+    let output = cmd.output().await
+        .map_err(|e| AppError::Tool(format!("Failed to execute Semgrep: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!("{} {}", "⚠️  Semgrep scan failed:".yellow(), stderr);
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if stdout.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let results: SemgrepResults = serde_json::from_str(&stdout)
+        .map_err(|e| AppError::Tool(format!("Failed to parse Semgrep output: {}", e)))?;
+
+    Ok(results.results)
 }
 
 /// Run Semgrep scan and return results

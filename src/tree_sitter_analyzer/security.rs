@@ -391,6 +391,23 @@ impl TreeSitterSecurityScanner {
 }
 
 impl SecurityScanResults {
+    /// Create a new empty SecurityScanResults
+    pub fn new() -> Self {
+        Self {
+            findings: Vec::new(),
+            summary: SecuritySummary {
+                total_files_scanned: 0,
+                total_findings: 0,
+                critical_count: 0,
+                high_count: 0,
+                medium_count: 0,
+                low_count: 0,
+                info_count: 0,
+            },
+            scan_time: std::time::SystemTime::now(),
+        }
+    }
+
     /// Filter findings by severity
     pub fn filter_by_severity(&self, min_severity: SecuritySeverity) -> Vec<&SecurityFinding> {
         self.findings
