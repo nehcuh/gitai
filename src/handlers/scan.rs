@@ -13,6 +13,7 @@ use tokio::process::Command as AsyncCommand;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::collections::HashMap;
+use chrono;
 
 /// Handle the scan command using Tree-sitter AST analysis with Semgrep fallback
 pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppError> {
@@ -45,14 +46,27 @@ pub async fn handle_scan(config: &AppConfig, args: ScanArgs) -> Result<(), AppEr
         analyze_scan_with_ai(config, &scan_results).await?;
     }
 
-    // Save to file if specified
-    if let Some(output_file) = &args.output {
-        let json_output = scan_results.to_json()
-            .map_err(|e| AppError::Tool(format!("Failed to serialize results: {}", e)))?;
-        fs::write(output_file, &json_output)
-            .map_err(|e| AppError::Tool(format!("Failed to write output file: {}", e)))?;
-        println!("{} {}", "📄 Results saved to:".green(), output_file);
-    }
+    // Save results locally (always save, with default filename if not specified)
+    let output_file = if let Some(file) = &args.output {
+        file.clone()
+    } else {
+        // Generate default filename based on format and timestamp
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let extension = if args.format == "json" { "json" } else { "md" };
+        format!("security_scan_{}.{}", timestamp, extension)
+    };
+
+    let output_content = if args.format == "json" {
+        scan_results.to_json()
+            .map_err(|e| AppError::Tool(format!("Failed to serialize results to JSON: {}", e)))?
+    } else {
+        scan_results.to_markdown()
+    };
+
+    fs::write(&output_file, &output_content)
+        .map_err(|e| AppError::Tool(format!("Failed to write output file: {}", e)))?;
+    
+    println!("{} {} ({})", "📄 Results saved to:".green(), output_file, args.format.to_uppercase());
 
     // Fallback to Semgrep if requested or if no findings and Semgrep is available
     if (scan_results.findings.is_empty() || args.rules.is_some()) && is_semgrep_available().await {

@@ -117,8 +117,11 @@ pub struct ScanArgs {
     /// Enable AI analysis of results
     pub ai_analysis: bool,
     
-    /// Output file for results
+    /// Output file for results (optional, defaults to local storage)
     pub output: Option<String>,
+    
+    /// Output format: markdown (default) or json
+    pub format: String,
 }
 
 impl Default for ScanArgs {
@@ -132,6 +135,7 @@ impl Default for ScanArgs {
             show_low_severity: false,
             ai_analysis: false,
             output: None,
+            format: "markdown".to_string(),
         }
     }
 }

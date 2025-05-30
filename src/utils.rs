@@ -100,7 +100,50 @@ pub fn construct_scan_args(args: &[String]) -> ScanArgs {
     // Parse arguments after scan command
     let mut i = scan_index + 1;
     while i < args.len() {
-        match args[i].as_str() {
+        let arg = &args[i];
+        
+        // Handle --key=value format
+        if arg.contains('=') {
+            let parts: Vec<&str> = arg.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                let key = parts[0];
+                let value = parts[1];
+                
+                match key {
+                    "--path" | "-p" => {
+                        scan_args.path = Some(value.to_string());
+                    }
+                    "--rules" | "-r" => {
+                        scan_args.rules = Some(value.to_string());
+                    }
+                    "--severity" | "-s" => {
+                        scan_args.severity = Some(value.to_string());
+                    }
+                    "--exclude" | "-e" => {
+                        let exclude_patterns: Vec<String> = value
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect();
+                        scan_args.exclude = Some(exclude_patterns);
+                    }
+                    "--output" | "-o" => {
+                        scan_args.output = Some(value.to_string());
+                    }
+                    "--format" | "-f" => {
+                        let format = value.to_lowercase();
+                        if format == "json" || format == "markdown" || format == "md" {
+                            scan_args.format = if format == "md" { "markdown".to_string() } else { format };
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+                continue;
+            }
+        }
+        
+        // Handle --key value format
+        match arg.as_str() {
             "--path" | "-p" => {
                 if i + 1 < args.len() {
                     scan_args.path = Some(args[i + 1].clone());
@@ -157,10 +200,21 @@ pub fn construct_scan_args(args: &[String]) -> ScanArgs {
                     i += 1;
                 }
             }
+            "--format" | "-f" => {
+                if i + 1 < args.len() {
+                    let format = args[i + 1].to_lowercase();
+                    if format == "json" || format == "markdown" || format == "md" {
+                        scan_args.format = if format == "md" { "markdown".to_string() } else { format };
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
             _ => {
                 // If it doesn't start with --, treat it as a path
-                if !args[i].starts_with("--") && scan_args.path.is_none() {
-                    scan_args.path = Some(args[i].clone());
+                if !arg.starts_with("--") && scan_args.path.is_none() {
+                    scan_args.path = Some(arg.clone());
                 }
                 i += 1;
             }
@@ -217,7 +271,7 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --defects=IDs    缺陷 ID 列表 (例如: 202,303)\n");
     help.push_str("      --space-id=ID    DevOps 空间/项目 ID (当指定工作项 ID 时必须提供)\n\n");
 
-    help.push_str("  scan (sc)            使用 Semgrep 执行代码安全扫描\n");
+    help.push_str("  scan (sc)            使用 Tree-sitter AST 分析执行代码安全扫描\n");
     help.push_str("    选项:\n");
     help.push_str("      -p, --path=PATH  扫描路径 (默认: 当前目录)\n");
     help.push_str("      -r, --rules=RULES 自定义 Semgrep 规则/配置\n");
@@ -226,7 +280,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      -d, --detailed   显示详细发现\n");
     help.push_str("      --show-low       显示低严重性问题\n");
     help.push_str("      -a, --ai         启用 AI 分析扫描结果\n");
-    help.push_str("      -o, --output=FILE 输出文件\n\n");
+    help.push_str("      -o, --output=FILE 输出文件 (可选，默认自动生成)\n");
+    help.push_str("      -f, --format=FORMAT 输出格式: markdown (默认) 或 json\n\n");
 
     help.push_str("标准 git 命令:\n");
     help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
@@ -237,11 +292,13 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  gitai review        对当前更改执行 AI 辅助代码评审\n");
     help.push_str("  gitai review --depth=deep --focus=\"性能问题\"\n");
     help.push_str("                      执行深度代码评审，重点关注性能问题\n");
-    help.push_str("  gitai scan          使用 Semgrep 扫描当前目录的安全问题\n");
+    help.push_str("  gitai scan          使用 Tree-sitter 扫描当前目录的安全问题\n");
     help.push_str("  gitai scan --detailed --ai\n");
     help.push_str("                      详细扫描并使用 AI 分析结果\n");
     help.push_str("  gitai scan --severity=ERROR --exclude=\"tests,docs\"\n");
     help.push_str("                      仅扫描错误级别问题，排除测试和文档目录\n");
+    help.push_str("  gitai scan --format=json --output=results.json\n");
+    help.push_str("                      以 JSON 格式保存扫描结果\n");
 
     help.push_str("参考：原始 git 命令:\n");
     help.push_str(

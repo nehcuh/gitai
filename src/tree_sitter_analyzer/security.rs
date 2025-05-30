@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use tree_sitter::{Query, QueryCursor, Tree};
 use serde::{Deserialize, Serialize};
 use streaming_iterator::StreamingIterator;
+use chrono;
 
 use crate::errors::TreeSitterError;
 use super::core::LanguageRegistry;
@@ -416,5 +417,98 @@ impl SecurityScanResults {
     /// Export to JSON
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
+    }
+
+    /// Convert scan results to markdown format
+    pub fn to_markdown(&self) -> String {
+        let mut markdown = String::new();
+        
+        // Header
+        markdown.push_str("# Security Scan Results\n\n");
+        
+        // Summary
+        markdown.push_str(&format!("**Scan Summary:**\n"));
+        markdown.push_str(&format!("- Files scanned: {}\n", self.summary.total_files_scanned));
+        markdown.push_str(&format!("- Total findings: {}\n", self.findings.len()));
+        
+        // Calculate scan duration from scan_time
+        let duration = self.scan_time.elapsed().unwrap_or(std::time::Duration::from_secs(0));
+        markdown.push_str(&format!("- Scan time: {}\n\n", 
+            chrono::DateTime::<chrono::Utc>::from(self.scan_time).format("%Y-%m-%d %H:%M:%S UTC")));
+        
+        if self.findings.is_empty() {
+            markdown.push_str("✅ **No security issues found!**\n");
+            return markdown;
+        }
+        
+        // Severity breakdown
+        let mut severity_counts = HashMap::new();
+        for finding in &self.findings {
+            *severity_counts.entry(finding.severity).or_insert(0) += 1;
+        }
+        
+        markdown.push_str("**Findings by Severity:**\n");
+        for severity in [SecuritySeverity::Critical, SecuritySeverity::High, SecuritySeverity::Medium, SecuritySeverity::Low, SecuritySeverity::Info] {
+            if let Some(count) = severity_counts.get(&severity) {
+                let emoji = match severity {
+                    SecuritySeverity::Critical => "🔴",
+                    SecuritySeverity::High => "🟠",
+                    SecuritySeverity::Medium => "🟡",
+                    SecuritySeverity::Low => "🔵",
+                    SecuritySeverity::Info => "ℹ️",
+                };
+                markdown.push_str(&format!("- {} {}: {}\n", emoji, severity, count));
+            }
+        }
+        markdown.push_str("\n");
+        
+        // Group findings by file
+        let grouped = self.group_by_file();
+        
+        markdown.push_str("## Detailed Findings\n\n");
+        
+        for (file_path, findings) in grouped {
+            markdown.push_str(&format!("### 📁 {}\n\n", file_path.display()));
+            
+            for finding in findings {
+                let severity_emoji = match finding.severity {
+                    SecuritySeverity::Critical => "🔴",
+                    SecuritySeverity::High => "🟠",
+                    SecuritySeverity::Medium => "🟡",
+                    SecuritySeverity::Low => "🔵",
+                    SecuritySeverity::Info => "ℹ️",
+                };
+                
+                markdown.push_str(&format!("#### {} {} {}\n\n", severity_emoji, finding.severity, finding.title));
+                markdown.push_str(&format!("**Description:** {}\n\n", finding.description));
+                markdown.push_str(&format!("**Location:** Lines {}-{}, Columns {}-{}\n\n", 
+                    finding.line_start, finding.line_end, finding.column_start, finding.column_end));
+                
+                if !finding.code_snippet.is_empty() {
+                    markdown.push_str("**Code:**\n");
+                    markdown.push_str("```\n");
+                    markdown.push_str(&finding.code_snippet);
+                    markdown.push_str("\n```\n\n");
+                }
+                
+                markdown.push_str(&format!("**Recommendation:** {}\n\n", finding.recommendation));
+                
+                if let Some(cwe) = &finding.cwe_id {
+                    markdown.push_str(&format!("**CWE:** {}\n\n", cwe));
+                }
+                
+                if let Some(owasp) = &finding.owasp_category {
+                    markdown.push_str(&format!("**OWASP Category:** {}\n\n", owasp));
+                }
+                
+                markdown.push_str("---\n\n");
+            }
+        }
+        
+        // Footer
+        markdown.push_str(&format!("*Generated on {}*\n", 
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        
+        markdown
     }
 }
