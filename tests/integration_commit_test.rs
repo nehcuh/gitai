@@ -59,7 +59,7 @@ async fn test_commit_with_custom_message() {
                 }
                 AppError::Generic(msg) => {
                     println!("Expected error: {}", msg);
-                    assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败"));
+                    assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败") || msg.contains("没有检测到任何变更可用于提交分析"));
                 }
                 _ => {
                     println!("Other expected error in test environment: {:?}", e);
@@ -162,7 +162,7 @@ async fn test_commit_error_handling() {
         }
         Err(AppError::Generic(msg)) => {
             // Expected generic error about no staged changes
-            assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败"));
+            assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败") || msg.contains("没有检测到任何变更可用于提交分析"));
         }
         Err(_) => {
             // Other errors are also acceptable in test environment
