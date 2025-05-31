@@ -676,6 +676,113 @@ async fn run_semgrep_fallback(args: &ScanArgs) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Load scan results for the current repository and commit
+pub async fn load_scan_results(config: &AppConfig) -> Result<Option<SecurityScanResults>, AppError> {
+    if !config.scan.auto_load {
+        return Ok(None);
+    }
+
+    let scan_path = std::env::current_dir()
+        .map_err(|e| AppError::Tool(format!("Failed to get current directory: {}", e)))?;
+    
+    let commit_id = get_current_commit_id().ok_or_else(|| AppError::IO("获取当前提交ID".to_string(), std::io::Error::new(std::io::ErrorKind::NotFound, "无法获取当前提交ID")))?;
+    let repo_name = scan_path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown");
+
+    let storage_path = shellexpand::tilde(&config.scan.storage_path).to_string();
+    let results_file = PathBuf::from(storage_path)
+        .join(repo_name)
+        .join(format!("scan_{}.json", commit_id));
+
+    if !results_file.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&results_file)
+        .map_err(|e| AppError::Tool(format!("Failed to read scan results: {}", e)))?;
+    
+    let results: SecurityScanResults = serde_json::from_str(&content)
+        .map_err(|e| AppError::Tool(format!("Failed to parse scan results: {}", e)))?;
+
+    Ok(Some(results))
+}
+
+/// Load scan results for a specific commit
+pub async fn load_scan_results_for_commit(config: &AppConfig, commit_id: &str) -> Result<Option<SecurityScanResults>, AppError> {
+    let scan_path = std::env::current_dir()
+        .map_err(|e| AppError::Tool(format!("Failed to get current directory: {}", e)))?;
+    
+    let repo_name = scan_path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown");
+
+    let storage_path = shellexpand::tilde(&config.scan.storage_path).to_string();
+    let results_file = PathBuf::from(storage_path)
+        .join(repo_name)
+        .join(format!("scan_{}.json", commit_id));
+
+    if !results_file.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&results_file)
+        .map_err(|e| AppError::Tool(format!("Failed to read scan results: {}", e)))?;
+    
+    let results: SecurityScanResults = serde_json::from_str(&content)
+        .map_err(|e| AppError::Tool(format!("Failed to parse scan results: {}", e)))?;
+
+    Ok(Some(results))
+}
+
+/// Format scan results for display in reviews/commits
+pub fn format_scan_results_summary(results: &SecurityScanResults) -> String {
+    let mut summary = String::new();
+    
+    summary.push_str("🔍 **Security Scan Results**\n");
+    summary.push_str(&format!("📁 Files scanned: {}\n", results.summary.total_files_scanned));
+    summary.push_str(&format!("🔍 Total findings: {}\n", results.summary.total_findings));
+    
+    if results.summary.critical_count > 0 {
+        summary.push_str(&format!("🔴 Critical: {}\n", results.summary.critical_count));
+    }
+    if results.summary.high_count > 0 {
+        summary.push_str(&format!("🟠 High: {}\n", results.summary.high_count));
+    }
+    if results.summary.medium_count > 0 {
+        summary.push_str(&format!("🟡 Medium: {}\n", results.summary.medium_count));
+    }
+    if results.summary.low_count > 0 {
+        summary.push_str(&format!("🟢 Low: {}\n", results.summary.low_count));
+    }
+    if results.summary.info_count > 0 {
+        summary.push_str(&format!("ℹ️ Info: {}\n", results.summary.info_count));
+    }
+    
+    if results.summary.total_findings > 0 {
+        summary.push_str("\n**Top Security Issues:**\n");
+        let high_severity_findings: Vec<_> = results.findings.iter()
+            .filter(|f| matches!(f.severity, SecuritySeverity::Critical | SecuritySeverity::High))
+            .take(3)
+            .collect();
+            
+        for finding in high_severity_findings {
+            summary.push_str(&format!("- {} ({}:{}): {}\n", 
+                finding.title, 
+                finding.file_path.display(), 
+                finding.line_start,
+                finding.description
+            ));
+        }
+        
+        if results.summary.total_findings > 3 {
+            summary.push_str(&format!("... and {} more findings\n", results.summary.total_findings - 3));
+        }
+    }
+    
+    summary
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

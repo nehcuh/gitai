@@ -1,7 +1,7 @@
 use crate::{
     config::{AppConfig, TreeSitterConfig},
     errors::{AppError, GitError},
-    handlers::{ai, git},
+    handlers::{ai, git, scan},
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{parse_git_diff, DiffAnalysis},
@@ -55,6 +55,23 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         tracing::debug!("评审集成已禁用");
         None
     };
+
+    // Load scan results if auto_load is enabled
+    let scan_context = match scan::load_scan_results(config).await {
+        Ok(Some(scan_results)) => {
+            tracing::info!("Loaded security scan results for commit message generation");
+            println!("Found security scan results, integrating into commit message");
+            Some(scan::format_scan_results_summary(&scan_results))
+        }
+        Ok(None) => {
+            tracing::debug!("No scan results found or auto_load disabled");
+            None
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load scan results: {}", e);
+            None
+        }
+    };
     
     // Auto-stage files if requested
     if args.auto_stage {
@@ -72,10 +89,10 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     let commit_message = if let Some(ref custom_message) = args.message {
         if args.tree_sitter {
             // Enhanced mode: combine custom message with AI analysis and review
-            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args, review_context.as_deref()).await?
+            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args, review_context.as_deref(), scan_context.as_deref()).await?
         } else if review_context.is_some() {
             // Custom message with review context
-            format_custom_message_with_review(custom_message, review_context.as_deref().unwrap())
+            format_custom_message_with_review(custom_message, review_context.as_deref().unwrap(), scan_context.as_deref())
         } else {
             // Simple mode: use custom message directly
             custom_message.clone()
@@ -83,10 +100,10 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     } else {
         if args.tree_sitter {
             // Enhanced mode: full Tree-sitter analysis with AI generation and review
-            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
+            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref(), scan_context.as_deref()).await?
         } else {
             // Basic mode: AI generation with optional review context
-            generate_commit_message_with_review(config, &diff, review_context.as_deref()).await?
+            generate_commit_message_with_review(config, &diff, review_context.as_deref(), scan_context.as_deref()).await?
         }
     };
     
@@ -187,7 +204,8 @@ async fn generate_enhanced_commit_message(
     diff: &str, 
     custom_message: Option<String>,
     args: &CommitArgs,
-    review_context: Option<&str>
+    review_context: Option<&str>,
+    scan_context: Option<&str>
 ) -> Result<String, AppError> {
     tracing::info!("🌳 正在使用Tree-sitter增强分析生成提交信息...");
     
@@ -203,18 +221,18 @@ async fn generate_enhanced_commit_message(
             tracing::warn!("Tree-sitter分析失败，回退到基础模式: {:?}", e);
             return if let Some(msg) = custom_message {
                 if let Some(review) = review_context {
-                    Ok(format_custom_message_with_review(&msg, review))
+                    Ok(format_custom_message_with_review(&msg, review, scan_context.as_deref()))
                 } else {
                     Ok(msg)
                 }
             } else {
-                generate_commit_message_with_review(config, diff, review_context).await
+                generate_commit_message_with_review(config, diff, review_context, scan_context).await
             };
         }
     };
     
     // Generate enhanced commit message
-    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message, review_context).await
+    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message, review_context, scan_context).await
 }
 
 /// Analyze diff using Tree-sitter
@@ -264,6 +282,7 @@ async fn generate_commit_message_with_analysis(
     analysis_result: &(String, Option<DiffAnalysis>),
     custom_message: Option<String>,
     review_context: Option<&str>,
+    scan_context: Option<&str>,
 ) -> Result<String, AppError> {
     let (analysis_text, analysis_data) = analysis_result;
     
@@ -291,6 +310,13 @@ async fn generate_commit_message_with_analysis(
         user_prompt.push_str(&format!(
             "\n\n## 代码评审要点:\n{}\n\n请在提交信息中体现相关的评审改进点。",
             review
+        ));
+    }
+
+    if let Some(scan) = scan_context {
+        user_prompt.push_str(&format!(
+            "\n\n## 安全扫描结果:\n{}\n\n请在提交信息中说明相关的安全问题修复或新增的安全风险。",
+            scan
         ));
     }
     
@@ -436,6 +462,7 @@ async fn generate_commit_message_with_review(
     config: &AppConfig,
     diff: &str,
     review_context: Option<&str>,
+    scan_context: Option<&str>,
 ) -> Result<String, AppError> {
     let mut prompt = format!(
         "根据以下代码变更信息生成高质量的Git提交信息：\n\n{}",
@@ -449,14 +476,25 @@ async fn generate_commit_message_with_review(
         ));
     }
 
+    if let Some(scan) = scan_context {
+        prompt.push_str(&format!(
+            "\n\n安全扫描结果:\n{}\n\n请在提交信息中说明相关的安全问题修复或新增的安全风险。",
+            scan
+        ));
+    }
+
     prompt.push_str("\n\n请生成简洁、清晰的提交信息，遵循常见的提交信息格式（如conventional commits）。");
 
     match generate_commit_message(config, &prompt).await {
         Ok(message) => Ok(message),
         Err(_) => {
             tracing::warn!("AI生成提交信息失败，使用回退方案");
-            if review_context.is_some() {
+            if review_context.is_some() && scan_context.is_some() {
+                Ok("chore: 基于代码评审和安全扫描结果更新代码".to_string())
+            } else if review_context.is_some() {
                 Ok("chore: 基于代码评审结果更新代码".to_string())
+            } else if scan_context.is_some() {
+                Ok("chore: 基于安全扫描结果更新代码".to_string())
             } else {
                 Ok("chore: 更新代码".to_string())
             }
@@ -465,12 +503,21 @@ async fn generate_commit_message_with_review(
 }
 
 /// Format custom message with review context
-fn format_custom_message_with_review(custom_message: &str, review_context: &str) -> String {
-    format!(
+fn format_custom_message_with_review(custom_message: &str, review_context: &str, scan_context: Option<&str>) -> String {
+    let mut result = format!(
         "{}\n\n---\n## 基于代码评审的改进\n\n{}",
         custom_message,
         review_context
-    )
+    );
+    
+    if let Some(scan) = scan_context {
+        result.push_str(&format!(
+            "\n\n## 安全扫描结果\n\n{}",
+            scan
+        ));
+    }
+    
+    result
 }
 
 #[cfg(test)]

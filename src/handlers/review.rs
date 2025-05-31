@@ -18,6 +18,7 @@ use crate::{
 use super::{
     ai::{create_review_prompt, execute_review_request},
     git::extract_diff_for_review,
+    scan::{load_scan_results, format_scan_results_summary},
 };
 use std::sync::Arc;
 use chrono;
@@ -1111,7 +1112,7 @@ fn format_enhanced_analysis_result(analysis_result: &crate::types::ai::AnalysisR
 }
 
 async fn generate_ai_review_prompt(
-    _config: &AppConfig,
+    config: &AppConfig,
     diff_text: &str,
     analysis: &str,
     args: &ReviewArgs,
@@ -1141,13 +1142,29 @@ async fn generate_ai_review_prompt(
         summary
     };
 
+    // Load scan results if auto_load is enabled
+    let scan_results_summary = match load_scan_results(config).await {
+        Ok(Some(scan_results)) => {
+            tracing::info!("Loaded scan results for review context");
+            format!("\n\n## Security Scan Results:\n{}", format_scan_results_summary(&scan_results))
+        }
+        Ok(None) => {
+            tracing::debug!("No scan results found or auto_load disabled");
+            String::new()
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load scan results: {}", e);
+            String::new()
+        }
+    };
+
     let prompt_without_work_items =
         create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
 
-    // Append work items summary to the prompt
+    // Append work items and scan results summary to the prompt
     Ok(format!(
-        "{}{}",
-        prompt_without_work_items, work_items_summary
+        "{}{}{}",
+        prompt_without_work_items, work_items_summary, scan_results_summary
     ))
 }
 

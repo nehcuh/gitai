@@ -135,7 +135,7 @@ impl Default for ScanArgs {
             show_low_severity: false,
             ai_analysis: false,
             output: None,
-            format: "markdown".to_string(),
+            format: String::new(), // Empty string to use config default
         }
     }
 }
