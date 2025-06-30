@@ -1,16 +1,19 @@
 use crate::{
+    ast_grep_analyzer::{
+        analyzer::AstGrepAnalyzer,
+        core::{DiffAnalysis, parse_git_diff},
+    },
     config::{AppConfig, AstGrepConfig},
     errors::{AppError, GitError},
     handlers::{ai, git},
-    ast_grep_analyzer::{
-        analyzer::AstGrepAnalyzer,
-        core::{parse_git_diff, DiffAnalysis},
-    },
     types::{
-        git::{CommitArgs, GitDiff},
         ai::ChatMessage,
+        git::{CommitArgs, GitDiff},
     },
-    utils::{find_latest_review_file, read_review_file, extract_review_insights, add_issue_prefix_to_commit_message},
+    utils::{
+        add_issue_prefix_to_commit_message, extract_review_insights, find_latest_review_file,
+        read_review_file,
+    },
 };
 use std::io::{self, Write};
 use std::time::Instant;
@@ -19,10 +22,10 @@ use std::time::Instant;
 /// This function demonstrates AI-powered commit message generation
 pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), AppError> {
     tracing::info!("开始处理智能提交命令");
-    
+
     // Check if we're in a git repository
     check_repository_status()?;
-    
+
     // Check for review results if review integration is enabled
     let review_context = if config.review.include_in_commit {
         match find_latest_review_file(&config.review.storage_path) {
@@ -55,24 +58,31 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         tracing::debug!("评审集成已禁用");
         None
     };
-    
+
     // Auto-stage files if requested
     if args.auto_stage {
         tracing::info!("自动暂存修改的文件...");
         auto_stage_files().await?;
     }
-    
+
     // Get changes for commit
     let diff = get_changes_for_commit().await?;
     if diff.trim().is_empty() {
         return Err(AppError::Git(GitError::NoStagedChanges));
     }
-    
+
     // Generate commit message using AI with optional Tree-sitter analysis and review context
     let commit_message = if let Some(ref custom_message) = args.message {
         if args.ast_grep {
             // Enhanced mode: combine custom message with AI analysis and review
-            generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args, review_context.as_deref()).await?
+            generate_enhanced_commit_message(
+                config,
+                &diff,
+                Some(custom_message.clone()),
+                &args,
+                review_context.as_deref(),
+            )
+            .await?
         } else if review_context.is_some() {
             // Custom message with review context
             format_custom_message_with_review(custom_message, review_context.as_deref().unwrap())
@@ -83,16 +93,18 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     } else {
         if args.ast_grep {
             // Enhanced mode: full AstGrep analysis with AI generation and review
-            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
+            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref())
+                .await?
         } else {
             // Basic mode: AI generation with optional review context
             generate_commit_message_with_review(config, &diff, review_context.as_deref()).await?
         }
     };
-    
+
     // Add issue ID prefix if provided
-    let final_commit_message = add_issue_prefix_to_commit_message(&commit_message, args.issue_id.as_ref());
-    
+    let final_commit_message =
+        add_issue_prefix_to_commit_message(&commit_message, args.issue_id.as_ref());
+
     // Show generated commit message and ask for confirmation
     println!("\n🤖 生成的提交信息:");
     println!("┌─────────────────────────────────────────────┐");
@@ -100,16 +112,16 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
         println!("│ {:<43} │", line);
     }
     println!("└─────────────────────────────────────────────┘");
-    
+
     if !confirm_commit_message(&final_commit_message)? {
         println!("❌ 提交已取消");
         return Ok(());
     }
-    
+
     // Execute the commit
     execute_commit(&final_commit_message).await?;
     println!("✅ 提交成功!");
-    
+
     Ok(())
 }
 
@@ -135,21 +147,22 @@ async fn get_changes_for_commit() -> Result<String, AppError> {
 /// Generate commit message using AI (basic mode)
 async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<String, AppError> {
     tracing::info!("正在使用AI生成提交信息...");
-    
+
     let system_prompt = config
         .prompts
         .get("commit-generator")
         .cloned()
         .unwrap_or_else(|| {
             tracing::warn!("未找到commit-generator提示模板，使用默认模板");
-            "你是一个专业的Git提交信息生成助手。请根据提供的代码变更生成简洁、清晰的提交信息。".to_string()
+            "你是一个专业的Git提交信息生成助手。请根据提供的代码变更生成简洁、清晰的提交信息。"
+                .to_string()
         });
-    
+
     let user_prompt = format!(
         "请根据以下Git diff生成一个规范的提交信息：\n\n```diff\n{}\n```\n\n要求：\n1. 使用中文\n2. 格式为：类型(范围): 简洁描述\n3. 第一行不超过50个字符\n4. 如有必要，可以添加详细说明",
         diff
     );
-    
+
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -160,7 +173,7 @@ async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<Strin
             content: user_prompt,
         },
     ];
-    
+
     match ai::execute_ai_request_generic(config, messages, "提交信息生成", true).await {
         Ok(message) => {
             // Clean up the AI response - remove any markdown formatting
@@ -183,16 +196,16 @@ async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<Strin
 
 /// Generate enhanced commit message using Tree-sitter analysis
 async fn generate_enhanced_commit_message(
-    config: &AppConfig, 
-    diff: &str, 
+    config: &AppConfig,
+    diff: &str,
     custom_message: Option<String>,
     args: &CommitArgs,
-    review_context: Option<&str>
+    review_context: Option<&str>,
 ) -> Result<String, AppError> {
     tracing::info!("🌳 正在使用AstGrep增强分析生成提交信息...");
-    
+
     let analysis_start = Instant::now();
-    
+
     // Perform AstGrep analysis
     let analysis_result = match analyze_diff_with_ast_grep(diff, args).await {
         Ok(result) => {
@@ -212,9 +225,16 @@ async fn generate_enhanced_commit_message(
             };
         }
     };
-    
+
     // Generate enhanced commit message
-    generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message, review_context).await
+    generate_commit_message_with_analysis(
+        config,
+        diff,
+        &analysis_result,
+        custom_message,
+        review_context,
+    )
+    .await
 }
 
 /// Analyze diff using AstGrep
@@ -222,16 +242,9 @@ async fn analyze_diff_with_ast_grep(
     diff: &str,
     args: &CommitArgs,
 ) -> Result<(String, Option<DiffAnalysis>), AppError> {
-    // Initialize AstGrep analyzer with analysis depth
-    let mut ts_config = AstGrepConfig::default();
-    
-    // Set analysis depth based on args
-    if let Some(depth) = &args.depth {
-        ts_config.analysis_depth = depth.clone();
-    } else {
-        ts_config.analysis_depth = "medium".to_string(); // Default for commit
-    }
-    
+    // Initialize AstGrep analyzer with default configuration
+    let ts_config = AstGrepConfig::default();
+
     let mut analyzer = AstGrepAnalyzer::new(ts_config).map_err(|e| {
         tracing::error!("AstGrep分析器初始化失败: {:?}", e);
         AppError::Analysis(e)
@@ -248,7 +261,7 @@ async fn analyze_diff_with_ast_grep(
         tracing::error!("执行差异分析失败: {:?}", e);
         AppError::Analysis(e)
     })?;
-    
+
     tracing::debug!("差异分析结果: {:?}", analysis);
 
     // Create detailed analysis text
@@ -266,7 +279,7 @@ async fn generate_commit_message_with_analysis(
     review_context: Option<&str>,
 ) -> Result<String, AppError> {
     let (analysis_text, analysis_data) = analysis_result;
-    
+
     let system_prompt = config
         .prompts
         .get("commit-generator")
@@ -274,7 +287,7 @@ async fn generate_commit_message_with_analysis(
         .unwrap_or_else(|| {
             "你是一个专业的Git提交信息生成助手。请根据提供的代码变更和静态分析结果生成高质量的提交信息。".to_string()
         });
-    
+
     let mut user_prompt = if let Some(ref custom_msg) = custom_message {
         format!(
             "用户提供的提交信息：\n{}\n\n基于以下代码分析，请生成增强的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## AstGrep 分析结果:\n{}\n\n要求：\n1. 保留用户原始意图\n2. 添加技术细节和影响分析\n3. 使用结构化格式\n4. 包含代码变更摘要",
@@ -293,7 +306,7 @@ async fn generate_commit_message_with_analysis(
             review
         ));
     }
-    
+
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -304,10 +317,12 @@ async fn generate_commit_message_with_analysis(
             content: user_prompt,
         },
     ];
-    
-    match ai::execute_ai_request_generic(config, messages, "AstGrep增强提交信息生成", true).await {
+
+    match ai::execute_ai_request_generic(config, messages, "AstGrep增强提交信息生成", true).await
+    {
         Ok(message) => {
-            let enhanced_message = format_enhanced_commit_message(&message, analysis_data, custom_message.is_some());
+            let enhanced_message =
+                format_enhanced_commit_message(&message, analysis_data, custom_message.is_some());
             Ok(enhanced_message)
         }
         Err(e) => {
@@ -323,66 +338,71 @@ async fn generate_commit_message_with_analysis(
 }
 
 /// Format AstGrep analysis for commit message generation
-fn format_ast_grep_analysis_for_commit(
-    analysis: &DiffAnalysis,
-    _git_diff: &GitDiff,
-) -> String {
+fn format_ast_grep_analysis_for_commit(analysis: &DiffAnalysis, _git_diff: &GitDiff) -> String {
     let mut result = String::new();
-    
+
     result.push_str("### 代码分析摘要\n");
     result.push_str(&format!("- 总体摘要: {}\n", analysis.overall_summary));
-    
+
     if !analysis.file_analyses.is_empty() {
         result.push_str("\n### 文件变更详情\n");
         for file_analysis in &analysis.file_analyses {
-            result.push_str(&format!("**{}** ({})\n", file_analysis.path.display(), file_analysis.language));
+            result.push_str(&format!(
+                "**{}** ({})\n",
+                file_analysis.path.display(),
+                file_analysis.language
+            ));
             if let Some(ref summary) = file_analysis.summary {
                 result.push_str(&format!("  - 摘要: {}\n", summary));
             }
             result.push('\n');
         }
     }
-    
+
     result
 }
 
 /// Format the final enhanced commit message
 fn format_enhanced_commit_message(
-    ai_message: &str, 
+    ai_message: &str,
     analysis_data: &Option<DiffAnalysis>,
-    has_custom_message: bool
+    has_custom_message: bool,
 ) -> String {
     let mut result = String::new();
-    
+
     // Add the AI-generated message
     result.push_str(ai_message.trim());
-    
+
     // Add AstGrep analysis summary if available
     if let Some(analysis) = analysis_data {
         result.push_str("\n\n");
         result.push_str("---\n");
         result.push_str("## 🌳 AstGrep 分析\n");
-        
+
         if !analysis.file_analyses.is_empty() {
             result.push_str(&format!("分析文件: {} 个", analysis.file_analyses.len()));
         }
-        
+
         if has_custom_message {
             result.push_str("\n\n[增强分析基于用户自定义消息]");
         }
     }
-    
+
     result
 }
 
 /// Ask user to confirm the commit message
 fn confirm_commit_message(_message: &str) -> Result<bool, AppError> {
     print!("\n是否使用此提交信息? [Y/n] ");
-    io::stdout().flush().map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
-    
+    io::stdout()
+        .flush()
+        .map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
+
     let mut input = String::new();
-    io::stdin().read_line(&mut input).map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
-    
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
+
     let input = input.trim().to_lowercase();
     Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
 }
@@ -398,10 +418,7 @@ async fn generate_commit_message_with_review(
     diff: &str,
     review_context: Option<&str>,
 ) -> Result<String, AppError> {
-    let mut prompt = format!(
-        "根据以下代码变更信息生成高质量的Git提交信息：\n\n{}",
-        diff
-    );
+    let mut prompt = format!("根据以下代码变更信息生成高质量的Git提交信息：\n\n{}", diff);
 
     if let Some(review) = review_context {
         prompt.push_str(&format!(
@@ -410,7 +427,9 @@ async fn generate_commit_message_with_review(
         ));
     }
 
-    prompt.push_str("\n\n请生成简洁、清晰的提交信息，遵循常见的提交信息格式（如conventional commits）。");
+    prompt.push_str(
+        "\n\n请生成简洁、清晰的提交信息，遵循常见的提交信息格式（如conventional commits）。",
+    );
 
     match generate_commit_message(config, &prompt).await {
         Ok(message) => Ok(message),
@@ -429,19 +448,18 @@ async fn generate_commit_message_with_review(
 fn format_custom_message_with_review(custom_message: &str, review_context: &str) -> String {
     format!(
         "{}\n\n---\n## 基于代码评审的改进\n\n{}",
-        custom_message,
-        review_context
+        custom_message, review_context
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::{
-        config::{AIConfig, TreeSitterConfig},
+        config::{AIConfig, AstGrepConfig},
         types::git::CommitArgs,
     };
+    use std::collections::HashMap;
 
     fn create_test_config() -> AppConfig {
         let mut prompts = HashMap::new();
@@ -449,7 +467,7 @@ mod tests {
             "commit-generator".to_string(),
             "Generate a professional commit message".to_string(),
         );
-        
+
         AppConfig {
             ai: AIConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
@@ -457,10 +475,11 @@ mod tests {
                 temperature: 0.7,
                 api_key: None,
             },
-            tree_sitter: TreeSitterConfig::default(),
+            ast_grep: AstGrepConfig::default(),
             review: crate::config::ReviewConfig::default(),
             account: None,
             prompts,
+            translation: Default::default(),
         }
     }
 
@@ -491,49 +510,45 @@ mod tests {
     #[test]
     fn test_commit_args_structure() {
         let args = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: Some("test message".to_string()),
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         assert_eq!(args.message, Some("test message".to_string()));
         assert!(!args.auto_stage);
-        assert!(!args.tree_sitter);
+        assert!(!args.ast_grep);
     }
 
     #[test]
     fn test_commit_args_with_tree_sitter() {
         let args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("deep".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
-        assert!(args.tree_sitter);
-        assert_eq!(args.depth, Some("deep".to_string()));
+
+        assert!(args.ast_grep);
         assert!(args.message.is_none());
     }
 
     #[test]
     fn test_commit_args_auto_stage_enabled() {
         let args = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: true,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec!["--verbose".to_string()],
         };
-        
+
         assert!(args.auto_stage);
         assert_eq!(args.passthrough_args, vec!["--verbose".to_string()]);
     }
@@ -542,10 +557,10 @@ mod tests {
     async fn test_generate_commit_message_with_fallback() {
         let config = create_test_config();
         let diff = "diff --git a/src/test.rs b/src/test.rs\nindex 1234567..abcdefg 100644\n--- a/src/test.rs\n+++ b/src/test.rs\n@@ -1,3 +1,4 @@\n fn test_function() {\n     println!(\"Hello, world!\");\n+    println!(\"New line added\");\n }";
-        
+
         // This will likely fall back to the default message since we don't have a real AI service
         let result = generate_commit_message(&config, diff).await;
-        
+
         match result {
             Ok(message) => {
                 assert!(!message.is_empty());
@@ -563,15 +578,14 @@ mod tests {
     async fn test_handle_commit_with_custom_message() {
         let config = create_test_config();
         let args = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: Some("feat: custom commit message".to_string()),
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         // This test will fail in most environments since we're not in a proper git repo
         // But it tests the structure and error handling
         match handle_commit(&config, args).await {
@@ -585,7 +599,9 @@ mod tests {
                     AppError::Git(GitError::NotARepository) => assert!(true),
                     AppError::Git(GitError::NoStagedChanges) => assert!(true),
                     AppError::Generic(msg) => {
-                        assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败"));
+                        assert!(
+                            msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败")
+                        );
                     }
                     _ => assert!(true), // Other errors are also acceptable in test
                 }
@@ -597,15 +613,14 @@ mod tests {
     async fn test_handle_commit_with_auto_stage() {
         let config = create_test_config();
         let args = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: true,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         match handle_commit(&config, args).await {
             Ok(_) => {
                 // Success only if in proper git environment
@@ -626,9 +641,12 @@ mod tests {
     #[test]
     fn test_create_test_config_structure() {
         let config = create_test_config();
-        
+
         assert_eq!(config.ai.model_name, "test-model");
-        assert_eq!(config.ai.api_url, "http://localhost:11434/v1/chat/completions");
+        assert_eq!(
+            config.ai.api_url,
+            "http://localhost:11434/v1/chat/completions"
+        );
         assert_eq!(config.ai.temperature, 0.7);
         assert!(config.prompts.contains_key("commit-generator"));
         assert_eq!(
@@ -668,7 +686,9 @@ mod tests {
                 // Expected errors
                 match e {
                     AppError::Generic(msg) => {
-                        assert!(msg.contains("没有检测到任何变更") || msg.contains("没有已暂存的变更"));
+                        assert!(
+                            msg.contains("没有检测到任何变更") || msg.contains("没有已暂存的变更")
+                        );
                     }
                     AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
@@ -681,7 +701,7 @@ mod tests {
     #[tokio::test]
     async fn test_execute_commit_error_handling() {
         let test_message = "test: this should fail in test environment";
-        
+
         match execute_commit(test_message).await {
             Ok(_) => {
                 // Would only succeed if we have staged changes to commit
@@ -702,10 +722,9 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_diff_with_tree_sitter_basic() {
         let diff = "diff --git a/src/test.rs b/src/test.rs\nindex 1234567..abcdefg 100644\n--- a/src/test.rs\n+++ b/src/test.rs\n@@ -1,3 +1,4 @@\n fn test_function() {\n     println!(\"Hello, world!\");\n+    println!(\"New line added\");\n }";
-        
+
         let args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
@@ -714,7 +733,7 @@ mod tests {
         };
 
         // This test may fail in environments without proper tree-sitter setup
-        match analyze_diff_with_tree_sitter(diff, &args).await {
+        match analyze_diff_with_ast_grep(diff, &args).await {
             Ok((analysis_text, analysis_data)) => {
                 assert!(!analysis_text.is_empty());
                 assert!(analysis_data.is_some());
@@ -723,7 +742,7 @@ mod tests {
             Err(e) => {
                 // Expected in test environments without tree-sitter support
                 match e {
-                    AppError::TreeSitter(_) => assert!(true),
+                    AppError::Analysis(_) => assert!(true),
                     _ => assert!(true),
                 }
             }
@@ -733,20 +752,18 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_diff_with_tree_sitter_depth_levels() {
         let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+pub fn new_function() {}";
-        
+
         let shallow_args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("shallow".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         let deep_args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("deep".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
@@ -756,11 +773,14 @@ mod tests {
 
         // Test different analysis depths
         for args in &[shallow_args, deep_args] {
-            match analyze_diff_with_tree_sitter(diff, args).await {
+            match analyze_diff_with_ast_grep(diff, args).await {
                 Ok((analysis_text, _)) => {
                     assert!(!analysis_text.is_empty());
                     // Analysis text should contain depth-specific information
-                    assert!(analysis_text.contains("代码分析摘要") || analysis_text.contains("变更模式"));
+                    assert!(
+                        analysis_text.contains("代码分析摘要")
+                            || analysis_text.contains("变更模式")
+                    );
                 }
                 Err(_) => {
                     // Expected in test environments
@@ -771,44 +791,23 @@ mod tests {
     }
 
     #[test]
-    fn test_format_tree_sitter_analysis_for_commit() {
-        use crate::tree_sitter_analyzer::core::{
-            DiffAnalysis, FileAnalysis, ChangeAnalysis, ChangePattern, ChangeScope, AffectedNode
-        };
+    fn test_format_ast_grep_analysis_for_commit() {
+        use crate::ast_grep_analyzer::core::{DiffAnalysis, FileAnalysis};
         use std::path::PathBuf;
 
         let analysis = DiffAnalysis {
-            file_analyses: vec![
-                FileAnalysis {
-                    path: PathBuf::from("src/test.rs"),
-                    language: "Rust".to_string(),
-                    change_type: crate::types::git::ChangeType::Added,
-                    affected_nodes: vec![
-                        AffectedNode {
-                            node_type: "function".to_string(),
-                            name: "test_function".to_string(),
-                            range: (0, 100),
-                            is_public: true,
-                            content: Some("fn test_function() {}".to_string()),
-                            line_range: (1, 5),
-                            change_type: Some("added".to_string()),
-                            additions: Some(vec!["println!(\"Hello\");".to_string()]),
-                            deletions: None,
-                        }
-                    ],
-                    summary: Some("新增测试函数".to_string()),
-                }
-            ],
+            file_analyses: vec![FileAnalysis {
+                path: PathBuf::from("src/test.rs"),
+                language: "Rust".to_string(),
+                change_type: crate::types::git::ChangeType::Added,
+                summary: Some("新增测试函数".to_string()),
+                issues: vec![],
+                metrics: None,
+            }],
             overall_summary: "添加了新的测试函数".to_string(),
-            change_analysis: ChangeAnalysis {
-                function_changes: 1,
-                type_changes: 0,
-                method_changes: 0,
-                interface_changes: 0,
-                other_changes: 0,
-                change_pattern: ChangePattern::FeatureImplementation,
-                change_scope: ChangeScope::Minor,
-            },
+            total_issues: 0,
+            total_files_analyzed: 1,
+            analysis_duration_ms: 100,
         };
 
         let git_diff = crate::types::git::GitDiff {
@@ -816,38 +815,29 @@ mod tests {
             metadata: None,
         };
 
-        let result = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
-        
+        let result = format_ast_grep_analysis_for_commit(&analysis, &git_diff);
+
         assert!(result.contains("代码分析摘要"));
-        assert!(result.contains("FeatureImplementation"));
-        assert!(result.contains("Minor"));
         assert!(result.contains("src/test.rs"));
-        assert!(result.contains("函数变更: 1 个"));
+        assert!(result.contains("Rust"));
     }
 
     #[test]
     fn test_format_enhanced_commit_message() {
-        use crate::tree_sitter_analyzer::core::{
-            DiffAnalysis, ChangeAnalysis, ChangePattern, ChangeScope
-        };
+        use crate::ast_grep_analyzer::core::DiffAnalysis;
 
         let ai_message = "feat: add new authentication feature\n\nImplemented user login and registration functionality";
-        
+
         let analysis = DiffAnalysis {
             file_analyses: vec![],
             overall_summary: "Authentication feature implementation".to_string(),
-            change_analysis: ChangeAnalysis {
-                function_changes: 3,
-                type_changes: 1,
-                method_changes: 2,
-                interface_changes: 0,
-                other_changes: 0,
-                change_pattern: ChangePattern::FeatureImplementation,
-                change_scope: ChangeScope::Moderate,
-            },
+            total_issues: 0,
+            total_files_analyzed: 2,
+            analysis_duration_ms: 150,
         };
 
-        let result_with_analysis = format_enhanced_commit_message(ai_message, &Some(analysis.clone()), false);
+        let result_with_analysis =
+            format_enhanced_commit_message(ai_message, &Some(analysis.clone()), false);
         let result_with_custom = format_enhanced_commit_message(ai_message, &Some(analysis), true);
 
         assert!(result_with_analysis.contains("Tree-sitter 分析"));
@@ -862,20 +852,18 @@ mod tests {
     async fn test_generate_enhanced_commit_message_fallback() {
         let config = create_test_config();
         let diff = "diff --git a/src/test.rs b/src/test.rs\n+// test change";
-        
+
         let args_with_custom = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: Some("feat: custom message".to_string()),
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         let args_without_custom = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
@@ -884,7 +872,15 @@ mod tests {
         };
 
         // Test with custom message
-        match generate_enhanced_commit_message(&config, diff, Some("feat: custom message".to_string()), &args_with_custom, None).await {
+        match generate_enhanced_commit_message(
+            &config,
+            diff,
+            Some("feat: custom message".to_string()),
+            &args_with_custom,
+            None,
+        )
+        .await
+        {
             Ok(message) => {
                 // Should either be enhanced or fallback
                 assert!(!message.is_empty());
@@ -897,7 +893,9 @@ mod tests {
         }
 
         // Test without custom message
-        match generate_enhanced_commit_message(&config, diff, None, &args_without_custom, None).await {
+        match generate_enhanced_commit_message(&config, diff, None, &args_without_custom, None)
+            .await
+        {
             Ok(message) => {
                 assert!(!message.is_empty());
             }
@@ -911,20 +909,18 @@ mod tests {
     #[tokio::test]
     async fn test_handle_commit_with_tree_sitter() {
         let config = create_test_config();
-        
+
         let args_tree_sitter = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         let args_tree_sitter_with_message = CommitArgs {
-            tree_sitter: true,
-            depth: Some("deep".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: Some("feat: enhanced with tree-sitter".to_string()),
             issue_id: None,
@@ -942,7 +938,9 @@ mod tests {
                 // Expected errors in test environment
                 match e {
                     AppError::Git(GitError::NotARepository) => assert!(true),
-                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
+                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => {
+                        assert!(true)
+                    }
                     _ => assert!(true),
                 }
             }
@@ -953,13 +951,13 @@ mod tests {
             Ok(_) => {
                 assert!(true);
             }
-            Err(e) => {
-                match e {
-                    AppError::Git(GitError::NotARepository) => assert!(true),
-                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
-                    _ => assert!(true),
+            Err(e) => match e {
+                AppError::Git(GitError::NotARepository) => assert!(true),
+                AppError::Generic(msg) if msg.contains("没有检测到任何变更") => {
+                    assert!(true)
                 }
-            }
+                _ => assert!(true),
+            },
         }
     }
 
@@ -967,28 +965,25 @@ mod tests {
     fn test_commit_args_tree_sitter_combinations() {
         // Test various combinations of tree-sitter related arguments
         let args1 = CommitArgs {
-            tree_sitter: true,
-            depth: Some("shallow".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         let args2 = CommitArgs {
-            tree_sitter: true,
-            depth: Some("deep".to_string()),
-            auto_stage: true,
-            message: Some("custom message".to_string()),
+            ast_grep: true,
+            auto_stage: false,
+            message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec!["-v".to_string()],
         };
-        
+
         let args3 = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: Some("simple commit".to_string()),
             issue_id: None,
@@ -996,19 +991,14 @@ mod tests {
             passthrough_args: vec![],
         };
 
-        assert!(args1.tree_sitter);
-        assert_eq!(args1.depth, Some("shallow".to_string()));
-        assert!(!args1.auto_stage);
+        // All should be valid structures
+        assert!(args1.ast_grep);
         assert!(args1.message.is_none());
 
-        assert!(args2.tree_sitter);
-        assert_eq!(args2.depth, Some("deep".to_string()));
-        assert!(args2.auto_stage);
-        assert_eq!(args2.message, Some("custom message".to_string()));
+        assert!(args2.ast_grep);
         assert_eq!(args2.passthrough_args, vec!["-v".to_string()]);
 
-        assert!(!args3.tree_sitter);
-        assert!(args3.depth.is_none());
+        assert!(!args3.ast_grep);
         assert_eq!(args3.message, Some("simple commit".to_string()));
     }
 
@@ -1023,7 +1013,9 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
+                    AppError::Generic(msg) if msg.contains("没有检测到任何变更") => {
+                        assert!(true)
+                    }
                     AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
@@ -1036,9 +1028,9 @@ mod tests {
     fn test_format_custom_message_with_review() {
         let custom_message = "feat: add user authentication";
         let review_context = "- Fix security vulnerability in login\n- Improve input validation";
-        
+
         let result = format_custom_message_with_review(custom_message, review_context);
-        
+
         assert!(result.contains("feat: add user authentication"));
         assert!(result.contains("基于代码评审的改进"));
         assert!(result.contains("Fix security vulnerability"));
@@ -1049,11 +1041,11 @@ mod tests {
     async fn test_generate_commit_message_with_review() {
         let config = create_test_config();
         let diff = "diff --git a/src/main.rs b/src/main.rs\nindex 123..456 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1,3 +1,4 @@\n fn main() {\n+    println!(\"Hello, world!\");\n     // TODO: implement\n }";
-        
+
         // Test with review context
         let review_context = "- 添加了主函数输出\n- 代码结构良好";
         let result = generate_commit_message_with_review(&config, diff, Some(review_context)).await;
-        
+
         match result {
             Ok(message) => {
                 assert!(!message.is_empty());
@@ -1065,7 +1057,7 @@ mod tests {
                 assert!(true);
             }
         }
-        
+
         // Test without review context
         let result = generate_commit_message_with_review(&config, diff, None).await;
         match result {
@@ -1082,16 +1074,15 @@ mod tests {
     fn test_commit_args_with_review_integration() {
         // Test CommitArgs structure supports review integration
         let args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: Some("feat: add feature".to_string()),
             issue_id: None,
             review: true,
             passthrough_args: vec![],
         };
-        
-        assert_eq!(args.tree_sitter, true);
+
+        assert_eq!(args.ast_grep, true);
         assert_eq!(args.message, Some("feat: add feature".to_string()));
         assert_eq!(args.review, true);
     }
@@ -1101,19 +1092,20 @@ mod tests {
         let config = create_test_config();
         let diff = "test diff content";
         let args = CommitArgs {
-            tree_sitter: true,
-            depth: Some("medium".to_string()),
+            ast_grep: true,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
-        
+
         // Test with review context
         let review_context = "Review findings: code quality good";
-        let result = generate_enhanced_commit_message(&config, diff, None, &args, Some(review_context)).await;
-        
+        let result =
+            generate_enhanced_commit_message(&config, diff, None, &args, Some(review_context))
+                .await;
+
         match result {
             Ok(message) => {
                 assert!(!message.is_empty());
@@ -1123,7 +1115,7 @@ mod tests {
                 assert!(true);
             }
         }
-        
+
         // Test without review context
         let result = generate_enhanced_commit_message(&config, diff, None, &args, None).await;
         match result {

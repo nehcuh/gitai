@@ -7,3 +7,5 @@ pub mod intelligent_git;
 #[cfg(test)]
 pub mod intelligent_git_integration_test;
 pub mod review;
+pub mod scan;
+pub mod update_rules;

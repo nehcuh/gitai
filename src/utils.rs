@@ -2,8 +2,10 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs};
 use crate::errors::AppError;
+use crate::types::git::{
+    CommitArgs, GitaiArgs, GitaiSubCommand, ReviewArgs, ScanArgs, UpdateRulesArgs,
+};
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
     // 重构review命令参数以便使用clap解析
@@ -20,24 +22,33 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
 
     tracing::debug!("重构的review命令: {:?}", review_args_vec);
 
-    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&review_args_vec) {
-        match parsed_args.command {
+    match GitaiArgs::try_parse_from(&review_args_vec) {
+        Ok(parsed_args) => match parsed_args.command {
             GitaiSubCommand::Review(review_args) => {
                 tracing::debug!("解析出来的 review 结构为: {:?}", review_args);
                 return review_args;
             }
             _ => panic!("无法解析 git review 命令,命令为: {:?}", args),
+        },
+        Err(e) => {
+            tracing::warn!("解析review命令失败: {:?}", e);
+            println!("Failed to parse review args: {:?}", e);
+            println!("Input args: {:?}", review_args_vec);
         }
-    } else {
-        tracing::warn!("解析review命令失败");
+    }
+
+    {
+        tracing::warn!("使用默认ReviewArgs");
         // 创建默认的ReviewArgs
         ReviewArgs {
-            depth: "medium".to_string(),
             focus: None,
             lang: None,
             format: "text".to_string(),
             output: None,
             ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -77,12 +88,96 @@ pub fn construct_commit_args(args: &[String]) -> CommitArgs {
         // 创建默认的CommitArgs
         CommitArgs {
             ast_grep: false,
-            depth: None,
             auto_stage: false,
             message: None,
             issue_id: None,
             review: false,
             passthrough_args: vec![],
+        }
+    }
+}
+
+pub fn construct_scan_args(args: &[String]) -> ScanArgs {
+    // 重构scan命令参数以便使用clap解析
+    let mut scan_args_vec = vec!["gitai".to_string(), "scan".to_string()];
+
+    // 获取scan之后的所有其他参数
+    let scan_index = args
+        .iter()
+        .position(|a| a == "scan" || a == "sc")
+        .unwrap_or(0);
+    if scan_index + 1 < args.len() {
+        scan_args_vec.extend_from_slice(&args[scan_index + 1..]);
+    }
+
+    tracing::debug!("重构的scan命令: {:?}", scan_args_vec);
+
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&scan_args_vec) {
+        match parsed_args.command {
+            GitaiSubCommand::Scan(scan_args) => {
+                tracing::debug!("解析出来的 scan 结构为: {:?}", scan_args);
+                return scan_args;
+            }
+            _ => panic!("无法解析 git scan 命令,命令为: {:?}", args),
+        }
+    } else {
+        tracing::warn!("解析scan命令失败");
+        // 创建默认的ScanArgs
+        ScanArgs {
+            target: ".".to_string(),
+            languages: None,
+            rules: None,
+            severity: "error,warning,info".to_string(),
+            format: "text".to_string(),
+            output: None,
+            max_issues: 0,
+            include: None,
+            exclude: None,
+            config: None,
+            parallel: false,
+            verbose: false,
+            stats: false,
+            fail_on_error: false,
+        }
+    }
+}
+
+pub fn construct_update_rules_args(args: &[String]) -> UpdateRulesArgs {
+    // 重构update-rules命令参数以便使用clap解析
+    let mut update_rules_args_vec = vec!["gitai".to_string(), "update-rules".to_string()];
+
+    // 获取update-rules之后的所有其他参数
+    let update_rules_index = args
+        .iter()
+        .position(|a| a == "update-rules" || a == "ur")
+        .unwrap_or(0);
+    if update_rules_index + 1 < args.len() {
+        update_rules_args_vec.extend_from_slice(&args[update_rules_index + 1..]);
+    }
+
+    tracing::debug!("重构的update-rules命令: {:?}", update_rules_args_vec);
+
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&update_rules_args_vec) {
+        match parsed_args.command {
+            GitaiSubCommand::UpdateRules(update_rules_args) => {
+                tracing::debug!("解析出来的 update_rules 结构为: {:?}", update_rules_args);
+                return update_rules_args;
+            }
+            _ => panic!("无法解析 git update-rules 命令,命令为: {:?}", args),
+        }
+    } else {
+        tracing::warn!("解析update-rules命令失败");
+        // 创建默认的UpdateRulesArgs
+        UpdateRulesArgs {
+            source: "github".to_string(),
+            repository: None,
+            reference: "main".to_string(),
+            target_dir: None,
+            force: false,
+            backup: false,
+            verify: false,
+            list_sources: false,
+            verbose: false,
         }
     }
 }
@@ -121,9 +216,11 @@ pub fn generate_gitai_help() -> String {
 
     help.push_str("  review (rv)          执行 AI 辅助的代码评审\n");
     help.push_str("    选项:\n");
-    help.push_str("      --depth=LEVEL    分析深度级别 (默认: medium)\n");
     help.push_str("      --focus=AREA     评审重点区域\n");
-    help.push_str("      --lang=LANGUAGE  限制分析到特定语言\n");
+    help.push_str("      --lang=LANG      翻译语言 (zh|en|auto)\n");
+    help.push_str("      --no-scan        禁用自动代码扫描\n");
+    help.push_str("      --force-scan     强制扫描即使有缓存\n");
+    help.push_str("      --use-cache      使用缓存的扫描结果\n");
     help.push_str("      --format=FORMAT  输出格式 (默认: text)\n");
     help.push_str("      --output=FILE    输出文件\n");
     help.push_str("      --ast-grep    使用 AstGrep 进行增强代码分析（默认）\n");
@@ -134,6 +231,29 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --defects=IDs    缺陷 ID 列表 (例如: 202,303)\n");
     help.push_str("      --space-id=ID    DevOps 空间/项目 ID (当指定工作项 ID 时必须提供)\n\n");
 
+    help.push_str("  scan (sc)           使用 AST-Grep 进行代码扫描和质量检查\n");
+    help.push_str("    选项:\n");
+    help.push_str("      --target=PATH    扫描目标路径 (默认: .)\n");
+    help.push_str("      --languages=LANGS 指定扫描的编程语言 (逗号分隔)\n");
+    help.push_str("      --rules=RULES    指定运行的规则 (逗号分隔规则ID)\n");
+    help.push_str("      --severity=LEVEL 问题严重级别 (error,warning,info,hint)\n");
+    help.push_str("      --format=FORMAT  输出格式 (text,json,sarif,csv)\n");
+    help.push_str("      --output=FILE    输出文件路径\n");
+    help.push_str("      --max-issues=NUM 最大问题数量 (0=无限制)\n");
+    help.push_str("      --parallel       启用并行处理\n");
+    help.push_str("      --verbose        详细输出\n\n");
+
+    help.push_str("  update-rules (ur)   更新 AST-Grep 规则到最新版本\n");
+    help.push_str("    选项:\n");
+    help.push_str("      --source=SOURCE  规则源 (github,local,url)\n");
+    help.push_str("      --repository=REPO 指定规则仓库\n");
+    help.push_str("      --reference=REF  分支或标签 (默认: main)\n");
+    help.push_str("      --force          强制更新\n");
+    help.push_str("      --backup         更新前备份现有规则\n");
+    help.push_str("      --verify         下载后验证规则\n");
+    help.push_str("      --list-sources   列出可用的规则源\n");
+    help.push_str("      --verbose        详细输出\n\n");
+
     help.push_str("标准 git 命令:\n");
     help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
     help.push_str("  gitai status, gitai add, gitai push, 等等\n\n");
@@ -141,8 +261,13 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  gitai commit        使用 AI 辅助生成提交信息\n");
     help.push_str("  gitai commit --noai 禁用 AI，使用标准 git commit\n");
     help.push_str("  gitai review        对当前更改执行 AI 辅助代码评审\n");
-    help.push_str("  gitai review --depth=deep --focus=\"性能问题\"\n");
-    help.push_str("                      执行深度代码评审，重点关注性能问题\n");
+    help.push_str("  gitai review --focus=\"性能问题\" --lang=zh\n");
+    help.push_str("                      执行代码评审，重点关注性能问题，使用中文\n");
+    help.push_str("  gitai scan          扫描当前目录的代码质量问题\n");
+    help.push_str("  gitai scan src/ --format=json --max-issues=10\n");
+    help.push_str("                      扫描 src 目录，输出 JSON 格式，最多10个问题\n");
+    help.push_str("  gitai update-rules  更新 AST-Grep 规则到最新版本\n");
+    help.push_str("  gitai ur --list-sources 列出所有可用的规则源\n");
 
     help.push_str("参考：原始 git 命令:\n");
     help.push_str(
@@ -202,18 +327,18 @@ pub fn get_git_repo_name() -> Result<String, AppError> {
         .args(&["rev-parse", "--show-toplevel"])
         .output()
         .map_err(|e| AppError::IO("Failed to get git repository path".to_string(), e))?;
-    
+
     if !output.status.success() {
         return Err(AppError::Generic("Not in a Git repository".to_string()));
     }
-    
+
     let binding = String::from_utf8_lossy(&output.stdout);
     let repo_path = binding.trim();
     let repo_name = Path::new(repo_path)
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| AppError::Generic("Failed to extract repository name".to_string()))?;
-    
+
     Ok(repo_name.to_string())
 }
 
@@ -223,11 +348,13 @@ pub fn get_current_commit_id() -> Result<String, AppError> {
         .args(&["rev-parse", "--short", "HEAD"])
         .output()
         .map_err(|e| AppError::IO("Failed to get current commit ID".to_string(), e))?;
-    
+
     if !output.status.success() {
-        return Err(AppError::Generic("Failed to get current commit ID".to_string()));
+        return Err(AppError::Generic(
+            "Failed to get current commit ID".to_string(),
+        ));
     }
-    
+
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
@@ -254,7 +381,7 @@ pub fn generate_review_file_path(
 ) -> Result<PathBuf, AppError> {
     let repo_name = get_git_repo_name()?;
     let commit_id = get_current_commit_id()?;
-    
+
     let expanded_base = expand_tilde_path(storage_base_path);
     let file_extension = match format.to_lowercase().as_str() {
         "json" => "json",
@@ -262,10 +389,10 @@ pub fn generate_review_file_path(
         "markdown" | "md" => "md",
         _ => "txt",
     };
-    
+
     let filename = format!("review_{}.{}", commit_id, file_extension);
     let file_path = expanded_base.join(&repo_name).join(filename);
-    
+
     Ok(file_path)
 }
 
@@ -274,24 +401,31 @@ pub fn find_latest_review_file(storage_base_path: &str) -> Result<Option<PathBuf
     let repo_name = get_git_repo_name()?;
     let expanded_base = expand_tilde_path(storage_base_path);
     let repo_dir = expanded_base.join(&repo_name);
-    
+
     if !repo_dir.exists() {
         return Ok(None);
     }
-    
+
     let mut review_files = Vec::new();
-    
-    for entry in std::fs::read_dir(&repo_dir)
-        .map_err(|e| AppError::IO(format!("Failed to read review directory: {:?}", repo_dir), e))?
-    {
-        let entry = entry.map_err(|e| AppError::IO("Failed to read directory entry".to_string(), e))?;
+
+    for entry in std::fs::read_dir(&repo_dir).map_err(|e| {
+        AppError::IO(
+            format!("Failed to read review directory: {:?}", repo_dir),
+            e,
+        )
+    })? {
+        let entry =
+            entry.map_err(|e| AppError::IO("Failed to read directory entry".to_string(), e))?;
         let path = entry.path();
-        
+
         if path.is_file() {
             if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if filename.starts_with("review_") && 
-                   (filename.ends_with(".md") || filename.ends_with(".txt") || 
-                    filename.ends_with(".json") || filename.ends_with(".html")) {
+                if filename.starts_with("review_")
+                    && (filename.ends_with(".md")
+                        || filename.ends_with(".txt")
+                        || filename.ends_with(".json")
+                        || filename.ends_with(".html"))
+                {
                     if let Ok(metadata) = entry.metadata() {
                         if let Ok(modified) = metadata.modified() {
                             review_files.push((path, modified));
@@ -301,23 +435,26 @@ pub fn find_latest_review_file(storage_base_path: &str) -> Result<Option<PathBuf
             }
         }
     }
-    
+
     if review_files.is_empty() {
         return Ok(None);
     }
-    
+
     // Sort by modification time, most recent first
     review_files.sort_by(|a, b| b.1.cmp(&a.1));
-    
+
     Ok(Some(review_files[0].0.clone()))
 }
 
 /// Read and parse review file content
 pub fn read_review_file(file_path: &Path) -> Result<String, AppError> {
     if !file_path.exists() {
-        return Err(AppError::Generic(format!("Review file does not exist: {:?}", file_path)));
+        return Err(AppError::Generic(format!(
+            "Review file does not exist: {:?}",
+            file_path
+        )));
     }
-    
+
     std::fs::read_to_string(file_path)
         .map_err(|e| AppError::IO(format!("Failed to read review file: {:?}", file_path), e))
 }
@@ -328,7 +465,7 @@ pub fn parse_issue_ids(issue_id_str: &str) -> Vec<String> {
     if issue_id_str.trim().is_empty() {
         return Vec::new();
     }
-    
+
     issue_id_str
         .split(',')
         .map(|id| {
@@ -353,7 +490,10 @@ pub fn format_issue_prefix(issue_ids: &[String]) -> String {
 }
 
 /// Add issue ID prefix to commit message if issue IDs are provided
-pub fn add_issue_prefix_to_commit_message(commit_message: &str, issue_id_option: Option<&String>) -> String {
+pub fn add_issue_prefix_to_commit_message(
+    commit_message: &str,
+    issue_id_option: Option<&String>,
+) -> String {
     match issue_id_option {
         Some(issue_id_str) => {
             let issue_ids = parse_issue_ids(issue_id_str);
@@ -370,53 +510,61 @@ pub fn add_issue_prefix_to_commit_message(commit_message: &str, issue_id_option:
 
 pub fn extract_review_insights(content: &str) -> String {
     let mut insights = Vec::new();
-    
+
     // Extract lines that look like important findings or suggestions
     for line in content.lines() {
         let line = line.trim();
-        
+
         // Skip empty lines and basic headers
         if line.is_empty() || line.starts_with('#') && line.len() < 50 {
             continue;
         }
-        
+
         // Look for key indicators of important content
         if line.starts_with("- ") || line.starts_with("* ") {
             // Bullet points are often key findings
-            if line.len() > 10 && (
-                line.to_lowercase().contains("fix") ||
-                line.to_lowercase().contains("issue") ||
-                line.to_lowercase().contains("improve") ||
-                line.to_lowercase().contains("security") ||
-                line.to_lowercase().contains("performance") ||
-                line.to_lowercase().contains("bug") ||
-                line.to_lowercase().contains("error") ||
-                line.contains("建议") || line.contains("问题") || line.contains("改进") ||
-                line.contains("优化") || line.contains("修复")
-            ) {
+            if line.len() > 10
+                && (line.to_lowercase().contains("fix")
+                    || line.to_lowercase().contains("issue")
+                    || line.to_lowercase().contains("improve")
+                    || line.to_lowercase().contains("security")
+                    || line.to_lowercase().contains("performance")
+                    || line.to_lowercase().contains("bug")
+                    || line.to_lowercase().contains("error")
+                    || line.contains("建议")
+                    || line.contains("问题")
+                    || line.contains("改进")
+                    || line.contains("优化")
+                    || line.contains("修复"))
+            {
                 insights.push(line.to_string());
             }
-        } else if line.contains("建议") || line.contains("问题") || line.contains("改进") ||
-                  line.contains("优化") || line.contains("修复") {
+        } else if line.contains("建议")
+            || line.contains("问题")
+            || line.contains("改进")
+            || line.contains("优化")
+            || line.contains("修复")
+        {
             // Chinese keywords for suggestions and issues
             insights.push(line.to_string());
         }
     }
-    
+
     if insights.is_empty() {
         // If no specific insights found, try to get a summary section
         let lines: Vec<&str> = content.lines().collect();
         let mut summary_start = None;
-        
+
         for (i, line) in lines.iter().enumerate() {
-            if line.to_lowercase().contains("summary") || 
-               line.to_lowercase().contains("总结") ||
-               line.to_lowercase().contains("摘要") {
+            if line.to_lowercase().contains("summary")
+                || line.to_lowercase().contains("总结")
+                || line.to_lowercase().contains("摘要")
+            {
                 summary_start = Some(i + 1);
                 break;
             }
         }
-        
+
         if let Some(start) = summary_start {
             for line in lines.iter().skip(start).take(5) {
                 let line = line.trim();
@@ -426,7 +574,7 @@ pub fn extract_review_insights(content: &str) -> String {
             }
         }
     }
-    
+
     if insights.is_empty() {
         "基于代码审查结果".to_string()
     } else {
@@ -437,7 +585,7 @@ pub fn extract_review_insights(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::git::{CommaSeparatedU32List, ReviewArgs, CommitArgs};
+    use crate::types::git::{CommaSeparatedU32List, CommitArgs, ReviewArgs};
 
     fn make_args(vec: Vec<&str>) -> Vec<String> {
         vec.into_iter().map(String::from).collect()
@@ -447,12 +595,14 @@ mod tests {
     fn test_construct_review_args_default() {
         let args = make_args(vec!["gitai", "review"]);
         let expected = ReviewArgs {
-            depth: "medium".to_string(),
             focus: None,
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -467,49 +617,61 @@ mod tests {
     #[test]
     fn test_construct_review_args_with_all_options() {
         let args = make_args(vec![
-            "gitai", "review",
-            "--depth=deep",
-            "--focus", "performance",
-            "--lang", "Rust",
-            "--format", "json",
-            "--output", "out.txt",
-            "--tree-sitter",
-            "--commit1", "abc123",
-            "--commit2", "def456",
+            "gitai",
+            "review",
+            "--focus",
+            "performance",
+            "--lang",
+            "Rust",
+            "--format",
+            "json",
+            "--output",
+            "out.txt",
+            "--ast-grep",
+            "--commit1",
+            "abc123",
+            "--commit2",
+            "def456",
             "--stories=1,2,3",
             "--tasks=4,5",
             "--defects=6",
-            "--space-id=12345",
-            "--", "--extra", "flag"
+            "--space-id=777",
+            "--",
+            "--extra",
+            "flag",
         ]);
         let expected = ReviewArgs {
-            depth: "deep".to_string(),
             focus: Some("performance".to_string()),
             lang: Some("Rust".to_string()),
             format: "json".to_string(),
             output: Some("out.txt".to_string()),
-            tree_sitter: true,
+            ast_grep: true,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec!["--extra".to_string(), "flag".to_string()],
             commit1: Some("abc123".to_string()),
             commit2: Some("def456".to_string()),
             stories: Some(CommaSeparatedU32List(vec![1, 2, 3])),
             tasks: Some(CommaSeparatedU32List(vec![4, 5])),
             defects: Some(CommaSeparatedU32List(vec![6])),
-            space_id: Some(12345),
+            space_id: Some(777),
         };
         assert_eq!(construct_review_args(&args), expected);
     }
 
     #[test]
     fn test_construct_review_args_alias_rv() {
-        let args = make_args(vec!["gitai", "rv", "--depth=shallow"]);
+        let args = make_args(vec!["gitai", "rv", "--lang=zh"]);
         let expected = ReviewArgs {
-            depth: "shallow".to_string(),
             focus: None,
-            lang: None,
+            lang: Some("zh".to_string()),
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -523,18 +685,16 @@ mod tests {
 
     #[test]
     fn test_construct_review_args_with_some_work_items() {
-        let args = make_args(vec![
-            "gitai", "review",
-            "--stories=7,8",
-            "--space-id=98765",
-        ]);
+        let args = make_args(vec!["gitai", "review", "--stories=7,8", "--space-id=98765"]);
         let expected = ReviewArgs {
-            depth: "medium".to_string(),
             focus: None,
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -549,19 +709,22 @@ mod tests {
     #[test]
     fn test_construct_review_args_with_empty_work_item_lists() {
         let args = make_args(vec![
-            "gitai", "review",
+            "gitai",
+            "review",
             "--stories=",
             "--tasks=",
             "--defects=",
             "--space-id=123",
         ]);
         let expected = ReviewArgs {
-            depth: "medium".to_string(),
             focus: None,
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -577,8 +740,7 @@ mod tests {
     fn test_construct_commit_args_default() {
         let args = make_args(vec!["gitai", "commit"]);
         let expected = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: None,
             issue_id: None,
@@ -591,17 +753,19 @@ mod tests {
     #[test]
     fn test_construct_commit_args_with_options() {
         let args = make_args(vec![
-            "gitai", "commit",
-            "-t",
-            "-l", "deep",
+            "gitai",
+            "commit",
+            "--ast-grep",
             "-a",
-            "-m", "test commit message",
+            "-m",
+            "test commit message",
             "-r",
-            "--", "--extra", "flag"
+            "--",
+            "--extra",
+            "flag",
         ]);
         let expected = CommitArgs {
-            tree_sitter: true,
-            depth: Some("deep".to_string()),
+            ast_grep: true,
             auto_stage: true,
             message: Some("test commit message".to_string()),
             issue_id: None,
@@ -615,8 +779,7 @@ mod tests {
     fn test_construct_commit_args_alias_cm() {
         let args = make_args(vec!["gitai", "cm", "-m", "quick commit"]);
         let expected = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: Some("quick commit".to_string()),
             issue_id: None,
@@ -630,8 +793,7 @@ mod tests {
     fn test_construct_commit_args_auto_stage_only() {
         let args = make_args(vec!["gitai", "commit", "-a"]);
         let expected = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: true,
             message: None,
             issue_id: None,
@@ -643,10 +805,16 @@ mod tests {
 
     #[test]
     fn test_construct_commit_args_with_issue_id() {
-        let args = make_args(vec!["gitai", "commit", "--issue-id", "#123,#456", "-m", "test message"]);
+        let args = make_args(vec![
+            "gitai",
+            "commit",
+            "--issue-id",
+            "#123,#456",
+            "-m",
+            "test message",
+        ]);
         let expected = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: Some("test message".to_string()),
             issue_id: Some("#123,#456".to_string()),
@@ -660,8 +828,7 @@ mod tests {
     fn test_construct_commit_args_issue_id_without_hash() {
         let args = make_args(vec!["gitai", "commit", "--issue-id", "123,456"]);
         let expected = CommitArgs {
-            tree_sitter: false,
-            depth: None,
+            ast_grep: false,
             auto_stage: false,
             message: None,
             issue_id: Some("123,456".to_string()),
@@ -676,17 +843,17 @@ mod tests {
         // Test with tilde
         let path = expand_tilde_path("~/Documents/test");
         assert!(path.to_string_lossy().contains("Documents/test"));
-        
+
         // Test with just tilde
         let path = expand_tilde_path("~");
         if let Some(home) = dirs::home_dir() {
             assert_eq!(path, home);
         }
-        
+
         // Test without tilde
         let path = expand_tilde_path("/absolute/path");
         assert_eq!(path, Path::new("/absolute/path"));
-        
+
         // Test relative path without tilde
         let path = expand_tilde_path("relative/path");
         assert_eq!(path, Path::new("relative/path"));
@@ -711,7 +878,7 @@ mod tests {
 
 整体代码质量不错，但需要注意安全性问题。
         "#;
-        
+
         let insights = extract_review_insights(review_content);
         assert!(insights.contains("修复安全漏洞"));
         assert!(insights.contains("性能问题需要优化"));
@@ -738,7 +905,7 @@ mod tests {
 
 The code has performance issues that need attention.
         "#;
-        
+
         let insights = extract_review_insights(review_content);
         assert!(insights.contains("Fix memory leak"));
         assert!(insights.contains("Improve error handling"));
@@ -795,7 +962,8 @@ The code has performance issues that need attention.
         let commit_message = "feat: add new feature";
 
         // Test with issue IDs
-        let result = add_issue_prefix_to_commit_message(commit_message, Some(&"#123,#456".to_string()));
+        let result =
+            add_issue_prefix_to_commit_message(commit_message, Some(&"#123,#456".to_string()));
         assert_eq!(result, "#123,#456 feat: add new feature");
 
         // Test without issue IDs

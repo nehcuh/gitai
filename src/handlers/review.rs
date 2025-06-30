@@ -131,7 +131,7 @@ pub async fn handle_review(
     let start_time = Instant::now();
     tracing::info!(
         "开始执行代码评审，参数: depth={}, format={}, ast_grep={}",
-        review_args.depth,
+        "medium", // Default analysis depth
         review_args.format,
         review_args.ast_grep
     );
@@ -161,7 +161,7 @@ pub async fn handle_review(
     let analyze_start = Instant::now();
     let (git_diff, analysis_text, analysis_results) = if use_ast_grep {
         tracing::info!("使用AstGrep进行深度代码分析");
-        analyze_diff_with_ast_grep(&diff_text, &review_args.depth, config)
+        analyze_diff_with_ast_grep(&diff_text, "medium", config)
             .await
             .map_err(|e| {
                 tracing::error!("AstGrep分析失败: {:?}", e);
@@ -408,19 +408,21 @@ fn extract_language_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AIConfig, AppConfig, TreeSitterConfig}; // Removed AccountConfig
+    use crate::config::{AIConfig, AppConfig, AstGrepConfig}; // Removed AccountConfig
     use crate::errors::AppError;
     use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
     use std::collections::HashMap;
 
     fn default_review_args() -> ReviewArgs {
         ReviewArgs {
-            depth: "medium".to_string(),
             focus: None,
             lang: None,
             format: "text".to_string(),
             output: None,
             ast_grep: false,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -436,6 +438,7 @@ mod tests {
             ai: AIConfig::default(),
             ast_grep: AstGrepConfig::default(),
             review: Default::default(),
+            translation: Default::default(),
             account: None,
             prompts: HashMap::new(),
         }
@@ -764,7 +767,7 @@ async fn perform_enhanced_ai_analysis(
         work_items.iter().map(|item| item.into()).collect();
 
     // Parse analysis depth from review args
-    let analysis_depth = match review_args.depth.as_str() {
+    let analysis_depth = match "medium" {
         "basic" => AnalysisDepth::Basic,
         "deep" => AnalysisDepth::Deep,
         _ => AnalysisDepth::Normal,
@@ -832,6 +835,7 @@ mod review_save_tests {
                 max_age_hours: 168,
                 include_in_commit: true,
             },
+            translation: Default::default(),
             account: None,
             prompts,
         }
@@ -1223,7 +1227,7 @@ async fn format_and_output_review(review_text: &str, args: &ReviewArgs) -> Resul
                 "timestamp": timestamp,
                 "format_version": "1.0",
                 "generator": "gitai",
-                "analysis_depth": args.depth,
+                "analysis_depth": "medium",
                 "focus": args.focus,
                 "language": args.lang
             })
@@ -1267,7 +1271,7 @@ async fn format_and_output_review(review_text: &str, args: &ReviewArgs) -> Resul
                 **分析深度**: {}\n\n\
                 ---\n\n\
                 {}",
-                timestamp, args.depth, review_text
+                timestamp, "medium", review_text
             )
         }
         _ => {

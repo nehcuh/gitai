@@ -42,7 +42,7 @@ pub struct CodeIssue {
     pub category: IssueCategory,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IssueSeverity {
     Error,
     Warning,
@@ -50,7 +50,7 @@ pub enum IssueSeverity {
     Hint,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IssueCategory {
     CodeQuality,
     Security,

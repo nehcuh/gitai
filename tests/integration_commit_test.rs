@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use gitai::{
-    config::{AppConfig, AIConfig, TreeSitterConfig},
+    config::{AIConfig, AppConfig, AstGrepConfig},
+    errors::{AppError, GitError},
     handlers::commit::handle_commit,
     types::git::CommitArgs,
-    errors::{AppError, GitError},
 };
+use std::collections::HashMap;
 
 // Helper function to create a test configuration
 fn create_test_config() -> AppConfig {
@@ -13,7 +13,7 @@ fn create_test_config() -> AppConfig {
         "commit-generator".to_string(),
         "You are a professional Git commit message generator. Generate concise, clear commit messages based on the provided code changes.".to_string(),
     );
-    
+
     AppConfig {
         ai: AIConfig {
             api_url: "http://localhost:11434/v1/chat/completions".to_string(),
@@ -21,10 +21,11 @@ fn create_test_config() -> AppConfig {
             temperature: 0.7,
             api_key: None,
         },
-        tree_sitter: TreeSitterConfig::default(),
+        ast_grep: AstGrepConfig::default(),
         review: Default::default(),
         account: None,
         prompts,
+        translation: Default::default(),
     }
 }
 
@@ -32,15 +33,14 @@ fn create_test_config() -> AppConfig {
 async fn test_commit_with_custom_message() {
     let config = create_test_config();
     let args = CommitArgs {
-        tree_sitter: false,
-        depth: None,
+        ast_grep: false,
         auto_stage: false,
-        message: Some("feat: add new integration test".to_string()),
+        message: Some("test commit message".to_string()),
         issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
-    
+
     // This test will likely fail in CI/CD since we're not in a proper git repo with staged changes
     // But it demonstrates the integration test structure
     match handle_commit(&config, args).await {
@@ -59,7 +59,11 @@ async fn test_commit_with_custom_message() {
                 }
                 AppError::Generic(msg) => {
                     println!("Expected error: {}", msg);
-                    assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败") || msg.contains("没有检测到任何变更可用于提交分析"));
+                    assert!(
+                        msg.contains("没有已暂存的变更")
+                            || msg.contains("检查Git仓库状态失败")
+                            || msg.contains("没有检测到任何变更可用于提交分析")
+                    );
                 }
                 _ => {
                     println!("Other expected error in test environment: {:?}", e);
@@ -73,15 +77,14 @@ async fn test_commit_with_custom_message() {
 async fn test_commit_with_auto_stage() {
     let config = create_test_config();
     let args = CommitArgs {
-        tree_sitter: false,
-        depth: None,
+        ast_grep: false,
         auto_stage: true,
         message: None,
         issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
-    
+
     match handle_commit(&config, args).await {
         Ok(_) => {
             println!("Auto-stage commit succeeded");
@@ -107,19 +110,20 @@ async fn test_commit_with_auto_stage() {
 async fn test_commit_argument_parsing() {
     // Test that CommitArgs can be created and have expected values
     let args = CommitArgs {
-        tree_sitter: true,
-        depth: Some("deep".to_string()),
+        ast_grep: true,
         auto_stage: true,
         message: Some("test: integration test commit".to_string()),
         issue_id: None,
         review: false,
         passthrough_args: vec!["--verbose".to_string()],
     };
-    
-    assert!(args.tree_sitter);
-    assert_eq!(args.depth, Some("deep".to_string()));
+
+    assert!(args.ast_grep);
     assert!(args.auto_stage);
-    assert_eq!(args.message, Some("test: integration test commit".to_string()));
+    assert_eq!(
+        args.message,
+        Some("test: integration test commit".to_string())
+    );
     assert!(!args.review);
     assert_eq!(args.passthrough_args, vec!["--verbose".to_string()]);
 }
@@ -127,11 +131,11 @@ async fn test_commit_argument_parsing() {
 #[test]
 fn test_config_structure() {
     let config = create_test_config();
-    
+
     assert_eq!(config.ai.model_name, "test-model");
     assert_eq!(config.ai.temperature, 0.7);
     assert!(config.prompts.contains_key("commit-generator"));
-    
+
     let prompt = config.prompts.get("commit-generator").unwrap();
     assert!(prompt.contains("Git commit message generator"));
 }
@@ -139,30 +143,33 @@ fn test_config_structure() {
 #[tokio::test]
 async fn test_commit_error_handling() {
     let config = create_test_config();
-    
+
     // Test with minimal args - should handle gracefully
     let args = CommitArgs {
-        tree_sitter: false,
-        depth: None,
+        ast_grep: false,
         auto_stage: false,
         message: None,
         issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
-    
+
     let result = handle_commit(&config, args).await;
-    
+
     // Should return an error since we're likely not in a git repo or have no staged changes
     assert!(result.is_err());
-    
+
     match result {
         Err(AppError::Git(_)) => {
             // Expected git-related error
         }
         Err(AppError::Generic(msg)) => {
             // Expected generic error about no staged changes
-            assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败") || msg.contains("没有检测到任何变更可用于提交分析"));
+            assert!(
+                msg.contains("没有已暂存的变更")
+                    || msg.contains("检查Git仓库状态失败")
+                    || msg.contains("没有检测到任何变更可用于提交分析")
+            );
         }
         Err(_) => {
             // Other errors are also acceptable in test environment
@@ -178,33 +185,31 @@ async fn test_commit_error_handling() {
 #[tokio::test]
 async fn test_commit_mode_combinations() {
     let config = create_test_config();
-    
+
     // Test tree-sitter + custom message
     let args1 = CommitArgs {
-        tree_sitter: true,
-        depth: Some("medium".to_string()),
+        ast_grep: true,
         auto_stage: false,
         message: Some("feat: test tree-sitter with message".to_string()),
         issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
-    
+
     // Test auto-stage + tree-sitter
     let args2 = CommitArgs {
-        tree_sitter: true,
-        depth: Some("shallow".to_string()),
+        ast_grep: true,
         auto_stage: true,
         message: None,
         issue_id: None,
         review: false,
         passthrough_args: vec![],
     };
-    
+
     // Both should handle errors gracefully in test environment
     let result1 = handle_commit(&config, args1).await;
     let result2 = handle_commit(&config, args2).await;
-    
+
     // Both should fail in test environment but with proper error handling
     assert!(result1.is_err());
     assert!(result2.is_err());

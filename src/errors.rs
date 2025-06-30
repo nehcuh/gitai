@@ -531,44 +531,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tree_sitter_error_display() {
-        let err_unsupported_lang = TreeSitterError::UnsupportedLanguage("Brainfuck".to_string());
-        assert_eq!(
-            format!("{}", err_unsupported_lang),
-            "Unsupported language: Brainfuck"
-        );
-
-        let err_language = TreeSitterError::LanguageError("Grammar error".to_string());
-        assert_eq!(format!("{}", err_language), "Language error: Grammar error");
-
-        let err_parse = TreeSitterError::ParseError("Syntax error".to_string());
-        assert_eq!(format!("{}", err_parse), "Parse error: Syntax error");
-
-        let err_query = TreeSitterError::QueryError("Invalid pattern".to_string());
-        assert_eq!(format!("{}", err_query), "Query error: Invalid pattern");
-
-        let err_cache = TreeSitterError::CacheError("Cache miss".to_string());
-        assert_eq!(format!("{}", err_cache), "Cache error: Cache miss");
-
-        let err_init =
-            TreeSitterError::InitializationError("Failed to initialize parser".to_string());
-        assert_eq!(
-            format!("{}", err_init),
-            "Initialization error: Failed to initialize parser"
-        );
-
-        let err_timeout = TreeSitterError::AnalysisTimeout("Operation timed out".to_string());
-        assert_eq!(
-            format!("{}", err_timeout),
-            "Analysis timeout: Operation timed out"
-        );
-
-        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-        let err_io = TreeSitterError::IOError(io_err);
-        assert_eq!(format!("{}", err_io), "I/O error: file not found");
-    }
-
-    #[test]
     fn test_app_error_display() {
         let config_err = ConfigError::PromptFileMissing("prompts/sys".to_string());
         let app_config_err = AppError::from(config_err);

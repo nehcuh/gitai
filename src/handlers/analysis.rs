@@ -39,17 +39,20 @@ impl AIAnalysisEngine {
 
         // Build enhanced analysis prompt
         let enhanced_prompt = self.build_requirement_analysis_prompt(&request)?;
-        
-        tracing::debug!("Built analysis prompt, length: {} chars", enhanced_prompt.len());
+
+        tracing::debug!(
+            "Built analysis prompt, length: {} chars",
+            enhanced_prompt.len()
+        );
 
         // Execute AI analysis
         let ai_response = self.execute_ai_analysis(&enhanced_prompt).await?;
-        
+
         tracing::debug!("Received AI response, length: {} chars", ai_response.len());
 
         // Parse and structure AI response
         let analysis_result = self.parse_analysis_response(&ai_response, &request)?;
-        
+
         tracing::info!(
             "Analysis completed successfully, overall score: {}",
             analysis_result.overall_score
@@ -59,10 +62,14 @@ impl AIAnalysisEngine {
     }
 
     /// Builds a comprehensive prompt for requirement analysis
-    fn build_requirement_analysis_prompt(&self, request: &AnalysisRequest) -> Result<String, AppError> {
+    fn build_requirement_analysis_prompt(
+        &self,
+        request: &AnalysisRequest,
+    ) -> Result<String, AppError> {
         let work_items_description = self.format_work_items_for_analysis(&request.work_items)?;
         let focus_areas_text = self.format_focus_areas(&request.focus_areas);
-        let analysis_depth_instruction = self.get_analysis_depth_instruction(&request.analysis_depth);
+        let analysis_depth_instruction =
+            self.get_analysis_depth_instruction(&request.analysis_depth);
 
         let prompt = format!(
             r#"你是一位资深的代码评审专家和需求分析师。请分析以下代码变更与业务需求的一致性。
@@ -161,39 +168,43 @@ impl AIAnalysisEngine {
     }
 
     /// Formats work items for inclusion in the analysis prompt
-    fn format_work_items_for_analysis(&self, work_items: &[AnalysisWorkItem]) -> Result<String, AppError> {
+    fn format_work_items_for_analysis(
+        &self,
+        work_items: &[AnalysisWorkItem],
+    ) -> Result<String, AppError> {
         if work_items.is_empty() {
             return Ok("无关联的工作项信息".to_string());
         }
 
         let mut formatted = String::new();
-        
+
         for (index, item) in work_items.iter().enumerate() {
-            formatted.push_str(&format!("\n### 工作项 {} - {}\n", 
-                index + 1, 
+            formatted.push_str(&format!(
+                "\n### 工作项 {} - {}\n",
+                index + 1,
                 item.item_type_name.as_deref().unwrap_or("未知类型")
             ));
-            
+
             if let Some(id) = item.id {
                 formatted.push_str(&format!("**ID**: {}\n", id));
             }
-            
+
             if let Some(code) = item.code {
                 formatted.push_str(&format!("**编号**: {}\n", code));
             }
-            
+
             if let Some(project) = &item.project_name {
                 formatted.push_str(&format!("**项目**: {}\n", project));
             }
-            
+
             if let Some(title) = &item.title {
                 formatted.push_str(&format!("**标题**: {}\n", title));
             }
-            
+
             if let Some(description) = &item.description {
                 formatted.push_str(&format!("**描述**:\n{}\n", description));
             }
-            
+
             formatted.push('\n');
         }
 
@@ -225,9 +236,15 @@ impl AIAnalysisEngine {
     /// Executes the AI analysis request
     async fn execute_ai_analysis(&self, prompt: &str) -> Result<String, AppError> {
         tracing::debug!("Executing AI analysis request");
-        
+
         // Use existing AI infrastructure from handlers/ai.rs
-        match execute_review_request(&self.config, "You are a senior code reviewer and requirements analyst.", prompt).await {
+        match execute_review_request(
+            &self.config,
+            "You are a senior code reviewer and requirements analyst.",
+            prompt,
+        )
+        .await
+        {
             Ok(response) => {
                 tracing::debug!("AI analysis completed successfully");
                 Ok(response)
@@ -241,7 +258,11 @@ impl AIAnalysisEngine {
                 Err(AppError::AI(AIError::ResponseParseFailed(e)))
             }
             Err(AIError::ApiResponseError(status, msg)) => {
-                tracing::error!("AI API response error during analysis: {} - {}", status, msg);
+                tracing::error!(
+                    "AI API response error during analysis: {} - {}",
+                    status,
+                    msg
+                );
                 Err(AppError::AI(AIError::ApiResponseError(status, msg)))
             }
             Err(e) => {
@@ -252,19 +273,26 @@ impl AIAnalysisEngine {
     }
 
     /// Parses AI response into structured analysis result
-    fn parse_analysis_response(&self, response: &str, request: &AnalysisRequest) -> Result<AnalysisResult, AppError> {
+    fn parse_analysis_response(
+        &self,
+        response: &str,
+        request: &AnalysisRequest,
+    ) -> Result<AnalysisResult, AppError> {
         tracing::debug!("Parsing AI analysis response");
 
         // Try to extract JSON from the response
         let json_content = self.extract_json_from_response(response)?;
-        
+
         match serde_json::from_str::<AnalysisResult>(&json_content) {
             Ok(result) => {
                 tracing::debug!("Successfully parsed structured analysis result");
                 Ok(result)
             }
             Err(e) => {
-                tracing::warn!("Failed to parse structured response, creating fallback result: {}", e);
+                tracing::warn!(
+                    "Failed to parse structured response, creating fallback result: {}",
+                    e
+                );
                 Ok(self.create_fallback_analysis_result(response, request))
             }
         }
@@ -291,17 +319,21 @@ impl AIAnalysisEngine {
         }
 
         Err(AppError::Generic(
-            "Could not extract JSON from AI response".to_string()
+            "Could not extract JSON from AI response".to_string(),
         ))
     }
 
     /// Creates a fallback analysis result when AI response cannot be parsed
-    fn create_fallback_analysis_result(&self, response: &str, _request: &AnalysisRequest) -> AnalysisResult {
+    fn create_fallback_analysis_result(
+        &self,
+        response: &str,
+        _request: &AnalysisRequest,
+    ) -> AnalysisResult {
         tracing::info!("Creating fallback analysis result");
-        
+
         // Basic scoring based on response content analysis
         let overall_score = self.estimate_score_from_text(response);
-        
+
         AnalysisResult {
             overall_score,
             requirement_consistency: RequirementAnalysis {
@@ -317,24 +349,20 @@ impl AIAnalysisEngine {
                 security_score: overall_score.saturating_sub(5),
                 structure_assessment: "基于AI文本响应的自动评估，建议人工复核".to_string(),
             },
-            deviations: vec![
-                Deviation {
-                    severity: DeviationSeverity::Medium,
-                    category: "Analysis Limitation".to_string(),
-                    description: "AI响应格式无法完全解析，建议人工复核分析结果".to_string(),
-                    file_location: None,
-                    suggestion: "重新运行分析或联系技术支持".to_string(),
-                }
-            ],
-            recommendations: vec![
-                Recommendation {
-                    priority: 2,
-                    title: "完善分析结果".to_string(),
-                    description: "由于AI响应解析问题，建议进行人工代码评审以补充分析结果".to_string(),
-                    expected_impact: "提高代码质量和需求一致性评估准确性".to_string(),
-                    effort_estimate: "Medium".to_string(),
-                }
-            ],
+            deviations: vec![Deviation {
+                severity: DeviationSeverity::Medium,
+                category: "Analysis Limitation".to_string(),
+                description: "AI响应格式无法完全解析，建议人工复核分析结果".to_string(),
+                file_location: None,
+                suggestion: "重新运行分析或联系技术支持".to_string(),
+            }],
+            recommendations: vec![Recommendation {
+                priority: 2,
+                title: "完善分析结果".to_string(),
+                description: "由于AI响应解析问题，建议进行人工代码评审以补充分析结果".to_string(),
+                expected_impact: "提高代码质量和需求一致性评估准确性".to_string(),
+                effort_estimate: "Medium".to_string(),
+            }],
             risk_assessment: RiskAssessment {
                 risk_level: DeviationSeverity::Medium,
                 business_impact: "分析结果可能不完整，建议谨慎采纳建议".to_string(),
@@ -346,22 +374,40 @@ impl AIAnalysisEngine {
 
     /// Estimates a score from text content analysis
     fn estimate_score_from_text(&self, text: &str) -> u8 {
-        let positive_keywords = ["good", "correct", "implemented", "完成", "正确", "良好", "符合"];
-        let negative_keywords = ["error", "missing", "incorrect", "错误", "缺失", "不正确", "问题"];
-        
-        let positive_count = positive_keywords.iter()
+        let positive_keywords = [
+            "good",
+            "correct",
+            "implemented",
+            "完成",
+            "正确",
+            "良好",
+            "符合",
+        ];
+        let negative_keywords = [
+            "error",
+            "missing",
+            "incorrect",
+            "错误",
+            "缺失",
+            "不正确",
+            "问题",
+        ];
+
+        let positive_count = positive_keywords
+            .iter()
             .map(|keyword| text.matches(keyword).count())
             .sum::<usize>();
-            
-        let negative_count = negative_keywords.iter()
+
+        let negative_count = negative_keywords
+            .iter()
             .map(|keyword| text.matches(keyword).count())
             .sum::<usize>();
-        
+
         // Basic scoring algorithm
         let base_score = 70;
         let positive_bonus = (positive_count * 3).min(20) as i32;
         let negative_penalty = (negative_count * 5).min(30) as i32;
-        
+
         let score = base_score + positive_bonus - negative_penalty;
         score.clamp(0, 100) as u8
     }
@@ -374,7 +420,7 @@ mod tests {
 
     fn create_test_config() -> Arc<AppConfig> {
         use std::collections::HashMap;
-        
+
         Arc::new(AppConfig {
             ai: AIConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
@@ -382,7 +428,8 @@ mod tests {
                 temperature: 0.7,
                 api_key: Some("test-key".to_string()),
             },
-            tree_sitter: Default::default(),
+            ast_grep: Default::default(),
+            translation: Default::default(),
             review: Default::default(),
             account: None,
             prompts: HashMap::new(),
@@ -404,9 +451,9 @@ mod tests {
     fn test_format_work_items_for_analysis() {
         let engine = AIAnalysisEngine::new(create_test_config());
         let work_items = vec![create_test_work_item()];
-        
+
         let result = engine.format_work_items_for_analysis(&work_items).unwrap();
-        
+
         assert!(result.contains("工作项 1"));
         assert!(result.contains("用户故事"));
         assert!(result.contains("测试功能"));
@@ -416,10 +463,10 @@ mod tests {
     #[test]
     fn test_format_focus_areas() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let focus_areas = Some(vec!["安全性".to_string(), "性能".to_string()]);
         let result = engine.format_focus_areas(&focus_areas);
-        
+
         assert!(result.contains("重点关注领域"));
         assert!(result.contains("安全性"));
         assert!(result.contains("性能"));
@@ -428,11 +475,11 @@ mod tests {
     #[test]
     fn test_get_analysis_depth_instruction() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let basic = engine.get_analysis_depth_instruction(&AnalysisDepth::Basic);
         let normal = engine.get_analysis_depth_instruction(&AnalysisDepth::Normal);
         let deep = engine.get_analysis_depth_instruction(&AnalysisDepth::Deep);
-        
+
         assert!(basic.contains("基础分析"));
         assert!(normal.contains("标准分析"));
         assert!(deep.contains("深度分析"));
@@ -441,24 +488,29 @@ mod tests {
     #[test]
     fn test_extract_json_from_response() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
-        let response_with_json_block = "这是一些文本\n```json\n{\"test\": \"value\"}\n```\n更多文本";
-        let result = engine.extract_json_from_response(response_with_json_block).unwrap();
+
+        let response_with_json_block =
+            "这是一些文本\n```json\n{\"test\": \"value\"}\n```\n更多文本";
+        let result = engine
+            .extract_json_from_response(response_with_json_block)
+            .unwrap();
         assert_eq!(result, "{\"test\": \"value\"}");
-        
+
         let response_with_direct_json = "一些文本 {\"direct\": \"json\"} 结束";
-        let result = engine.extract_json_from_response(response_with_direct_json).unwrap();
+        let result = engine
+            .extract_json_from_response(response_with_direct_json)
+            .unwrap();
         assert_eq!(result, "{\"direct\": \"json\"}");
     }
 
     #[test]
     fn test_estimate_score_from_text() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let positive_text = "代码实现正确，功能完成良好，符合需求";
         let score = engine.estimate_score_from_text(positive_text);
         assert!(score > 70);
-        
+
         let negative_text = "代码存在错误，功能缺失，实现不正确";
         let score = engine.estimate_score_from_text(negative_text);
         assert!(score < 70);
@@ -474,9 +526,9 @@ mod tests {
             analysis_depth: AnalysisDepth::Normal,
             output_format: crate::types::ai::OutputFormat::Json,
         };
-        
+
         let result = engine.create_fallback_analysis_result("some response text", &request);
-        
+
         assert!(result.overall_score <= 100);
         assert!(!result.deviations.is_empty());
         assert!(!result.recommendations.is_empty());
@@ -486,9 +538,9 @@ mod tests {
     fn test_format_work_items_empty() {
         let engine = AIAnalysisEngine::new(create_test_config());
         let work_items = vec![];
-        
+
         let result = engine.format_work_items_for_analysis(&work_items).unwrap();
-        
+
         assert_eq!(result, "无关联的工作项信息");
     }
 
@@ -504,11 +556,11 @@ mod tests {
                 item_type_name: Some("缺陷".to_string()),
                 title: Some("修复错误".to_string()),
                 description: Some("修复一个重要错误".to_string()),
-            }
+            },
         ];
-        
+
         let result = engine.format_work_items_for_analysis(&work_items).unwrap();
-        
+
         assert!(result.contains("工作项 1"));
         assert!(result.contains("工作项 2"));
         assert!(result.contains("用户故事"));
@@ -520,14 +572,14 @@ mod tests {
     #[test]
     fn test_format_focus_areas_multiple() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let focus_areas = Some(vec![
-            "安全性".to_string(), 
-            "性能".to_string(), 
-            "可维护性".to_string()
+            "安全性".to_string(),
+            "性能".to_string(),
+            "可维护性".to_string(),
         ]);
         let result = engine.format_focus_areas(&focus_areas);
-        
+
         assert!(result.contains("重点关注领域"));
         assert!(result.contains("安全性、性能、可维护性"));
     }
@@ -535,20 +587,20 @@ mod tests {
     #[test]
     fn test_format_focus_areas_empty_vector() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let focus_areas = Some(vec![]);
         let result = engine.format_focus_areas(&focus_areas);
-        
+
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_extract_json_complex_response() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let complex_response = r#"
         这里是一些分析文本
-        
+
         ```json
         {
           "overall_score": 85,
@@ -560,10 +612,10 @@ mod tests {
           }
         }
         ```
-        
+
         更多分析内容
         "#;
-        
+
         let result = engine.extract_json_from_response(complex_response).unwrap();
         assert!(result.contains("overall_score"));
         assert!(result.contains("requirement_consistency"));
@@ -572,20 +624,20 @@ mod tests {
     #[test]
     fn test_extract_json_malformed_response() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let malformed_response = "这里没有有效的JSON内容";
         let result = engine.extract_json_from_response(malformed_response);
-        
+
         assert!(result.is_err());
     }
 
     #[test]
     fn test_estimate_score_balanced_text() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let balanced_text = "代码实现正确但存在一些错误，功能完成度良好，需要修复缺失的部分";
         let score = engine.estimate_score_from_text(balanced_text);
-        
+
         // Should be around the base score since positive and negative balance out
         assert!(score >= 60);
         assert!(score <= 80);
@@ -594,20 +646,20 @@ mod tests {
     #[test]
     fn test_estimate_score_very_negative_text() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let negative_text = "代码错误很多，实现不正确，功能缺失严重，存在大量问题";
         let score = engine.estimate_score_from_text(negative_text);
-        
+
         assert!(score < 60);
     }
 
     #[test]
     fn test_estimate_score_very_positive_text() {
         let engine = AIAnalysisEngine::new(create_test_config());
-        
+
         let positive_text = "代码实现完美，功能完成优秀，质量良好，符合所有需求，正确无误";
         let score = engine.estimate_score_from_text(positive_text);
-        
+
         assert!(score > 80);
     }
 
@@ -621,9 +673,9 @@ mod tests {
             analysis_depth: AnalysisDepth::Deep,
             output_format: crate::types::ai::OutputFormat::Json,
         };
-        
+
         let result = engine.build_requirement_analysis_prompt(&request).unwrap();
-        
+
         assert!(result.contains("工作项信息"));
         assert!(result.contains("代码变更"));
         assert!(result.contains("深度分析"));
@@ -642,9 +694,9 @@ mod tests {
             analysis_depth: AnalysisDepth::Basic,
             output_format: crate::types::ai::OutputFormat::Text,
         };
-        
+
         let result = engine.build_requirement_analysis_prompt(&request).unwrap();
-        
+
         assert!(result.contains("基础分析"));
         assert!(result.contains("无关联的工作项信息"));
         assert!(!result.contains("重点关注领域"));
@@ -660,16 +712,22 @@ mod tests {
             analysis_depth: AnalysisDepth::Normal,
             output_format: crate::types::ai::OutputFormat::Json,
         };
-        
+
         // Test with very positive text
-        let positive_result = engine.create_fallback_analysis_result("excellent code, good implementation, correct functionality", &request);
-        
-        // Test with very negative text  
-        let negative_result = engine.create_fallback_analysis_result("terrible code, many errors, incorrect implementation", &request);
-        
+        let positive_result = engine.create_fallback_analysis_result(
+            "excellent code, good implementation, correct functionality",
+            &request,
+        );
+
+        // Test with very negative text
+        let negative_result = engine.create_fallback_analysis_result(
+            "terrible code, many errors, incorrect implementation",
+            &request,
+        );
+
         // Positive text should yield higher score
         assert!(positive_result.overall_score > negative_result.overall_score);
-        
+
         // Both should have fallback recommendations
         assert!(!positive_result.recommendations.is_empty());
         assert!(!negative_result.recommendations.is_empty());

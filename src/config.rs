@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, io::ErrorKind, path::PathBuf};
 
+use crate::ast_grep_analyzer::translation::TranslationConfig;
 use crate::errors::ConfigError;
 
 // Configuration location
@@ -191,7 +192,6 @@ impl Default for AstGrepConfig {
             enabled: true,
             analysis_depth: default_analysis_depth(),
             cache_enabled: default_cache_enabled(),
-            
         }
     }
 }
@@ -239,8 +239,6 @@ fn default_analysis_depth() -> String {
 fn default_cache_enabled() -> bool {
     true
 }
-
-
 
 fn default_auto_save() -> bool {
     true
@@ -311,6 +309,17 @@ pub struct PartialReviewConfig {
     pub include_in_commit: Option<bool>,
 }
 
+/// Partial configuration for translation functionality
+#[derive(Deserialize, Debug, Clone)]
+pub struct PartialTranslationConfig {
+    pub enabled: Option<bool>,
+    pub default_language: Option<String>,
+    pub cache_enabled: Option<bool>,
+    pub provider: Option<String>,
+    pub cache_dir: Option<String>,
+    pub provider_settings: Option<HashMap<String, String>>,
+}
+
 /// Application overall configuration
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
@@ -325,6 +334,9 @@ pub struct AppConfig {
     pub review: ReviewConfig,
 
     #[serde(default)]
+    pub translation: TranslationConfig,
+
+    #[serde(default)]
     pub account: Option<AccountConfig>,
 
     #[serde(skip)]
@@ -336,6 +348,7 @@ pub struct PartialAppConfig {
     ai: Option<PartialAIConfig>,
     ast_grep: Option<PartialAstGrepConfig>,
     review: Option<PartialReviewConfig>,
+    translation: Option<PartialTranslationConfig>,
     account: Option<PartialAccountConfig>,
 }
 
@@ -629,8 +642,6 @@ impl AppConfig {
         Self::load_config_from_file(&user_config_path, &user_prompt_paths)
     }
 
-    
-
     fn load_config_from_file(
         config_path: &std::path::Path,
         prompt_paths: &HashMap<String, PathBuf>,
@@ -829,12 +840,12 @@ impl AppConfig {
             match value {
                 Some(s) => {
                     let s = s.trim();
-                    s.is_empty() || 
-                    s == "YOUR_DEVOPS_API_TOKEN" || 
-                    s == "YOUR_API_KEY_IF_NEEDED" ||
-                    s.starts_with("YOUR_") ||
-                    s == "your-devops-instance.com" ||
-                    s.contains("your-devops-instance")
+                    s.is_empty()
+                        || s == "YOUR_DEVOPS_API_TOKEN"
+                        || s == "YOUR_API_KEY_IF_NEEDED"
+                        || s.starts_with("YOUR_")
+                        || s == "your-devops-instance.com"
+                        || s.contains("your-devops-instance")
                 }
                 None => true,
             }
@@ -843,9 +854,10 @@ impl AppConfig {
         let file_loaded_account_config: Option<AccountConfig> =
             partial_config.account.and_then(|p_acc| {
                 // Check if any of the required fields have meaningful values
-                if is_placeholder(&p_acc.devops_platform) && 
-                   is_placeholder(&p_acc.base_url) && 
-                   is_placeholder(&p_acc.token) {
+                if is_placeholder(&p_acc.devops_platform)
+                    && is_placeholder(&p_acc.base_url)
+                    && is_placeholder(&p_acc.token)
+                {
                     tracing::debug!("账户配置中只包含占位符值，将忽略文件中的账户配置");
                     None
                 } else {
@@ -887,6 +899,28 @@ impl AppConfig {
         }
         // --- End Account Configuration Loading ---
 
+        // --- Translation Configuration Loading ---
+        use crate::ast_grep_analyzer::translation::{SupportedLanguage, TranslationConfig};
+
+        let translation_config = if let Some(partial_translation) = partial_config.translation {
+            TranslationConfig {
+                enabled: partial_translation.enabled.unwrap_or(false),
+                default_language: partial_translation
+                    .default_language
+                    .and_then(|lang| SupportedLanguage::from_str(&lang))
+                    .unwrap_or(SupportedLanguage::Auto),
+                cache_enabled: partial_translation.cache_enabled.unwrap_or(true),
+                provider: partial_translation
+                    .provider
+                    .unwrap_or_else(|| "openai".to_string()),
+                cache_dir: partial_translation.cache_dir.map(PathBuf::from),
+                provider_settings: partial_translation.provider_settings.unwrap_or_default(),
+            }
+        } else {
+            TranslationConfig::default()
+        };
+        // --- End Translation Configuration Loading ---
+
         if prompts.is_empty() {
             tracing::warn!("未能加载任何提示文件，配置可能不完整");
         } else if prompts.len() < prompt_paths.len() {
@@ -911,6 +945,7 @@ impl AppConfig {
             ai: ai_config,
             ast_grep: ast_grep_config,
             review: review_config,
+            translation: translation_config,
             account: final_account_config,
             prompts,
         };
@@ -1474,53 +1509,6 @@ cache_enabled = false
             !app_config.prompts.contains_key("general-helper"),
             "Empty general-helper prompt should not be loaded"
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_initialize_rules_copies_missing_files() -> Result<(), Box<dyn std::error::Error>> {
-        use std::fs::{self, File};
-        use std::io::Write;
-        let (temp_dir, _user_config_base, _user_prompts_dir) = setup_test_environment()?;
-
-        // Mimic project root (where queries should be found)
-        let project_root = temp_dir.path();
-        let queries_dir = project_root.join("queries/rust");
-        fs::create_dir_all(&queries_dir)?;
-
-        let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
-        for f in &scm_files {
-            let mut file = File::create(queries_dir.join(f))?;
-            writeln!(file, "test content for {f}")?;
-        }
-
-        // Set CARGO_MANIFEST_DIR so abs_template_path works (simulate from project root)
-        unsafe { std::env::set_var("CARGO_MANIFEST_DIR", &project_root) };
-
-        // Patch the extract_file_path function if needed, or ensure USER_RULES_PATH resolves into temp_dir
-        // (if not, you may want to temporarily override USER_RULES_PATH or mock it)
-
-        // Call initialize_rules and check results
-        let result = AppConfig::initialize_rules();
-        assert!(result.is_ok());
-
-        // The user rules directory should now have "rust/{*.scm}"
-        let user_rules_dir = temp_dir.path().join(".config/gitai/rules/rust");
-        fs::create_dir_all(&user_rules_dir)?;
-
-        for f in &scm_files {
-            let user_file = user_rules_dir.join(f);
-            assert!(
-                user_file.exists(),
-                "File {f} should be copied to user rules dir"
-            );
-            let content = fs::read_to_string(&user_file)?;
-            assert!(
-                content.contains("test content"),
-                "File contents should match"
-            );
-        }
 
         Ok(())
     }

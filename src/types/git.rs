@@ -56,6 +56,12 @@ pub enum GitaiSubCommand {
     /// Perform code review with AI assistance.
     #[clap(alias = "rv")]
     Review(ReviewArgs),
+    /// Perform comprehensive code scanning with ast-grep
+    #[clap(alias = "sc")]
+    Scan(ScanArgs),
+    /// Update ast-grep rules to the latest version
+    #[clap(alias = "ur")]
+    UpdateRules(UpdateRulesArgs),
     // Future: Add(AddArgs)
     // Future: Config(ConfigArgs)
 }
@@ -67,10 +73,6 @@ pub struct CommitArgs {
     /// Optional value can specify analysis depth: 'shallow', 'medium' (default), or 'deep'.
     #[clap(short = 't', long = "ast-grep")]
     pub ast_grep: bool,
-
-    /// When `tree-sitter` flag is enabled, this argument is used to control the analysis depth
-    #[clap(short = 'l', long = "level", value_name = "TREESITTER_LEVEL")]
-    pub depth: Option<String>,
 
     /// Automatically stage all tracked, modified files before commit (like git commit -a).
     #[clap(short = 'a', long = "all")]
@@ -96,16 +98,12 @@ pub struct CommitArgs {
 /// Arguments for the `review` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ReviewArgs {
-    /// Analysis depth level
-    #[clap(long, value_name = "LEVEL", default_value = "medium")]
-    pub depth: String,
-
     /// Focus areas for the review
     #[clap(long, value_name = "AREA")]
     pub focus: Option<String>,
 
-    /// Limit analysis to specific language
-    #[clap(long, value_name = "LANGUAGE")]
+    /// Translation language (zh|en|auto)
+    #[clap(long, value_name = "LANG")]
     pub lang: Option<String>,
 
     /// Output format
@@ -119,6 +117,18 @@ pub struct ReviewArgs {
     /// Use ast-grep for enhanced code analysis (enabled by default)
     #[clap(long = "ast-grep", alias = "ag")]
     pub ast_grep: bool,
+
+    /// Disable automatic code scanning during review
+    #[clap(long = "no-scan")]
+    pub no_scan: bool,
+
+    /// Force code scanning even if cached results exist
+    #[clap(long = "force-scan")]
+    pub force_scan: bool,
+
+    /// Use cached scan results if available
+    #[clap(long = "use-cache")]
+    pub use_cache: bool,
 
     /// First commit reference
     #[clap(long, value_name = "COMMIT")]
@@ -147,6 +157,106 @@ pub struct ReviewArgs {
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,
+}
+
+/// Arguments for the `scan` subcommand
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct ScanArgs {
+    /// Target directory or file to scan
+    #[clap(value_name = "PATH", default_value = ".")]
+    pub target: String,
+
+    /// Programming languages to scan (comma-separated)
+    #[clap(long, value_name = "LANGUAGES")]
+    pub languages: Option<String>,
+
+    /// Specific rules to run (comma-separated rule IDs)
+    #[clap(long, value_name = "RULES")]
+    pub rules: Option<String>,
+
+    /// Rule severity levels to include (error,warning,info,hint)
+    #[clap(long, value_name = "SEVERITY", default_value = "error,warning,info")]
+    pub severity: String,
+
+    /// Output format (text, json, sarif, csv)
+    #[clap(long, value_name = "FORMAT", default_value = "text")]
+    pub format: String,
+
+    /// Output file path
+    #[clap(long, value_name = "FILE")]
+    pub output: Option<String>,
+
+    /// Maximum number of issues to report (0 = unlimited)
+    #[clap(long, value_name = "COUNT", default_value = "0")]
+    pub max_issues: usize,
+
+    /// Include file paths matching pattern
+    #[clap(long, value_name = "PATTERN")]
+    pub include: Option<String>,
+
+    /// Exclude file paths matching pattern
+    #[clap(long, value_name = "PATTERN")]
+    pub exclude: Option<String>,
+
+    /// Custom rules configuration file
+    #[clap(long, value_name = "FILE")]
+    pub config: Option<String>,
+
+    /// Enable parallel processing
+    #[clap(long)]
+    pub parallel: bool,
+
+    /// Verbose output
+    #[clap(short, long)]
+    pub verbose: bool,
+
+    /// Show rule statistics
+    #[clap(long)]
+    pub stats: bool,
+
+    /// Fail with non-zero exit code if issues found
+    #[clap(long)]
+    pub fail_on_error: bool,
+}
+
+/// Arguments for the `update-rules` subcommand
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct UpdateRulesArgs {
+    /// Source to update rules from (github, local, url)
+    #[clap(long, value_name = "SOURCE", default_value = "github")]
+    pub source: String,
+
+    /// Specific repository or URL for rules
+    #[clap(long, value_name = "REPO")]
+    pub repository: Option<String>,
+
+    /// Branch or tag to use
+    #[clap(long, value_name = "REF", default_value = "main")]
+    pub reference: String,
+
+    /// Target directory for rules
+    #[clap(long, value_name = "DIR")]
+    pub target_dir: Option<String>,
+
+    /// Force update even if rules are newer
+    #[clap(long)]
+    pub force: bool,
+
+    /// Backup existing rules before update
+    #[clap(long)]
+    pub backup: bool,
+
+    /// Verify rules after download
+    #[clap(long)]
+    pub verify: bool,
+
+    /// List available rule sources
+    #[clap(long)]
+    pub list_sources: bool,
+
+    /// Verbose output
+    #[clap(short, long)]
+    pub verbose: bool,
 }
 
 // Represents the entire Git diff

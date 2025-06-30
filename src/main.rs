@@ -1,8 +1,8 @@
+mod ast_grep_analyzer;
 pub mod clients;
 mod config;
 mod errors;
 mod handlers;
-mod ast_grep_analyzer;
 mod types;
 mod utils;
 
@@ -10,7 +10,11 @@ use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::review::handle_review;
-use utils::{construct_commit_args, construct_review_args};
+use handlers::scan::handle_scan;
+use handlers::update_rules::handle_update_rules;
+use utils::{
+    construct_commit_args, construct_review_args, construct_scan_args, construct_update_rules_args,
+};
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -32,7 +36,7 @@ async fn main() -> Result<(), AppError> {
 
     // Handling cmd args
     let mut args: Vec<String> = std::env::args().collect();
-    
+
     // Remove program name from arguments
     if !args.is_empty() {
         args.remove(0);
@@ -86,12 +90,28 @@ async fn main() -> Result<(), AppError> {
         return Ok(());
     }
 
+    // scan 处理
+    if args.iter().any(|arg| arg == "scan" || arg == "sc") {
+        tracing::info!("检测到scan命令");
+        let scan_args = construct_scan_args(&args);
+        handle_scan(&config, &scan_args).await?;
+        return Ok(());
+    }
+
+    // update-rules 处理
+    if args.iter().any(|arg| arg == "update-rules" || arg == "ur") {
+        tracing::info!("检测到update-rules命令");
+        let update_rules_args = construct_update_rules_args(&args);
+        handle_update_rules(&config, &update_rules_args).await?;
+        return Ok(());
+    }
+
     // 标准 git 指令处理
     // 1. 当全局 ai 标识启用时，同时捕捉标准输出和标准错误，利用 AI 解释
     // 2. 当没有指定全局 ai 标识时，如果没有报错，则标准输出直接输出，如果有错误，则捕获标准错误并提供 AI 解释
-    
+
     match handle_intelligent_git_command(&config, &args, use_ai).await {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(AppError::Git(crate::errors::GitError::CommandFailed { status_code, .. })) => {
             // Maintain same exit status as original git command
             std::process::exit(status_code.unwrap_or(1));

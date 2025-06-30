@@ -5,6 +5,7 @@ edition = "2024"
 
 
 [dependencies]
+async-trait = "0.1.75"
 ast-grep-config = "0.21.2"
 ast-grep-core = "0.21.2"
 chrono = { version = "0.4.31", features = ["serde"] }
@@ -24,6 +25,11 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
 thiserror = "2.0.12"
+rayon = "1.10.0"
+walkdir = "2.5.0"
+zip = "4.2.0"
+md5 = "0.8.0"
+serde_yaml = "0.9.34"
 
 [dev-dependencies]
 tempfile = "3.20.0"

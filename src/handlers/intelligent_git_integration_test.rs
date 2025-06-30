@@ -1,11 +1,11 @@
 use crate::{
-    config::{AppConfig, AIConfig, ReviewConfig, TreeSitterConfig},
+    config::{AIConfig, AppConfig, AstGrepConfig, ReviewConfig},
     handlers::intelligent_git::handle_intelligent_git_command,
     types::general::CommandOutput,
 };
 use std::collections::HashMap;
-use std::process::ExitStatus;
 use std::os::unix::process::ExitStatusExt;
+use std::process::ExitStatus;
 use tokio;
 
 /// Integration tests for intelligent git command handling
@@ -26,14 +26,15 @@ fn create_test_config_for_integration() -> AppConfig {
             temperature: 0.3,
         },
         prompts,
-        tree_sitter: TreeSitterConfig::default(),
+        ast_grep: AstGrepConfig::default(),
+        translation: Default::default(),
         account: None,
         review: ReviewConfig {
             auto_save: true,
-            storage_path: "~/test_review_results".to_string(),
+            storage_path: "~/.gitai/review_results".to_string(),
             format: "markdown".to_string(),
             max_age_hours: 168,
-            include_in_commit: false,
+            include_in_commit: true,
         },
     }
 }
@@ -76,9 +77,11 @@ async fn test_intelligent_git_integration_status_command_smart_mode() {
         Err(e) => {
             // Expected if not in a git repository
             println!("⚠️ Expected failure in test environment: {}", e);
-            assert!(e.to_string().contains("not a git repository") 
-                   || e.to_string().contains("Git") 
-                   || e.to_string().contains("command"));
+            assert!(
+                e.to_string().contains("not a git repository")
+                    || e.to_string().contains("Git")
+                    || e.to_string().contains("command")
+            );
         }
     }
 }
@@ -177,7 +180,12 @@ async fn test_intelligent_git_config_validation() {
 #[tokio::test]
 async fn test_intelligent_git_ai_mode_vs_smart_mode() {
     let config = create_test_config_for_integration();
-    let args = vec!["log".to_string(), "--oneline".to_string(), "-n".to_string(), "1".to_string()];
+    let args = vec![
+        "log".to_string(),
+        "--oneline".to_string(),
+        "-n".to_string(),
+        "1".to_string(),
+    ];
 
     // Test both modes with the same command
     println!("Testing smart mode...");
@@ -221,7 +229,8 @@ mod test_helpers {
     pub fn create_mock_error_output() -> CommandOutput {
         CommandOutput {
             stdout: String::new(),
-            stderr: "fatal: not a git repository (or any of the parent directories): .git".to_string(),
+            stderr: "fatal: not a git repository (or any of the parent directories): .git"
+                .to_string(),
             status: ExitStatus::from_raw(128),
         }
     }
@@ -239,22 +248,22 @@ mod test_helpers {
 async fn test_integration_flow_simulation() {
     // This test simulates the integration flow without actually calling git
     // It's useful for testing the logic flow in CI environments
-    
+
     let config = create_test_config_for_integration();
-    
+
     // Test the configuration and setup
     assert!(!config.prompts.is_empty());
     assert!(config.prompts.contains_key("general-helper"));
-    
+
     // Test mock outputs
     let success_output = test_helpers::create_mock_success_output();
     let error_output = test_helpers::create_mock_error_output();
     let warning_output = test_helpers::create_mock_warning_output();
-    
+
     assert!(success_output.status.success());
     assert!(!error_output.status.success());
     assert!(warning_output.status.success());
     assert!(!warning_output.stderr.is_empty());
-    
+
     println!("✅ Integration flow simulation completed successfully");
 }
