@@ -77,13 +77,17 @@ pub fn is_git_repository() -> Result<bool, AppError> {
         .args(&["rev-parse", "--is-inside-work-tree"])
         .output()
         .map_err(|e| AppError::IO("检查Git仓库状态失败".to_string(), e))?;
-    
+
     Ok(result.status.success())
 }
 
 /// Get the status of staged files
 pub async fn get_staged_files_status() -> Result<String, AppError> {
-    let args = vec!["diff".to_string(), "--cached".to_string(), "--name-only".to_string()];
+    let args = vec![
+        "diff".to_string(),
+        "--cached".to_string(),
+        "--name-only".to_string(),
+    ];
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }
@@ -99,23 +103,23 @@ pub async fn get_staged_diff() -> Result<String, AppError> {
 pub async fn get_diff_for_commit() -> Result<String, AppError> {
     // First try to get staged changes
     let staged_diff = get_staged_diff().await?;
-    
+
     if !staged_diff.trim().is_empty() {
         tracing::debug!("使用已暂存的变更进行提交分析");
         return Ok(staged_diff);
     }
-    
+
     // If no staged changes, check for unstaged changes
     let args = vec!["diff".to_string()];
     let result = passthrough_to_git_with_error_handling(&args, false)?;
-    
+
     if !result.stdout.trim().is_empty() {
         tracing::debug!("使用未暂存的变更进行提交分析");
         return Ok(result.stdout);
     }
-    
+
     Err(AppError::Generic(
-        "没有检测到任何变更可用于提交分析".to_string()
+        "没有检测到任何变更可用于提交分析".to_string(),
     ))
 }
 
@@ -123,7 +127,7 @@ pub async fn get_diff_for_commit() -> Result<String, AppError> {
 pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
     let args = vec!["add".to_string(), "-u".to_string()];
     let result = passthrough_to_git_with_error_handling(&args, false)?;
-    
+
     if !result.status.success() {
         return Err(AppError::Git(GitError::CommandFailed {
             command: "git add -u".to_string(),
@@ -132,15 +136,46 @@ pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
             stderr: result.stderr,
         }));
     }
-    
+
     Ok(())
+}
+
+pub fn get_untracked_files() -> Result<Vec<String>, AppError> {
+    let args = vec![
+        "ls-files".to_string(),
+        "--others".to_string(),
+        "--exclude-standard".to_string(),
+    ];
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
+
+    if !result.status.success() {
+        return Err(AppError::Git(GitError::CommandFailed {
+            command: "git ls-files --others --exclude-standard".to_string(),
+            status_code: result.status.code(),
+            stdout: result.stdout,
+            stderr: result.stderr,
+        }));
+    }
+
+    Ok(result.stdout.lines().map(String::from).collect())
+}
+
+pub fn stage_specific_files(files: &[String]) -> Result<(), AppError> {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let mut args = vec!["add".to_string(), "--".to_string()];
+    args.extend(files.iter().cloned());
+
+    passthrough_to_git(&args)
 }
 
 /// Execute git commit with message
 pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> {
     let args = vec!["commit".to_string(), "-m".to_string(), message.to_string()];
     let result = passthrough_to_git_with_error_handling(&args, false)?;
-    
+
     if !result.status.success() {
         return Err(AppError::Git(GitError::CommandFailed {
             command: format!("git commit -m \"{}\"", message),
@@ -149,7 +184,7 @@ pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> 
             stderr: result.stderr,
         }));
     }
-    
+
     Ok(())
 }
 

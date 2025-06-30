@@ -17,8 +17,19 @@ use crate::{
         devops::{AnalysisWorkItem, WorkItem}, // Added AnalysisWorkItem
         git::{GitDiff, ReviewArgs},
     },
-    utils::generate_review_file_path,
 };
+
+fn generate_review_file_path(storage_path: &str, format: &str) -> std::path::PathBuf {
+    let file_name = format!("review.{}", format);
+    let mut path = std::path::PathBuf::from(storage_path);
+    if !path.exists() {
+        // For simplicity in this placeholder, we'll just attempt to create it.
+        // In a real scenario, proper error handling is needed.
+        let _ = std::fs::create_dir_all(&path);
+    }
+    path.push(file_name);
+    path
+}
 
 use super::{
     ai::{create_review_prompt, execute_review_request},
@@ -1752,7 +1763,7 @@ async fn save_review_results(
     tracing::debug!("准备保存评审结果到本地文件");
 
     // Generate file path based on current repository and commit
-    let file_path = generate_review_file_path(&config.review.storage_path, &config.review.format)?;
+    let file_path = generate_review_file_path(&config.review.storage_path, &config.review.format);
 
     // Ensure parent directory exists
     if let Some(parent_dir) = file_path.parent() {

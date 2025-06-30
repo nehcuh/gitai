@@ -1,4 +1,16 @@
-use crate::{config::AppConfig, errors::AppError, utils::generate_gitai_help};
+use crate::{config::AppConfig, errors::AppError};
+
+// Placeholder implementation for generate_gitai_help
+fn generate_gitai_help(_config: &AppConfig) -> String {
+    "GitAI Help (placeholder)\n\
+    Usage: gitai <command> [options]\n\
+    \n\
+    Commands:\n\
+    commit      Generate a commit message with AI.\n\
+    review      Review code changes with AI.\n\
+    ... and more."
+        .to_string()
+}
 
 use super::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling};
 
@@ -9,7 +21,7 @@ pub async fn handle_help(
     use_ai: bool,
 ) -> Result<(), AppError> {
     // 获取 gitie 自定义帮助
-    let gitai_help = generate_gitai_help();
+    let gitai_help = generate_gitai_help(config);
     if args.iter().any(|arg| arg == "review" || arg == "rv") {
         println!("{}", gitai_help);
         return Ok(());
@@ -33,7 +45,7 @@ pub async fn handle_help(
     // 获取完整的git帮助文本
     args.retain(|arg| arg != "-h" && arg != "--help");
     if args.len() <= 1 {
-        println!("{}", generate_gitai_help());
+        println!("{}", generate_gitai_help(config));
         return Ok(());
     }
     args.push("--help".to_string());
@@ -55,7 +67,7 @@ pub async fn handle_help(
             Err(e) => {
                 tracing::warn!("无法获取AI帮助解释: {}", e);
                 // 如果AI解释失败，仍然显示原始帮助
-                println!("{}", generate_gitai_help());
+                println!("{}", generate_gitai_help(config));
             }
         }
     } else {

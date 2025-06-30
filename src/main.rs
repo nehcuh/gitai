@@ -110,7 +110,7 @@ async fn main() -> Result<(), AppError> {
     // review 处理
     if args.iter().any(|arg| arg == "review" || arg == "rv") {
         tracing::info!("检测到review命令");
-        let review_args = construct_review_args(&args);
+        let review_args = construct_review_args();
         // review_args can overwritten config tree-sitter config
         handle_review(&mut config, review_args).await?;
         return Ok(());
@@ -119,7 +119,7 @@ async fn main() -> Result<(), AppError> {
     // commit 处理
     if args.iter().any(|arg| arg == "commit" || arg == "cm") {
         tracing::info!("检测到commit命令");
-        let commit_args = construct_commit_args(&args);
+        let commit_args = construct_commit_args();
         handle_commit(&config, commit_args).await?;
         return Ok(());
     }
@@ -127,7 +127,7 @@ async fn main() -> Result<(), AppError> {
     // scan 处理
     if args.iter().any(|arg| arg == "scan" || arg == "sc") {
         tracing::info!("检测到scan命令");
-        let scan_args = construct_scan_args(&args);
+        let scan_args = construct_scan_args();
         handle_scan(&config, &scan_args).await?;
         return Ok(());
     }
@@ -135,7 +135,7 @@ async fn main() -> Result<(), AppError> {
     // update-rules 处理
     if args.iter().any(|arg| arg == "update-rules" || arg == "ur") {
         tracing::info!("检测到update-rules命令");
-        let update_rules_args = construct_update_rules_args(&args);
+        let update_rules_args = construct_update_rules_args();
         handle_update_rules(&config, &update_rules_args).await?;
         return Ok(());
     }

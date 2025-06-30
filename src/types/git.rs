@@ -95,6 +95,19 @@ pub struct CommitArgs {
     pub passthrough_args: Vec<String>,
 }
 
+impl Default for CommitArgs {
+    fn default() -> Self {
+        Self {
+            ast_grep: false,
+            auto_stage: false,
+            message: None,
+            issue_id: None,
+            review: false,
+            passthrough_args: Vec::new(),
+        }
+    }
+}
+
 /// Arguments for the `review` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ReviewArgs {
@@ -159,6 +172,28 @@ pub struct ReviewArgs {
     pub passthrough_args: Vec<String>,
 }
 
+impl Default for ReviewArgs {
+    fn default() -> Self {
+        Self {
+            focus: None,
+            lang: None,
+            format: "text".to_string(),
+            output: None,
+            ast_grep: true,
+            no_scan: false,
+            force_scan: false,
+            use_cache: false,
+            commit1: None,
+            commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
+            passthrough_args: Vec::new(),
+        }
+    }
+}
+
 /// Arguments for the `scan` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ScanArgs {
@@ -217,6 +252,43 @@ pub struct ScanArgs {
     /// Fail with non-zero exit code if issues found
     #[clap(long)]
     pub fail_on_error: bool,
+}
+
+impl Default for ScanArgs {
+    fn default() -> Self {
+        Self {
+            target: ".".to_string(),
+            languages: None,
+            rules: None,
+            severity: "error,warning,info".to_string(),
+            format: "text".to_string(),
+            output: None,
+            max_issues: 0,
+            include: None,
+            exclude: None,
+            config: None,
+            parallel: false,
+            verbose: false,
+            stats: false,
+            fail_on_error: false,
+        }
+    }
+}
+
+impl Default for UpdateRulesArgs {
+    fn default() -> Self {
+        Self {
+            source: "github".to_string(),
+            repository: None,
+            reference: "main".to_string(),
+            target_dir: None,
+            force: false,
+            backup: false,
+            verify: false,
+            list_sources: false,
+            verbose: false,
+        }
+    }
 }
 
 /// Arguments for the `update-rules` subcommand

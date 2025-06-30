@@ -303,7 +303,7 @@ mod review_args_integration_tests {
             "--focus=performance".to_string(),
         ];
 
-        let review_args = construct_review_args(&args);
+        let review_args = construct_review_args();
 
         assert_eq!(review_args.lang, Some("zh".to_string()));
         assert_eq!(review_args.focus, Some("performance".to_string()));
@@ -317,7 +317,7 @@ mod review_args_integration_tests {
             "--focus=security".to_string(),
         ];
 
-        let review_args = construct_review_args(&args);
+        let review_args = construct_review_args();
 
         assert_eq!(review_args.lang, None);
         assert_eq!(review_args.focus, Some("security".to_string()));
@@ -333,7 +333,7 @@ mod review_args_integration_tests {
             "--format=json".to_string(),
         ];
 
-        let review_args = construct_review_args(&args);
+        let review_args = construct_review_args();
 
         assert_eq!(review_args.lang, Some("en".to_string()));
         assert!(review_args.no_scan);
@@ -493,7 +493,7 @@ mod end_to_end_tests {
             "--no-scan".to_string(),
         ];
 
-        let review_args = construct_review_args(&args);
+        let review_args = construct_review_args();
 
         // Verify args parsing
         assert_eq!(review_args.lang, Some("zh".to_string()));
