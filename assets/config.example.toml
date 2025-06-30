@@ -1,6 +1,6 @@
 [ai]
-api_url = "http://localhost:11434/v1/chat/completions"
-model_name = "qwen3:32b-q8_0"
+api_url = "http://localhost:1234/v1/chat/completions"
+model_name = "deepseek-r1-0528-qwen3-8b-awq"
 temperature = 0.7
 api_key = "YOUR_API_KEY_IF_NEEDED"
 

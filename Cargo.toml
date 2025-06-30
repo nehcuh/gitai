@@ -2,12 +2,11 @@
 name = "gitai"
 version = "0.1.0"
 edition = "2024"
-build = "build.rs"
 
-[build-dependencies]
-reqwest = { version = "0.12.15", features = ["blocking"] }
 
 [dependencies]
+ast-grep-config = "0.21.2"
+ast-grep-core = "0.21.2"
 chrono = { version = "0.4.31", features = ["serde"] }
 clap = { version = "4.5.38", features = ["derive"] }
 colored = "3.0.0"
@@ -23,17 +22,9 @@ toml = "0.8.22"
 futures = "0.3"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
-tree-sitter = "0.25.4"
-tree-sitter-c = "0.23.4"
-tree-sitter-cpp = "0.23.4"
-tree-sitter-go = "0.23.4"
-tree-sitter-highlight = "0.25.4"
-tree-sitter-java = "0.23.5"
-tree-sitter-javascript = "0.23.1"
-tree-sitter-python = "0.23.6"
-tree-sitter-rust = "0.24.0"
+
 thiserror = "2.0.12"
 
 [dev-dependencies]
 tempfile = "3.20.0"
-httpmock = "0.7.0" # Using a recent version of httpmock
+httpmock = "0.7.0"  # Using a recent version of httpmock

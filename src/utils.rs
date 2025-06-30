@@ -37,7 +37,7 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -76,7 +76,7 @@ pub fn construct_commit_args(args: &[String]) -> CommitArgs {
         tracing::warn!("解析commit命令失败");
         // 创建默认的CommitArgs
         CommitArgs {
-            tree_sitter: false,
+            ast_grep: false,
             depth: None,
             auto_stage: false,
             message: None,
@@ -108,10 +108,10 @@ pub fn generate_gitai_help() -> String {
     help.push_str("Gitai 特有命令:\n");
     help.push_str("  commit (cm)         增强的 git commit 命令，提供 AI 生成提交信息\n");
     help.push_str("    选项:\n");
-    help.push_str("      -t, --tree-sitter\n");
-    help.push_str("                      启用 Tree-sitter 语法分析以改进提交信息\n");
-    help.push_str("      -l, --level=TREESITTER_LEVEL\n");
-    help.push_str("                  Tree-sitter 语法分析程度，\n");
+    help.push_str("      -t, --ast-grep\n");
+    help.push_str("                      启用 AstGrep 语法分析以改进提交信息\n");
+    help.push_str("      -l, --level=AST_GREP_LEVEL\n");
+    help.push_str("                  AstGrep 语法分析程度，\n");
     help.push_str("                      可选值: shallow, medium (默认), deep\n\n");
     help.push_str("      -a, --all       自动暂存所有已跟踪的修改文件（类似 git commit -a）\n");
     help.push_str("      -m, --message   直接传递消息给提交\n");
@@ -126,7 +126,7 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --lang=LANGUAGE  限制分析到特定语言\n");
     help.push_str("      --format=FORMAT  输出格式 (默认: text)\n");
     help.push_str("      --output=FILE    输出文件\n");
-    help.push_str("      --tree-sitter    使用 Tree-sitter 进行增强代码分析（默认）\n");
+    help.push_str("      --ast-grep    使用 AstGrep 进行增强代码分析（默认）\n");
     help.push_str("      --commit1=COMMIT 第一个提交引用\n");
     help.push_str("      --commit2=COMMIT 第二个提交引用（如果比较两个提交）\n");
     help.push_str("      --stories=IDs    用户故事 ID 列表 (例如: 123,456)\n");

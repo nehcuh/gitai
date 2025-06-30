@@ -168,10 +168,10 @@ impl AccountConfig {
     }
 }
 
-/// Tree-sitter Configuration
+/// AstGrep Configuration
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
-pub struct TreeSitterConfig {
+pub struct AstGrepConfig {
     /// Represents if enable AST analysis
     #[serde(default)]
     pub enabled: bool,
@@ -183,19 +183,15 @@ pub struct TreeSitterConfig {
     /// Is cache enabled
     #[serde(default = "default_cache_enabled")]
     pub cache_enabled: bool,
-
-    /// List of supported languages
-    #[serde(default = "default_languages")]
-    pub languages: Vec<String>,
 }
 
-impl Default for TreeSitterConfig {
+impl Default for AstGrepConfig {
     fn default() -> Self {
         Self {
             enabled: true,
             analysis_depth: default_analysis_depth(),
             cache_enabled: default_cache_enabled(),
-            languages: default_languages(),
+            
         }
     }
 }
@@ -244,17 +240,7 @@ fn default_cache_enabled() -> bool {
     true
 }
 
-fn default_languages() -> Vec<String> {
-    vec![
-        "rust".to_string(),
-        "c".to_string(),
-        "cpp".to_string(),
-        "go".to_string(),
-        "javascript".to_string(),
-        "python".to_string(),
-        "java".to_string(),
-    ]
-}
+
 
 fn default_auto_save() -> bool {
     true
@@ -299,17 +285,15 @@ pub struct PartialAccountConfig {
     pub retry_count: Option<u32>,
 }
 
-/// Partial loading helper structure for Tree-sitter configuration
+/// Partial loading helper structure for AstGrep configuration
 #[derive(Deserialize, Debug, Default, Clone)]
-pub struct PartialTreeSitterConfig {
+pub struct PartialAstGrepConfig {
     #[serde(default)]
     enabled: Option<bool>,
     #[serde(default)]
     analysis_depth: Option<String>,
     #[serde(default)]
     cache_enabled: Option<bool>,
-    #[serde(default)]
-    languages: Option<Vec<String>>,
 }
 
 /// Partial loading helper structure for review configuration
@@ -335,7 +319,7 @@ pub struct AppConfig {
     pub ai: AIConfig,
 
     #[serde(default)]
-    pub tree_sitter: TreeSitterConfig,
+    pub ast_grep: AstGrepConfig,
 
     #[serde(default)]
     pub review: ReviewConfig,
@@ -350,7 +334,7 @@ pub struct AppConfig {
 #[derive(Deserialize, Debug, Default)]
 pub struct PartialAppConfig {
     ai: Option<PartialAIConfig>,
-    tree_sitter: Option<PartialTreeSitterConfig>,
+    ast_grep: Option<PartialAstGrepConfig>,
     review: Option<PartialReviewConfig>,
     account: Option<PartialAccountConfig>,
 }
@@ -624,9 +608,6 @@ impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
         let start_time = std::time::Instant::now();
 
-        tracing::info!("加载 AST Query 配置");
-        Self::initialize_rules()?;
-
         let (user_config_path, user_prompt_paths) = match Self::initialize_config() {
             Ok(result) => {
                 tracing::debug!("配置初始化完成，用时 {:?}", start_time.elapsed());
@@ -648,50 +629,7 @@ impl AppConfig {
         Self::load_config_from_file(&user_config_path, &user_prompt_paths)
     }
 
-    /// copy default Tree-sitter rule files to user's config directory if missing
-    fn initialize_rules() -> Result<(), ConfigError> {
-        // resolve user rules base
-        let base = Self::extract_file_path(USER_RULES_PATH, "")?;
-        std::fs::create_dir_all(&base)
-            .map_err(|e| ConfigError::FileWrite(base.to_string_lossy().into(), e))?;
-        // default queries directory in project
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
-        let project_queries = PathBuf::from(manifest_dir).join("queries");
-
-        // Skip if queries directory doesn't exist (e.g., in tests)
-        if !project_queries.exists() {
-            tracing::debug!(
-                "Queries directory {:?} does not exist, skipping rules initialization",
-                project_queries
-            );
-            return Ok(());
-        }
-
-        let scm_files = ["highlights.scm", "injections.scm", "locals.scm"];
-        for entry in std::fs::read_dir(&project_queries)
-            .map_err(|e| ConfigError::FileRead("read project queries".into(), e))?
-        {
-            let dir = entry
-                .map_err(|e| ConfigError::FileRead("iter project queries".into(), e))?
-                .path();
-            if dir.is_dir() {
-                let lang = dir.file_name().unwrap();
-                let dest = base.join(lang);
-                std::fs::create_dir_all(&dest)
-                    .map_err(|e| ConfigError::FileWrite(dest.to_string_lossy().into(), e))?;
-                for file in &scm_files {
-                    let src = dir.join(file);
-                    let dst = dest.join(file);
-                    if !dst.exists() {
-                        std::fs::copy(&src, &dst)
-                            .map_err(|e| ConfigError::FileWrite(dst.to_string_lossy().into(), e))?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
+    
 
     fn load_config_from_file(
         config_path: &std::path::Path,
@@ -743,9 +681,9 @@ impl AppConfig {
             partial_config.ai = Some(PartialAIConfig::default());
         }
 
-        if partial_config.tree_sitter.is_none() {
-            tracing::info!("配置文件中未找到 Tree-sitter 配置部分，使用默认值");
-            partial_config.tree_sitter = Some(PartialTreeSitterConfig::default());
+        if partial_config.ast_grep.is_none() {
+            tracing::info!("配置文件中未找到 AstGrep 配置部分，使用默认值");
+            partial_config.ast_grep = Some(PartialAstGrepConfig::default());
         }
 
         if partial_config.review.is_none() {
@@ -827,35 +765,26 @@ impl AppConfig {
             }
         );
 
-        let partial_tree_sitter_config = partial_config.tree_sitter.unwrap_or_default();
+        let partial_ast_grep_config = partial_config.ast_grep.unwrap_or_default();
 
-        let enabled = partial_tree_sitter_config.enabled.unwrap_or(true);
-        let analysis_depth = partial_tree_sitter_config
+        let enabled = partial_ast_grep_config.enabled.unwrap_or(true);
+        let analysis_depth = partial_ast_grep_config
             .analysis_depth
             .unwrap_or_else(default_analysis_depth);
-        let cache_enabled = partial_tree_sitter_config.cache_enabled.unwrap_or(true);
-        let languages = partial_tree_sitter_config
-            .languages
-            .unwrap_or_else(default_languages);
+        let cache_enabled = partial_ast_grep_config.cache_enabled.unwrap_or(true);
 
-        let tree_sitter_config = TreeSitterConfig {
+        let ast_grep_config = AstGrepConfig {
             enabled,
             analysis_depth: analysis_depth.clone(),
             cache_enabled,
-            languages: languages.clone(),
         };
 
         tracing::debug!(
-            "Tree-sitter 配置: 启用状态: {}, 分析深度: {}, 缓存启用: {}, 支持语言数量: {}",
+            "AstGrep 配置: 启用状态: {}, 分析深度: {}, 缓存启用: {}",
             enabled,
             analysis_depth,
             cache_enabled,
-            languages.len()
         );
-
-        if enabled {
-            tracing::debug!("Tree-sitter 支持的语言: {}", languages.join(", "));
-        }
 
         // --- Review Configuration Loading ---
         let partial_review_config = partial_config.review.unwrap_or_default();
@@ -980,7 +909,7 @@ impl AppConfig {
 
         let config = Self {
             ai: ai_config,
-            tree_sitter: tree_sitter_config,
+            ast_grep: ast_grep_config,
             review: review_config,
             account: final_account_config,
             prompts,
@@ -1399,19 +1328,15 @@ mod tests {
             "General AI help prompt."
         );
 
-        let default_ts_config = TreeSitterConfig::default();
-        assert_eq!(app_config.tree_sitter.enabled, default_ts_config.enabled);
+        let default_ts_config = AstGrepConfig::default();
+        assert_eq!(app_config.ast_grep.enabled, default_ts_config.enabled);
         assert_eq!(
-            app_config.tree_sitter.analysis_depth,
+            app_config.ast_grep.analysis_depth,
             default_ts_config.analysis_depth
         );
         assert_eq!(
-            app_config.tree_sitter.cache_enabled,
+            app_config.ast_grep.cache_enabled,
             default_ts_config.cache_enabled
-        );
-        assert_eq!(
-            app_config.tree_sitter.languages,
-            default_ts_config.languages
         );
 
         Ok(())
@@ -1428,11 +1353,10 @@ model_name = "custom-gpt"
 temperature = 0.9
 api_key = "CUSTOM_KEY_123"
 
-[tree_sitter]
+[ast_grep]
 enabled = true
 analysis_depth = "medium"
 cache_enabled = false
-languages = ["rust", "python"]
 "#;
         let config_file_path = user_config_base_dir.join(CONFIG_FILE_NAME);
         fs::write(&config_file_path, custom_config_content)?;
@@ -1459,13 +1383,9 @@ languages = ["rust", "python"]
             "Explain commit deviation."
         );
 
-        assert_eq!(app_config.tree_sitter.enabled, true);
-        assert_eq!(app_config.tree_sitter.analysis_depth, "medium");
-        assert_eq!(app_config.tree_sitter.cache_enabled, false);
-        assert_eq!(
-            app_config.tree_sitter.languages,
-            vec!["rust".to_string(), "python".to_string()]
-        );
+        assert_eq!(app_config.ast_grep.enabled, true);
+        assert_eq!(app_config.ast_grep.analysis_depth, "medium");
+        assert_eq!(app_config.ast_grep.cache_enabled, false);
 
         Ok(())
     }

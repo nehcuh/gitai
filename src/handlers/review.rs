@@ -1,12 +1,12 @@
 use crate::{
-    clients::devops_client::DevOpsClient, // Added
-    config::{AppConfig, TreeSitterConfig},
-    errors::{AIError, AppError}, // DevOpsError import removed
-    handlers::analysis::AIAnalysisEngine,
-    tree_sitter_analyzer::{
-        analyzer::TreeSitterAnalyzer,
+    ast_grep_analyzer::{
+        analyzer::AstGrepAnalyzer,
         core::{detect_language_from_extension, parse_git_diff},
     },
+    clients::devops_client::DevOpsClient, // Added
+    config::{AppConfig, AstGrepConfig},
+    errors::{AIError, AppError}, // DevOpsError import removed
+    handlers::analysis::AIAnalysisEngine,
     types::{
         ai::{AnalysisDepth, AnalysisRequest, OutputFormat},
         devops::{AnalysisWorkItem, WorkItem}, // Added AnalysisWorkItem
@@ -19,10 +19,10 @@ use super::{
     ai::{create_review_prompt, execute_review_request},
     git::extract_diff_for_review,
 };
-use std::sync::Arc;
 use chrono;
 use colored::Colorize;
 use serde_json;
+use std::sync::Arc;
 use std::{collections::HashMap, env, fs, io::Write, time::Instant}; // env was already here
 
 pub async fn handle_review(
@@ -48,8 +48,11 @@ pub async fn handle_review(
                 account_config.devops_platform,
                 account_config.base_url
             );
-            DevOpsClient::new(account_config.base_url.clone(), account_config.token.clone())
-        },
+            DevOpsClient::new(
+                account_config.base_url.clone(),
+                account_config.token.clone(),
+            )
+        }
         None => {
             // Fallback to environment variables if no config found
             let devops_base_url = env::var("DEV_DEVOPS_API_BASE_URL")
@@ -127,10 +130,10 @@ pub async fn handle_review(
 
     let start_time = Instant::now();
     tracing::info!(
-        "开始执行代码评审，参数: depth={}, format={}, tree_sitter={}",
+        "开始执行代码评审，参数: depth={}, format={}, ast_grep={}",
         review_args.depth,
         review_args.format,
-        review_args.tree_sitter
+        review_args.ast_grep
     );
 
     // Extract the Git diff
@@ -147,21 +150,21 @@ pub async fn handle_review(
 
     tracing::debug!("检测到差异信息，长度: {} 字符", diff_text.len());
 
-    // Determine if TreeSitter should be used
-    let use_tree_sitter = review_args.tree_sitter;
+    // Determine if AstGrep should be used
+    let use_ast_grep = review_args.ast_grep;
     tracing::debug!(
-        "TreeSitter分析: {}",
-        if use_tree_sitter { "启用" } else { "禁用" }
+        "AstGrep分析: {}",
+        if use_ast_grep { "启用" } else { "禁用" }
     );
 
     // Analyze the diff with appropriate analyzer
     let analyze_start = Instant::now();
-    let (git_diff, analysis_text, analysis_results) = if use_tree_sitter {
-        tracing::info!("使用TreeSitter进行深度代码分析");
-        analyze_diff_with_tree_sitter(&diff_text, &review_args.depth, config)
+    let (git_diff, analysis_text, analysis_results) = if use_ast_grep {
+        tracing::info!("使用AstGrep进行深度代码分析");
+        analyze_diff_with_ast_grep(&diff_text, &review_args.depth, config)
             .await
             .map_err(|e| {
-                tracing::error!("TreeSitter分析失败: {:?}", e);
+                tracing::error!("AstGrep分析失败: {:?}", e);
                 e
             })?
     } else {
@@ -179,8 +182,10 @@ pub async fn handle_review(
         // Enhanced AI analysis with work items
         tracing::info!("执行增强型 AI 分析（结合工作项需求）");
         let ai_start = Instant::now();
-        
-        match perform_enhanced_ai_analysis(config, &diff_text, &fetched_work_items, &review_args).await {
+
+        match perform_enhanced_ai_analysis(config, &diff_text, &fetched_work_items, &review_args)
+            .await
+        {
             Ok(response) => {
                 tracing::info!("增强型 AI 分析完成，耗时: {:?}", ai_start.elapsed());
                 response
@@ -188,13 +193,33 @@ pub async fn handle_review(
             Err(e) => {
                 tracing::warn!("增强型 AI 分析失败: {}，回退到标准评审", e);
                 // Fallback to standard review
-                perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
+                perform_standard_ai_review(
+                    config,
+                    &diff_text,
+                    &analysis_text,
+                    &review_args,
+                    &git_diff,
+                    &language_info,
+                    &fetched_work_items,
+                    &analysis_results,
+                )
+                .await?
             }
         }
     } else {
         // Standard AI review without work items
         tracing::info!("执行标准 AI 代码评审");
-        perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
+        perform_standard_ai_review(
+            config,
+            &diff_text,
+            &analysis_text,
+            &review_args,
+            &git_diff,
+            &language_info,
+            &fetched_work_items,
+            &analysis_results,
+        )
+        .await?
     };
 
     // Format and output the review
@@ -229,8 +254,8 @@ pub async fn handle_review(
     Ok(())
 }
 
-/// Analyze diff with TreeSitter
-async fn analyze_diff_with_tree_sitter(
+/// Analyze diff with AstGrep
+async fn analyze_diff_with_ast_grep(
     diff_text: &str,
     depth: &str,
     _config: &AppConfig,
@@ -238,33 +263,33 @@ async fn analyze_diff_with_tree_sitter(
     (
         GitDiff,
         String,
-        Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+        Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
     ),
     AppError,
 > {
-    // Initialize TreeSitter analyzer with analysis depth
-    let mut config = TreeSitterConfig::default();
+    // Initialize AstGrep analyzer with analysis depth
+    let mut config = AstGrepConfig::default();
     config.analysis_depth = depth.to_string();
-    let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
-        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-        AppError::TreeSitter(e)
+    let mut analyzer = AstGrepAnalyzer::new(config).map_err(|e| {
+        tracing::error!("AstGrep分析器初始化失败: {:?}", e);
+        AppError::Analysis(e)
     })?;
 
     // Parse the diff to get structured representation
     let git_diff = parse_git_diff(diff_text).map_err(|e| {
         tracing::error!("解析Git差异失败: {:?}", e);
-        AppError::TreeSitter(e)
+        AppError::Analysis(e)
     })?;
 
-    // Generate analysis using TreeSitter
+    // Generate analysis using AstGrep
     let analysis = analyzer.analyze_diff(diff_text).map_err(|e| {
         tracing::error!("执行差异分析失败: {:?}", e);
-        AppError::TreeSitter(e)
+        AppError::Analysis(e)
     })?;
     tracing::debug!("差异分析结果: {:?}", analysis);
 
     // Create detailed analysis text
-    let analysis_text = format_tree_sitter_analysis(&analysis, &git_diff);
+    let analysis_text = format_ast_grep_analysis(&analysis, &git_diff);
 
     Ok((git_diff, analysis_text, Some(analysis)))
 }
@@ -276,11 +301,11 @@ async fn analyze_diff_simple(
     (
         GitDiff,
         String,
-        Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+        Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
     ),
     AppError,
 > {
-    let git_diff = parse_git_diff(diff_text).map_err(|e| AppError::TreeSitter(e))?;
+    let git_diff = parse_git_diff(diff_text).map_err(|e| AppError::Analysis(e))?;
 
     let mut analysis_text = String::new();
     analysis_text.push_str("## 代码变更分析\n\n");
@@ -307,53 +332,24 @@ async fn analyze_diff_simple(
 
     analysis_text.push_str("\n### 分析结果\n\n");
     analysis_text.push_str("- ℹ️ **简化分析模式**\n");
-    analysis_text.push_str("  - 未启用TreeSitter进行深度分析\n");
-    analysis_text.push_str("  - 建议使用 `--tree-sitter` 参数启用更详细的分析\n");
+    analysis_text.push_str("  - 未启用AstGrep进行深度分析\n");
+    analysis_text.push_str("  - 建议使用 `--ast-grep` 参数启用更详细的分析\n");
 
     Ok((git_diff, analysis_text, None))
 }
 
-/// Format TreeSitter analysis results into readable text
-fn format_tree_sitter_analysis(
-    analysis: &crate::tree_sitter_analyzer::core::DiffAnalysis,
+fn format_ast_grep_analysis(
+    analysis: &crate::ast_grep_analyzer::core::DiffAnalysis,
     _git_diff: &GitDiff,
 ) -> String {
     let mut text = String::new();
 
-    text.push_str("## TreeSitter 代码结构分析\n\n");
+    text.push_str("## AstGrep 代码结构分析\n\n");
     text.push_str(&format!("### 总体摘要\n\n{}\n\n", analysis.overall_summary));
 
-    text.push_str("### 变更统计\n\n");
-    text.push_str(&format!(
-        "- 影响文件数: **{}**\n",
-        analysis.file_analyses.len()
-    ));
-    text.push_str(&format!(
-        "- 函数变更: **{}**\n",
-        analysis.change_analysis.function_changes
-    ));
-    text.push_str(&format!(
-        "- 类型变更: **{}**\n",
-        analysis.change_analysis.type_changes
-    ));
-    text.push_str(&format!(
-        "- 方法变更: **{}**\n",
-        analysis.change_analysis.method_changes
-    ));
-    text.push_str(&format!(
-        "- 接口变更: **{}**\n",
-        analysis.change_analysis.interface_changes
-    ));
-    text.push_str(&format!(
-        "- 其他变更: **{}**\n\n",
-        analysis.change_analysis.other_changes
-    ));
-
     // 按语言分组显示文件分析
-    let mut language_groups: HashMap<
-        String,
-        Vec<&crate::tree_sitter_analyzer::core::FileAnalysis>,
-    > = HashMap::new();
+    let mut language_groups: HashMap<String, Vec<&crate::ast_grep_analyzer::core::FileAnalysis>> =
+        HashMap::new();
     for file_analysis in &analysis.file_analyses {
         language_groups
             .entry(file_analysis.language.clone())
@@ -373,53 +369,8 @@ fn format_tree_sitter_analysis(
             if let Some(summary) = &file_analysis.summary {
                 text.push_str(&format!("  - {}\n", summary));
             }
-
-            if !file_analysis.affected_nodes.is_empty() {
-                text.push_str("  - 受影响的代码结构:\n");
-                for node in &file_analysis.affected_nodes {
-                    let visibility = if node.is_public { "公开" } else { "私有" };
-                    let change_type = match &node.change_type {
-                        Some(change) => match change.as_str() {
-                            "added" | "added_content" => "➕ ",
-                            "deleted" => "❌ ",
-                            "modified" | "modified_with_deletion" => "🔄 ",
-                            _ => "",
-                        },
-                        None => "",
-                    };
-
-                    text.push_str(&format!(
-                        "    - {}**{}** `{}` ({})\n",
-                        change_type, node.node_type, node.name, visibility
-                    ));
-                }
-            }
         }
         text.push_str("\n");
-    }
-
-    // 添加评审建议
-    text.push_str("### 评审重点建议\n\n");
-    match &analysis.change_analysis.change_pattern {
-        crate::tree_sitter_analyzer::core::ChangePattern::FeatureImplementation => {
-            text.push_str("- 🆕 **新功能实现**\n");
-            text.push_str("  - 建议关注功能完整性和边界情况处理\n");
-            text.push_str("  - 确认是否有足够的测试覆盖新功能\n");
-        }
-        crate::tree_sitter_analyzer::core::ChangePattern::BugFix => {
-            text.push_str("- 🐛 **Bug修复**\n");
-            text.push_str("  - 确认修复是否解决了根本问题\n");
-            text.push_str("  - 检查是否有回归测试防止问题再次出现\n");
-        }
-        crate::tree_sitter_analyzer::core::ChangePattern::Refactoring => {
-            text.push_str("- ♻️ **代码重构**\n");
-            text.push_str("  - 关注功能等价性，确保重构不改变行为\n");
-            text.push_str("  - 检查性能影响，尤其是循环和算法改变\n");
-        }
-        _ => {
-            text.push_str("- ℹ️ **代码评审**\n");
-            text.push_str("  - 使用 AI 进行深度评审，提供详细反馈\n");
-        }
     }
 
     text
@@ -428,10 +379,10 @@ fn format_tree_sitter_analysis(
 /// Extract language information from diff
 fn extract_language_info(
     git_diff: &GitDiff,
-    analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    analysis_results: &Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
 ) -> String {
     if let Some(analysis) = analysis_results {
-        // 从TreeSitter分析中获取详细语言信息
+        // 从AstGrep分析中获取详细语言信息
         analysis
             .file_analyses
             .iter()
@@ -446,12 +397,7 @@ fn extract_language_info(
         git_diff
             .changed_files
             .iter()
-            .filter_map(|f| {
-                f.path
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .and_then(|ext| detect_language_from_extension(ext))
-            })
+            .filter_map(|f| detect_language_from_extension(&f.path))
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>()
@@ -474,7 +420,7 @@ mod tests {
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: false,
             passthrough_args: vec![],
             commit1: None,
             commit2: None,
@@ -488,7 +434,7 @@ mod tests {
     fn minimal_app_config() -> AppConfig {
         AppConfig {
             ai: AIConfig::default(),
-            tree_sitter: TreeSitterConfig::default(),
+            ast_grep: AstGrepConfig::default(),
             review: Default::default(),
             account: None,
             prompts: HashMap::new(),
@@ -607,7 +553,7 @@ mod tests {
     #[test]
     fn test_format_enhanced_analysis_result() {
         use crate::types::ai::*;
-        
+
         let analysis_result = AnalysisResult {
             overall_score: 85,
             requirement_consistency: RequirementAnalysis {
@@ -623,24 +569,20 @@ mod tests {
                 security_score: 90,
                 structure_assessment: "代码结构良好".to_string(),
             },
-            deviations: vec![
-                Deviation {
-                    severity: DeviationSeverity::Medium,
-                    category: "Logic Error".to_string(),
-                    description: "缺少空值检查".to_string(),
-                    file_location: Some("src/main.rs:42".to_string()),
-                    suggestion: "添加输入验证".to_string(),
-                }
-            ],
-            recommendations: vec![
-                Recommendation {
-                    priority: 1,
-                    title: "改进错误处理".to_string(),
-                    description: "添加更完善的错误处理机制".to_string(),
-                    expected_impact: "提高系统稳定性".to_string(),
-                    effort_estimate: "Medium".to_string(),
-                }
-            ],
+            deviations: vec![Deviation {
+                severity: DeviationSeverity::Medium,
+                category: "Logic Error".to_string(),
+                description: "缺少空值检查".to_string(),
+                file_location: Some("src/main.rs:42".to_string()),
+                suggestion: "添加输入验证".to_string(),
+            }],
+            recommendations: vec![Recommendation {
+                priority: 1,
+                title: "改进错误处理".to_string(),
+                description: "添加更完善的错误处理机制".to_string(),
+                expected_impact: "提高系统稳定性".to_string(),
+                effort_estimate: "Medium".to_string(),
+            }],
             risk_assessment: RiskAssessment {
                 risk_level: DeviationSeverity::Medium,
                 business_impact: "中等业务影响".to_string(),
@@ -650,7 +592,7 @@ mod tests {
         };
 
         let formatted = format_enhanced_analysis_result(&analysis_result);
-        
+
         assert!(formatted.contains("增强型 AI 代码评审报告"));
         assert!(formatted.contains("总体评分**: 85/100"));
         assert!(formatted.contains("需求实现一致性分析"));
@@ -665,7 +607,7 @@ mod tests {
     #[test]
     fn test_perform_enhanced_ai_analysis_data_conversion() {
         use crate::types::devops::*;
-        
+
         let work_item = WorkItem {
             id: 123,
             code: Some(99),
@@ -686,16 +628,14 @@ mod tests {
         };
 
         let work_items = vec![work_item];
-        
+
         // Convert to AnalysisWorkItems
-        let analysis_work_items: Vec<AnalysisWorkItem> = work_items
-            .iter()
-            .map(|item| item.into())
-            .collect();
+        let analysis_work_items: Vec<AnalysisWorkItem> =
+            work_items.iter().map(|item| item.into()).collect();
 
         assert_eq!(analysis_work_items.len(), 1);
         let analysis_item = &analysis_work_items[0];
-        
+
         assert_eq!(analysis_item.id, Some(123));
         assert_eq!(analysis_item.code, Some(99));
         assert_eq!(analysis_item.project_name, Some("测试项目".to_string()));
@@ -707,7 +647,7 @@ mod tests {
     #[test]
     fn test_analysis_depth_parsing() {
         use crate::types::ai::AnalysisDepth;
-        
+
         // Test depth parsing logic
         let basic_depth = match "basic" {
             "basic" => AnalysisDepth::Basic,
@@ -734,7 +674,7 @@ mod tests {
     #[test]
     fn test_output_format_parsing() {
         use crate::types::ai::OutputFormat;
-        
+
         // Test output format parsing logic
         let json_format = match "json" {
             "json" => OutputFormat::Json,
@@ -764,7 +704,7 @@ mod tests {
     #[test]
     fn test_enhanced_analysis_result_formatting_edge_cases() {
         use crate::types::ai::*;
-        
+
         // Test with empty collections
         let minimal_result = AnalysisResult {
             overall_score: 50,
@@ -792,14 +732,14 @@ mod tests {
         };
 
         let formatted = format_enhanced_analysis_result(&minimal_result);
-        
+
         // Should still contain main sections even if they're empty
         assert!(formatted.contains("增强型 AI 代码评审报告"));
         assert!(formatted.contains("总体评分**: 50/100"));
         assert!(formatted.contains("需求实现一致性分析"));
         assert!(formatted.contains("代码质量分析"));
         assert!(formatted.contains("风险评估"));
-        
+
         // Should not contain sections for empty collections
         assert!(!formatted.contains("发现的偏离和问题"));
         assert!(!formatted.contains("改进建议"));
@@ -814,21 +754,22 @@ async fn perform_enhanced_ai_analysis(
     work_items: &[WorkItem],
     review_args: &ReviewArgs,
 ) -> Result<String, AppError> {
-    tracing::debug!("Starting enhanced AI analysis with {} work items", work_items.len());
-    
+    tracing::debug!(
+        "Starting enhanced AI analysis with {} work items",
+        work_items.len()
+    );
+
     // Convert WorkItems to AnalysisWorkItems
-    let analysis_work_items: Vec<AnalysisWorkItem> = work_items
-        .iter()
-        .map(|item| item.into())
-        .collect();
-    
+    let analysis_work_items: Vec<AnalysisWorkItem> =
+        work_items.iter().map(|item| item.into()).collect();
+
     // Parse analysis depth from review args
     let analysis_depth = match review_args.depth.as_str() {
         "basic" => AnalysisDepth::Basic,
         "deep" => AnalysisDepth::Deep,
         _ => AnalysisDepth::Normal,
     };
-    
+
     // Parse output format from review args
     let output_format = match review_args.format.as_str() {
         "json" => OutputFormat::Json,
@@ -836,7 +777,7 @@ async fn perform_enhanced_ai_analysis(
         "html" => OutputFormat::Html,
         _ => OutputFormat::Text,
     };
-    
+
     // Create analysis request
     let analysis_request = AnalysisRequest {
         work_items: analysis_work_items,
@@ -845,14 +786,20 @@ async fn perform_enhanced_ai_analysis(
         analysis_depth,
         output_format,
     };
-    
+
     // Create and use AI analysis engine
     let config_arc = Arc::new(config.clone());
     let analysis_engine = AIAnalysisEngine::new(config_arc);
-    
-    match analysis_engine.analyze_with_requirements(analysis_request).await {
+
+    match analysis_engine
+        .analyze_with_requirements(analysis_request)
+        .await
+    {
         Ok(analysis_result) => {
-            tracing::debug!("AI analysis completed with score: {}", analysis_result.overall_score);
+            tracing::debug!(
+                "AI analysis completed with score: {}",
+                analysis_result.overall_score
+            );
             Ok(format_enhanced_analysis_result(&analysis_result))
         }
         Err(e) => {
@@ -866,11 +813,10 @@ async fn perform_enhanced_ai_analysis(
 mod review_save_tests {
     use super::*;
 
-
     fn create_test_config_for_save() -> AppConfig {
         let mut prompts = std::collections::HashMap::new();
         prompts.insert("review".to_string(), "Test review prompt".to_string());
-        
+
         AppConfig {
             ai: crate::config::AIConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
@@ -878,7 +824,7 @@ mod review_save_tests {
                 temperature: 0.7,
                 api_key: None,
             },
-            tree_sitter: crate::config::TreeSitterConfig::default(),
+            ast_grep: crate::config::AstGrepConfig::default(),
             review: crate::config::ReviewConfig {
                 auto_save: true,
                 storage_path: "~/test_reviews".to_string(),
@@ -895,7 +841,7 @@ mod review_save_tests {
     fn test_format_review_for_saving_markdown() {
         let review_content = "# Test Review\n\nThis is a test review.";
         let formatted = format_review_for_saving(review_content, "markdown");
-        
+
         assert!(formatted.contains("# 🔍 GitAI 代码评审报告"));
         assert!(formatted.contains("**生成时间**:"));
         assert!(formatted.contains("**格式版本**: 1.0"));
@@ -908,9 +854,10 @@ mod review_save_tests {
     fn test_format_review_for_saving_json() {
         let review_content = "Test review content";
         let formatted = format_review_for_saving(review_content, "json");
-        
+
         // Should be valid JSON
-        let parsed: serde_json::Value = serde_json::from_str(&formatted).expect("Should be valid JSON");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&formatted).expect("Should be valid JSON");
         assert_eq!(parsed["review"], "Test review content");
         assert_eq!(parsed["format_version"], "1.0");
         assert_eq!(parsed["generator"], "gitai");
@@ -921,7 +868,7 @@ mod review_save_tests {
     fn test_format_review_for_saving_html() {
         let review_content = "Test review with <special> chars & symbols";
         let formatted = format_review_for_saving(review_content, "html");
-        
+
         assert!(formatted.contains("<!DOCTYPE html>"));
         assert!(formatted.contains("<title>GitAI 代码评审报告</title>"));
         assert!(formatted.contains("&lt;special&gt;"));
@@ -933,7 +880,7 @@ mod review_save_tests {
     fn test_format_review_for_saving_text_default() {
         let review_content = "Simple text review";
         let formatted = format_review_for_saving(review_content, "txt");
-        
+
         assert!(formatted.contains("GitAI 代码评审报告"));
         assert!(formatted.contains("==================="));
         assert!(formatted.contains("生成时间:"));
@@ -947,10 +894,10 @@ mod review_save_tests {
         // For now, we'll test the error handling when Git operations fail
         let config = create_test_config_for_save();
         let review_content = "Test review content for saving";
-        
+
         // This should fail because we're not in a Git repository
         let result = save_review_results(review_content, &config).await;
-        
+
         // Should get an error since we're not in a Git repo
         match result {
             Err(AppError::Generic(msg)) if msg.contains("Git repository") => {
@@ -978,7 +925,7 @@ async fn perform_standard_ai_review(
     git_diff: &GitDiff,
     language_info: &str,
     work_items: &[WorkItem],
-    analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    analysis_results: &Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
 ) -> Result<String, AppError> {
     // Generate AI prompt with enhanced context
     let prompt_result: Result<String, AppError> = generate_ai_review_prompt(
@@ -1004,7 +951,11 @@ async fn perform_standard_ai_review(
         }
         Err(e) => {
             tracing::warn!("AI请求失败: {}，生成离线评审结果", e);
-            Ok(generate_fallback_review(analysis_text, git_diff, &analysis_results))
+            Ok(generate_fallback_review(
+                analysis_text,
+                git_diff,
+                &analysis_results,
+            ))
         }
     }
 }
@@ -1012,40 +963,75 @@ async fn perform_standard_ai_review(
 /// Formats enhanced analysis result for output
 fn format_enhanced_analysis_result(analysis_result: &crate::types::ai::AnalysisResult) -> String {
     let mut output = String::new();
-    
+
     output.push_str("========== 增强型 AI 代码评审报告 ==========\n\n");
-    
+
     // Overall score
-    output.push_str(&format!("📊 **总体评分**: {}/100\n\n", analysis_result.overall_score));
-    
+    output.push_str(&format!(
+        "📊 **总体评分**: {}/100\n\n",
+        analysis_result.overall_score
+    ));
+
     // Requirement consistency
     output.push_str("## 📋 需求实现一致性分析\n");
-    output.push_str(&format!("- 完整性评分: {}/100\n", analysis_result.requirement_consistency.completion_score));
-    output.push_str(&format!("- 准确性评分: {}/100\n", analysis_result.requirement_consistency.accuracy_score));
-    
-    if !analysis_result.requirement_consistency.missing_features.is_empty() {
+    output.push_str(&format!(
+        "- 完整性评分: {}/100\n",
+        analysis_result.requirement_consistency.completion_score
+    ));
+    output.push_str(&format!(
+        "- 准确性评分: {}/100\n",
+        analysis_result.requirement_consistency.accuracy_score
+    ));
+
+    if !analysis_result
+        .requirement_consistency
+        .missing_features
+        .is_empty()
+    {
         output.push_str("- 缺失功能:\n");
         for feature in &analysis_result.requirement_consistency.missing_features {
             output.push_str(&format!("  - {}\n", feature));
         }
     }
-    
-    if !analysis_result.requirement_consistency.extra_implementations.is_empty() {
+
+    if !analysis_result
+        .requirement_consistency
+        .extra_implementations
+        .is_empty()
+    {
         output.push_str("- 额外实现:\n");
-        for extra in &analysis_result.requirement_consistency.extra_implementations {
+        for extra in &analysis_result
+            .requirement_consistency
+            .extra_implementations
+        {
             output.push_str(&format!("  - {}\n", extra));
         }
     }
     output.push('\n');
-    
+
     // Code quality
     output.push_str("## 🔧 代码质量分析\n");
-    output.push_str(&format!("- 整体质量: {}/100\n", analysis_result.code_quality.quality_score));
-    output.push_str(&format!("- 可维护性: {}/100\n", analysis_result.code_quality.maintainability_score));
-    output.push_str(&format!("- 性能评估: {}/100\n", analysis_result.code_quality.performance_score));
-    output.push_str(&format!("- 安全性评估: {}/100\n", analysis_result.code_quality.security_score));
-    output.push_str(&format!("- 结构评估: {}\n\n", analysis_result.code_quality.structure_assessment));
-    
+    output.push_str(&format!(
+        "- 整体质量: {}/100\n",
+        analysis_result.code_quality.quality_score
+    ));
+    output.push_str(&format!(
+        "- 可维护性: {}/100\n",
+        analysis_result.code_quality.maintainability_score
+    ));
+    output.push_str(&format!(
+        "- 性能评估: {}/100\n",
+        analysis_result.code_quality.performance_score
+    ));
+    output.push_str(&format!(
+        "- 安全性评估: {}/100\n",
+        analysis_result.code_quality.security_score
+    ));
+    output.push_str(&format!(
+        "- 结构评估: {}\n\n",
+        analysis_result.code_quality.structure_assessment
+    ));
+
     // Deviations
     if !analysis_result.deviations.is_empty() {
         output.push_str("## ⚠️ 发现的偏离和问题\n");
@@ -1056,30 +1042,39 @@ fn format_enhanced_analysis_result(analysis_result: &crate::types::ai::AnalysisR
                 crate::types::ai::DeviationSeverity::Medium => "🟡",
                 crate::types::ai::DeviationSeverity::Low => "🟢",
             };
-            
-            output.push_str(&format!("{}. {} **{}** - {}\n", 
-                i + 1, severity_icon, deviation.category, deviation.description));
-            
+
+            output.push_str(&format!(
+                "{}. {} **{}** - {}\n",
+                i + 1,
+                severity_icon,
+                deviation.category,
+                deviation.description
+            ));
+
             if let Some(location) = &deviation.file_location {
                 output.push_str(&format!("   📍 位置: {}\n", location));
             }
-            
+
             output.push_str(&format!("   💡 建议: {}\n\n", deviation.suggestion));
         }
     }
-    
+
     // Recommendations
     if !analysis_result.recommendations.is_empty() {
         output.push_str("## 💡 改进建议\n");
         for (i, rec) in analysis_result.recommendations.iter().enumerate() {
-            output.push_str(&format!("{}. **{}** (优先级: {})\n", 
-                i + 1, rec.title, rec.priority));
+            output.push_str(&format!(
+                "{}. **{}** (优先级: {})\n",
+                i + 1,
+                rec.title,
+                rec.priority
+            ));
             output.push_str(&format!("   - 描述: {}\n", rec.description));
             output.push_str(&format!("   - 预期影响: {}\n", rec.expected_impact));
             output.push_str(&format!("   - 工作量估算: {}\n\n", rec.effort_estimate));
         }
     }
-    
+
     // Risk assessment
     output.push_str("## 🎯 风险评估\n");
     let risk_icon = match analysis_result.risk_assessment.risk_level {
@@ -1088,24 +1083,34 @@ fn format_enhanced_analysis_result(analysis_result: &crate::types::ai::AnalysisR
         crate::types::ai::DeviationSeverity::Medium => "🟡",
         crate::types::ai::DeviationSeverity::Low => "🟢",
     };
-    
-    output.push_str(&format!("- {} 风险等级: {:?}\n", risk_icon, analysis_result.risk_assessment.risk_level));
-    output.push_str(&format!("- 业务影响: {}\n", analysis_result.risk_assessment.business_impact));
-    
+
+    output.push_str(&format!(
+        "- {} 风险等级: {:?}\n",
+        risk_icon, analysis_result.risk_assessment.risk_level
+    ));
+    output.push_str(&format!(
+        "- 业务影响: {}\n",
+        analysis_result.risk_assessment.business_impact
+    ));
+
     if !analysis_result.risk_assessment.technical_risks.is_empty() {
         output.push_str("- 技术风险:\n");
         for risk in &analysis_result.risk_assessment.technical_risks {
             output.push_str(&format!("  - {}\n", risk));
         }
     }
-    
-    if !analysis_result.risk_assessment.mitigation_strategies.is_empty() {
+
+    if !analysis_result
+        .risk_assessment
+        .mitigation_strategies
+        .is_empty()
+    {
         output.push_str("- 缓解策略:\n");
         for strategy in &analysis_result.risk_assessment.mitigation_strategies {
             output.push_str(&format!("  - {}\n", strategy));
         }
     }
-    
+
     output.push_str("\n========================================\n");
     output
 }
@@ -1169,7 +1174,7 @@ async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, A
 fn generate_fallback_review(
     analysis_text: &str,
     git_diff: &GitDiff,
-    analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    analysis_results: &Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
 ) -> String {
     let mut review = String::new();
 
@@ -1183,22 +1188,6 @@ fn generate_fallback_review(
             "- 检测到 {} 个文件变更\n",
             analysis.file_analyses.len()
         ));
-        review.push_str(&format!(
-            "- 函数变更: {}\n",
-            analysis.change_analysis.function_changes
-        ));
-        review.push_str(&format!(
-            "- 类型变更: {}\n",
-            analysis.change_analysis.type_changes
-        ));
-        review.push_str(&format!(
-            "- 变更模式: {:?}\n",
-            analysis.change_analysis.change_pattern
-        ));
-        review.push_str(&format!(
-            "- 变更范围: {:?}\n",
-            analysis.change_analysis.change_scope
-        ));
     } else {
         review.push_str(&format!(
             "- 检测到 {} 个文件变更\n",
@@ -1211,7 +1200,7 @@ fn generate_fallback_review(
 
     review.push_str("\n## 建议\n\n");
     review.push_str("- 请检查网络连接和 AI 配置\n");
-    review.push_str("- 建议手动检查代码质量和安全性\n");
+    review.push_str("- 建议手动检查代���质量和安全性\n");
     review.push_str("- 考虑使用本地代码质量工具进行补充检查\n");
 
     review
@@ -1365,16 +1354,10 @@ fn expand_tilde(path: &str) -> String {
 /// Output review statistics for debugging
 fn output_review_stats(
     git_diff: &GitDiff,
-    analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    analysis_results: &Option<crate::ast_grep_analyzer::core::DiffAnalysis>,
 ) {
     if let Some(analysis) = analysis_results {
-        tracing::debug!(
-            "评审统计: 文件数={}, 函数变更={}, 类型变更={}, 方法变更={}",
-            analysis.file_analyses.len(),
-            analysis.change_analysis.function_changes,
-            analysis.change_analysis.type_changes,
-            analysis.change_analysis.method_changes
-        );
+        tracing::debug!("评审统计: 文件数={}", analysis.file_analyses.len(),);
     } else {
         tracing::debug!("评审统计: 文件数={}", git_diff.changed_files.len());
     }
@@ -1386,10 +1369,10 @@ async fn save_review_results(
     config: &AppConfig,
 ) -> Result<std::path::PathBuf, AppError> {
     tracing::debug!("准备保存评审结果到本地文件");
-    
+
     // Generate file path based on current repository and commit
     let file_path = generate_review_file_path(&config.review.storage_path, &config.review.format)?;
-    
+
     // Ensure parent directory exists
     if let Some(parent_dir) = file_path.parent() {
         if !parent_dir.exists() {
@@ -1398,14 +1381,14 @@ async fn save_review_results(
             tracing::debug!("创建目录: {:?}", parent_dir);
         }
     }
-    
+
     // Format review content based on configured format
     let formatted_content = format_review_for_saving(review_content, &config.review.format);
-    
+
     // Write to file
     std::fs::write(&file_path, formatted_content)
         .map_err(|e| AppError::IO(format!("写入评审结果文件失败: {:?}", file_path), e))?;
-    
+
     tracing::debug!("评审结果已成功保存到: {:?}", file_path);
     Ok(file_path)
 }
@@ -1413,16 +1396,15 @@ async fn save_review_results(
 /// Format review content for saving based on the specified format
 fn format_review_for_saving(review_content: &str, format: &str) -> String {
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
-    
+
     match format.to_lowercase().as_str() {
-        "json" => {
-            serde_json::json!({
-                "review": review_content,
-                "timestamp": timestamp.to_string(),
-                "format_version": "1.0",
-                "generator": "gitai"
-            }).to_string()
-        }
+        "json" => serde_json::json!({
+            "review": review_content,
+            "timestamp": timestamp.to_string(),
+            "format_version": "1.0",
+            "generator": "gitai"
+        })
+        .to_string(),
         "html" => {
             let processed_content = review_content
                 .replace("&", "&amp;")

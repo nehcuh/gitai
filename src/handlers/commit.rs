@@ -1,9 +1,9 @@
 use crate::{
-    config::{AppConfig, TreeSitterConfig},
+    config::{AppConfig, AstGrepConfig},
     errors::{AppError, GitError},
     handlers::{ai, git},
-    tree_sitter_analyzer::{
-        analyzer::TreeSitterAnalyzer,
+    ast_grep_analyzer::{
+        analyzer::AstGrepAnalyzer,
         core::{parse_git_diff, DiffAnalysis},
     },
     types::{
@@ -70,7 +70,7 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     
     // Generate commit message using AI with optional Tree-sitter analysis and review context
     let commit_message = if let Some(ref custom_message) = args.message {
-        if args.tree_sitter {
+        if args.ast_grep {
             // Enhanced mode: combine custom message with AI analysis and review
             generate_enhanced_commit_message(config, &diff, Some(custom_message.clone()), &args, review_context.as_deref()).await?
         } else if review_context.is_some() {
@@ -81,8 +81,8 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
             custom_message.clone()
         }
     } else {
-        if args.tree_sitter {
-            // Enhanced mode: full Tree-sitter analysis with AI generation and review
+        if args.ast_grep {
+            // Enhanced mode: full AstGrep analysis with AI generation and review
             generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
         } else {
             // Basic mode: AI generation with optional review context
@@ -189,18 +189,18 @@ async fn generate_enhanced_commit_message(
     args: &CommitArgs,
     review_context: Option<&str>
 ) -> Result<String, AppError> {
-    tracing::info!("🌳 正在使用Tree-sitter增强分析生成提交信息...");
+    tracing::info!("🌳 正在使用AstGrep增强分析生成提交信息...");
     
     let analysis_start = Instant::now();
     
-    // Perform Tree-sitter analysis
-    let analysis_result = match analyze_diff_with_tree_sitter(diff, args).await {
+    // Perform AstGrep analysis
+    let analysis_result = match analyze_diff_with_ast_grep(diff, args).await {
         Ok(result) => {
-            tracing::info!("Tree-sitter分析完成，耗时: {:?}", analysis_start.elapsed());
+            tracing::info!("AstGrep分析完成，耗时: {:?}", analysis_start.elapsed());
             result
         }
         Err(e) => {
-            tracing::warn!("Tree-sitter分析失败，回退到基础模式: {:?}", e);
+            tracing::warn!("AstGrep分析失败，回退到基础模式: {:?}", e);
             return if let Some(msg) = custom_message {
                 if let Some(review) = review_context {
                     Ok(format_custom_message_with_review(&msg, review))
@@ -217,13 +217,13 @@ async fn generate_enhanced_commit_message(
     generate_commit_message_with_analysis(config, diff, &analysis_result, custom_message, review_context).await
 }
 
-/// Analyze diff using Tree-sitter
-async fn analyze_diff_with_tree_sitter(
+/// Analyze diff using AstGrep
+async fn analyze_diff_with_ast_grep(
     diff: &str,
     args: &CommitArgs,
 ) -> Result<(String, Option<DiffAnalysis>), AppError> {
-    // Initialize TreeSitter analyzer with analysis depth
-    let mut ts_config = TreeSitterConfig::default();
+    // Initialize AstGrep analyzer with analysis depth
+    let mut ts_config = AstGrepConfig::default();
     
     // Set analysis depth based on args
     if let Some(depth) = &args.depth {
@@ -232,27 +232,27 @@ async fn analyze_diff_with_tree_sitter(
         ts_config.analysis_depth = "medium".to_string(); // Default for commit
     }
     
-    let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
-        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-        AppError::TreeSitter(e)
+    let mut analyzer = AstGrepAnalyzer::new(ts_config).map_err(|e| {
+        tracing::error!("AstGrep分析器初始化失败: {:?}", e);
+        AppError::Analysis(e)
     })?;
 
     // Parse the diff to get structured representation
     let git_diff = parse_git_diff(diff).map_err(|e| {
         tracing::error!("解析Git差异失败: {:?}", e);
-        AppError::TreeSitter(e)
+        AppError::Analysis(e)
     })?;
 
-    // Generate analysis using TreeSitter
+    // Generate analysis using AstGrep
     let analysis = analyzer.analyze_diff(diff).map_err(|e| {
         tracing::error!("执行差异分析失败: {:?}", e);
-        AppError::TreeSitter(e)
+        AppError::Analysis(e)
     })?;
     
     tracing::debug!("差异分析结果: {:?}", analysis);
 
     // Create detailed analysis text
-    let analysis_text = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
+    let analysis_text = format_ast_grep_analysis_for_commit(&analysis, &git_diff);
 
     Ok((analysis_text, Some(analysis)))
 }
@@ -277,12 +277,12 @@ async fn generate_commit_message_with_analysis(
     
     let mut user_prompt = if let Some(ref custom_msg) = custom_message {
         format!(
-            "用户提供的提交信息：\n{}\n\n基于以下代码分析，请生成增强的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## Tree-sitter 分析结果:\n{}\n\n要求：\n1. 保留用户原始意图\n2. 添加技术细节和影响分析\n3. 使用结构化格式\n4. 包含代码变更摘要",
+            "用户提供的提交信息：\n{}\n\n基于以下代码分析，请生成增强的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## AstGrep 分析结果:\n{}\n\n要求：\n1. 保留用户原始意图\n2. 添加技术细节和影响分析\n3. 使用结构化格式\n4. 包含代码变更摘要",
             custom_msg, diff, analysis_text
         )
     } else {
         format!(
-            "请根据以下代码变更和静态分析结果生成专业的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## Tree-sitter 分析结果:\n{}\n\n要求：\n1. 主标题简洁明确（<50字符）\n2. 包含变更的技术细节\n3. 说明影响范围和复杂度\n4. 使用规范的提交信息格式",
+            "请根据以下代码变更和静态分析结果生成专业的提交信息：\n\n## Git Diff:\n```diff\n{}\n```\n\n## AstGrep 分析结果:\n{}\n\n要求：\n1. 主标题简洁明确（<50字符）\n2. 包含变更的技术细节\n3. 说明影响范围和复杂度\n4. 使用规范的提交信息格式",
             diff, analysis_text
         )
     };
@@ -305,7 +305,7 @@ async fn generate_commit_message_with_analysis(
         },
     ];
     
-    match ai::execute_ai_request_generic(config, messages, "Tree-sitter增强提交信息生成", true).await {
+    match ai::execute_ai_request_generic(config, messages, "AstGrep增强提交信息生成", true).await {
         Ok(message) => {
             let enhanced_message = format_enhanced_commit_message(&message, analysis_data, custom_message.is_some());
             Ok(enhanced_message)
@@ -314,60 +314,33 @@ async fn generate_commit_message_with_analysis(
             tracing::error!("增强提交信息生成失败: {:?}", e);
             // Fallback to custom message or basic generation
             if let Some(ref msg) = custom_message {
-                Ok(format!("{}\n\n[Tree-sitter 分析可用但AI生成失败]", msg))
+                Ok(format!("{}\n\n[AstGrep 分析可用但AI生成失败]", msg))
             } else {
-                Ok("feat: 代码更新\n\n[Tree-sitter 分析完成但AI生成失败]".to_string())
+                Ok("feat: 代码更新\n\n[AstGrep 分析完成但AI生成失败]".to_string())
             }
         }
     }
 }
 
-/// Format Tree-sitter analysis for commit message generation
-fn format_tree_sitter_analysis_for_commit(
+/// Format AstGrep analysis for commit message generation
+fn format_ast_grep_analysis_for_commit(
     analysis: &DiffAnalysis,
     _git_diff: &GitDiff,
 ) -> String {
     let mut result = String::new();
     
     result.push_str("### 代码分析摘要\n");
-    result.push_str(&format!("- 变更模式: {:?}\n", analysis.change_analysis.change_pattern));
-    result.push_str(&format!("- 影响范围: {:?}\n", analysis.change_analysis.change_scope));
     result.push_str(&format!("- 总体摘要: {}\n", analysis.overall_summary));
     
     if !analysis.file_analyses.is_empty() {
         result.push_str("\n### 文件变更详情\n");
         for file_analysis in &analysis.file_analyses {
             result.push_str(&format!("**{}** ({})\n", file_analysis.path.display(), file_analysis.language));
-            result.push_str(&format!("  - 变更类型: {:?}\n", file_analysis.change_type));
             if let Some(ref summary) = file_analysis.summary {
                 result.push_str(&format!("  - 摘要: {}\n", summary));
             }
-            
-            if !file_analysis.affected_nodes.is_empty() {
-                result.push_str("  - 影响的代码结构:\n");
-                for node in &file_analysis.affected_nodes {
-                    let change_type_str = node.change_type.as_deref().unwrap_or("未知");
-                    result.push_str(&format!("    • {} ({}): {}\n", 
-                        node.node_type, 
-                        &node.name, 
-                        change_type_str
-                    ));
-                }
-            }
             result.push('\n');
         }
-    }
-    
-    // Add change statistics
-    let change_analysis = &analysis.change_analysis;
-    if change_analysis.function_changes > 0 {
-        result.push_str(&format!("### 函数变更: {} 个\n", change_analysis.function_changes));
-        result.push('\n');
-    }
-    
-    if change_analysis.type_changes > 0 {
-        result.push_str(&format!("### 类型变更: {} 个\n", change_analysis.type_changes));
-        result.push('\n');
     }
     
     result
@@ -384,26 +357,14 @@ fn format_enhanced_commit_message(
     // Add the AI-generated message
     result.push_str(ai_message.trim());
     
-    // Add Tree-sitter analysis summary if available
+    // Add AstGrep analysis summary if available
     if let Some(analysis) = analysis_data {
         result.push_str("\n\n");
         result.push_str("---\n");
-        result.push_str("## 🌳 Tree-sitter 分析\n");
-        result.push_str(&format!("变更模式: {:?} | 影响范围: {:?}\n", 
-            analysis.change_analysis.change_pattern,
-            analysis.change_analysis.change_scope
-        ));
+        result.push_str("## 🌳 AstGrep 分析\n");
         
         if !analysis.file_analyses.is_empty() {
             result.push_str(&format!("分析文件: {} 个", analysis.file_analyses.len()));
-            
-            let total_nodes: usize = analysis.file_analyses.iter()
-                .map(|f| f.affected_nodes.len())
-                .sum();
-                
-            if total_nodes > 0 {
-                result.push_str(&format!(" | 影响节点: {} 个", total_nodes));
-            }
         }
         
         if has_custom_message {

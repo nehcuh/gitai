@@ -63,10 +63,10 @@ pub enum GitaiSubCommand {
 /// Arguments for the `commit` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct CommitArgs {
-    /// Enable Tree-sitter syntax analysis for improved commit messages.
+    /// Enable AstGrep syntax analysis for improved commit messages.
     /// Optional value can specify analysis depth: 'shallow', 'medium' (default), or 'deep'.
-    #[clap(short = 't', long = "tree-sitter")]
-    pub tree_sitter: bool,
+    #[clap(short = 't', long = "ast-grep")]
+    pub ast_grep: bool,
 
     /// When `tree-sitter` flag is enabled, this argument is used to control the analysis depth
     #[clap(short = 'l', long = "level", value_name = "TREESITTER_LEVEL")]
@@ -116,9 +116,9 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "FILE")]
     pub output: Option<String>,
 
-    /// Use tree-sitter for enhanced code analysis (enabled by default)
-    #[clap(long = "tree-sitter", alias = "ts")]
-    pub tree_sitter: bool,
+    /// Use ast-grep for enhanced code analysis (enabled by default)
+    #[clap(long = "ast-grep", alias = "ag")]
+    pub ast_grep: bool,
 
     /// First commit reference
     #[clap(long, value_name = "COMMIT")]

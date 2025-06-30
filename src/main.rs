@@ -2,7 +2,7 @@ pub mod clients;
 mod config;
 mod errors;
 mod handlers;
-mod tree_sitter_analyzer;
+mod ast_grep_analyzer;
 mod types;
 mod utils;
 

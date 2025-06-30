@@ -19,7 +19,7 @@ pub async fn handle_help(
     if args.iter().any(|arg| arg == "commit" || arg == "cm") {
         if args.iter().any(|arg| {
             arg == "-t"
-                || arg == "--tree-sitter"
+                || arg == "--ast-grep"
                 || arg == "-l"
                 || arg == "--level"
                 || arg == "-r"

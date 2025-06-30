@@ -3,7 +3,7 @@ pub mod errors;
 pub mod handlers;
 pub mod types;
 pub mod utils;
-pub mod tree_sitter_analyzer;
+pub mod ast_grep_analyzer;
 pub mod clients;
 
 // Re-export commonly used items for convenience
