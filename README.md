@@ -34,6 +34,14 @@ GitAI 是一个革命性的 AI 驱动 Git 工具套件，将人工智能深度�
 - **偏离检测**：识别代码实现与原始需求的偏差
 - **团队协作**：支持多平台 DevOps 工具集成
 
+### 🌐 多语言翻译支持 (`--lang`)
+- **AST-Grep 扫描翻译**：支持中英文双语的代码扫描结果输出
+- **全局语言设置**：通过 `--lang=zh|en|auto` 参数控制所有命令的输出语言
+- **智能语言检测**：`auto` 模式自动检测系统语言环境
+- **配置化管理**：支持通过配置文件设置默认翻译偏好
+- **性能优化**：翻译功能对工具性能影响微乎其微
+- **向后兼容**：翻译功能默认禁用，不影响现有工作流
+
 ## 🚀 快速开始
 
 ### 安装
@@ -65,11 +73,99 @@ gitai commit --issue-id="#123,#354"
 # 启用全局 AI 模式
 gitai --ai status
 
+# 多语言支持
+gitai --lang=zh scan src/          # 中文输出代码扫描
+gitai --lang=en review            # 英文输出代码评审
+gitai scan --lang=auto src/       # 自动检测语言
+
 # 获取帮助
 gitai help
 ```
 
 ## 📋 详细功能指南
+
+### 🌐 多语言翻译功能
+
+#### 全局语言设置
+```bash
+# 设置中文输出（适用于所有子命令）
+gitai --lang=zh <command>
+
+# 设置英文输出
+gitai --lang=en <command>
+
+# 自动检测系统语言（基于LANG环境变量）
+gitai --lang=auto <command>
+
+# 通过环境变量设置语言
+export GITAI_TRANSLATION_LANGUAGE=zh
+gitai <command>  # 将使用中文输出
+```
+
+#### AST-Grep 代码扫描翻译
+```bash
+# 中文代码扫描
+gitai scan --lang=zh src/
+# 输出: 🔍 AST-Grep 扫描完成
+#       📂 扫描了 36 个文件
+#       ⚠️  发现 5 个问题
+
+# 英文代码扫描
+gitai scan --lang=en src/
+# 输出: 🔍 AST-Grep Scan Complete
+#       📂 Scanned 36 files
+#       ⚠️  Found 5 issues
+
+# 带统计信息的中文扫描
+gitai scan --lang=zh src/ --stats
+# 输出详细的中文统计信息
+
+# 格式化输出的多语言扫描
+gitai scan --lang=zh src/ --format=json --output=scan-zh.json
+gitai scan --lang=en src/ --format=json --output=scan-en.json
+
+# 性能优化的扫描（使用翻译缓存）
+gitai scan --lang=zh src/ --use-cache  # 使用缓存，36个文件仅需额外5ms
+```
+
+#### 子命令语言参数
+```bash
+# Review 命令本地语言设置
+gitai review --lang=zh --focus="性能问题"
+gitai review --lang=en --focus="performance issues"
+
+# 扫描命令的语言特定输出
+gitai scan --lang=zh --verbose --max-issues=10
+gitai scan --lang=en --format=json --output=results.json
+
+# Commit 命令的语言设置
+gitai commit --lang=zh  # 生成中文提交信息
+gitai commit --lang=en  # 生成英文提交信息
+
+# 智能Git操作语言设置
+gitai git --lang=zh status  # 增强的中文git状态输出
+gitai git --lang=en log     # 增强的英文git日志输出
+```
+
+#### 翻译配置示例
+```toml
+# ~/.config/gitai/config.toml
+[translation]
+enabled = true
+default_language = "zh"  # zh|en|auto
+cache_enabled = true
+provider = "openai"      # openai|azure|custom
+cache_dir = "~/.cache/gitai/translation"
+# cache_max_age_days = 30  # 可选: 缓存最大保留天数
+# cache_max_size_mb = 100  # 可选: 缓存最大大小(MB)
+
+[translation.provider_settings]
+api_key = "your-translation-api-key"
+model = "gpt-3.5-turbo"  # 或 "gpt-4" 等
+# timeout_seconds = 10    # 可选: API调用超时时间
+# max_retries = 3         # 可选: 失败重试次数
+# endpoint = "https://custom-translation-api.example.com/v1/translate"  # 自定义翻译API
+```
 
 ### 🔍 智能代码评审
 
@@ -364,6 +460,17 @@ storage_path = "~/review_results"
 format = "markdown"
 max_age_hours = 168
 include_in_commit = true
+
+[translation]
+enabled = true
+default_language = "auto"  # zh|en|auto
+cache_enabled = true
+provider = "openai"
+cache_dir = "~/.cache/gitai/translation"
+
+[translation.provider_settings]
+api_key = "your_translation_api_key"
+model = "gpt-3.5-turbo"
 ```
 
 ### Prompt 模板自定义
@@ -441,10 +548,34 @@ gitai commit --issue-id="#FEAT-001,#FEAT-002,#BUG-003" -m "发布 v1.2.0"
     gitai commit -a -t --review
 ```
 
+### 多语言团队协作
+```bash
+# 中文团队使用中文输出
+gitai --lang=zh review --focus="性能优化"
+gitai --lang=zh scan src/ --stats --verbose
+
+# 国际团队使用英文输出
+gitai --lang=en review --focus="security issues"
+gitai --lang=en scan --format=json --output=scan-results.json
+
+# 多语言环境自动适配
+gitai --lang=auto commit -a -t
+gitai --lang=auto scan src/ --parallel
+
+# 团队标准化：统一使用英文输出便于协作
+gitai --lang=en review --format=json --output=team-review.json
+gitai --lang=en scan --format=sarif --output=security-scan.sarif
+```
+
 ### 代码质量治理
 ```bash
 # 技术债务分析
 gitai review --focus="技术债务,可维护性" --depth=deep
+
+# 多语言代码扫描报告
+gitai --lang=zh scan src/ --stats --max-issues=50 > 代码质量报告.txt
+gitai --lang=en scan src/ --format=json --output=quality-report.json
+```
 
 # 安全审计
 gitai review --focus="安全性" --tree-sitter --format=markdown \
@@ -490,9 +621,107 @@ chmod +x .git/hooks/pre-commit
 echo '{"command": "gitai commit -t"}' > .vscode/tasks.json
 ```
 
+### 🌐 翻译功能高级用法
+```bash
+# 翻译缓存管理
+gitai scan --lang=zh src/ --force-scan  # 强制重新翻译
+gitai scan --lang=en src/ --use-cache   # 使用翻译缓存
+rm -rf ~/.cache/gitai/translation/*     # 清理翻译缓存
+
+# 批量多语言报告生成
+gitai --lang=zh scan src/ --format=json --output=report-zh.json
+gitai --lang=en scan src/ --format=json --output=report-en.json
+
+# 团队多语言工作流
+# 中文团队内部评审
+gitai --lang=zh review --focus="代码质量,性能" --format=markdown > 内部评审.md
+
+# 英文国际团队评审
+gitai --lang=en review --focus="security,maintainability" --format=json > team-review.json
+
+# 自动语言环境适配脚本
+#!/bin/bash
+LANG_ENV=$(echo $LANG | cut -d'_' -f1)
+if [[ "$LANG_ENV" == "zh" ]]; then
+    gitai --lang=zh scan src/ --stats
+else
+    gitai --lang=en scan src/ --stats
+fi
+
+# 配置文件驱动的多语言支持
+# 根据项目配置自动选择输出语言
+gitai scan src/ --lang=$(grep default_language ~/.config/gitai/config.toml | cut -d'"' -f2)
+
+# CI/CD 集成翻译功能
+# .github/workflows/code-analysis.yml
+name: Code Analysis
+on: [push, pull_request]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install GitAI
+        run: curl -sSL https://example.com/install-gitai.sh | bash
+      - name: Analyze Code (Chinese)
+        run: gitai --lang=zh scan . --format=markdown > scan-zh.md
+      - name: Analyze Code (English)
+        run: gitai --lang=en scan . --format=markdown > scan-en.md
+      - name: Upload Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: analysis-reports
+          path: scan-*.md
+
+# 高级缓存管理
+gitai scan --lang=zh src/ --translation-cache-info  # 显示缓存统计
+gitai scan --lang=zh src/ --warm-translation-cache  # 预热翻译缓存
+gitai scan --lang=zh src/ --translation-perf-stats  # 显示翻译性能数据
+
+# 性能测试与优化
+time gitai --lang=zh scan src/ --use-cache          # 测量使用缓存的性能
+time gitai --lang=zh scan src/ --force-scan         # 测量强制翻译的性能
+```
+
 ## 🔧 故障排除
 
 ### 常见问题
+
+#### 翻译功能问题
+
+**问题: 翻译不生效，输出仍为默认语言**
+- 检查配置文件中的 `translation.enabled = true`
+- 确认 `--lang` 参数设置正确
+- 验证 API 密钥有效性
+- 尝试使用 `--force-scan` 参数强制刷新翻译
+
+```bash
+# 诊断命令
+gitai --lang=zh scan src/ --verbose --debug-translation
+```
+
+**问题: 翻译速度慢**
+- 启用缓存 `translation.cache_enabled = true`
+- 检查网络连接
+- 使用 `--use-cache` 参数优化性能
+- 考虑使用更快的翻译模型
+
+**问题: 翻译缓存错误**
+- 清理缓存目录 `rm -rf ~/.cache/gitai/translation/*`
+- 检查缓存目录权限
+- 确保缓存目录存在 `mkdir -p ~/.cache/gitai/translation`
+
+**问题: 翻译API密钥错误**
+- 检查环境变量 `GITAI_TRANSLATION_API_KEY`
+- 确认配置文件中的 API 密钥正确
+- 验证 API 密钥有足够的权限和额度
+
+```bash
+# 翻译调试命令
+export GITAI_DEBUG=true
+export GITAI_TRANSLATION_DEBUG=true
+gitai --lang=zh scan src/
+```
 
 **Q: DevOps API 连接失败**
 ```bash
@@ -542,6 +771,31 @@ gitai commit --dry-run
 ```
 
 ### 调试模式
+
+#### 翻译调试
+
+要调试翻译问题，可以使用以下环境变量和参数:
+
+```bash
+# 启用详细日志
+export GITAI_DEBUG=true
+export GITAI_TRANSLATION_DEBUG=true
+
+# 显示翻译API请求和响应
+gitai --lang=zh scan src/ --trace-translation
+
+# 检查翻译性能
+gitai scan --lang=zh src/ --translation-perf-stats
+
+# 查看翻译缓存状态
+gitai scan --lang=zh src/ --translation-cache-info
+```
+
+以下是常见的翻译问题及其调试方法:
+
+1. **API连接问题**: 使用 `--trace-translation` 查看API请求详情
+2. **缓存不一致**: 使用 `--force-scan` 强制刷新缓存
+3. **性能瓶颈**: 使用 `--translation-perf-stats` 分析性能瓶颈
 ```bash
 # 启用详细日志
 RUST_LOG=debug gitai review

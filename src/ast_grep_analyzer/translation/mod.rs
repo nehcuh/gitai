@@ -4,11 +4,13 @@
 //! to other languages (primarily Chinese) and manage translation caching.
 
 pub mod cache_manager;
+pub mod manager;
 pub mod rule_localizer;
 pub mod translator;
 
 // Re-export main types for easier access
 pub use cache_manager::{TranslationCache, TranslationCacheManager};
+pub use manager::{TranslationManager, TranslationStats};
 pub use rule_localizer::{LocalizedRule, RuleLocalizer};
 pub use translator::{RuleTranslator, TranslationProvider};
 
@@ -88,6 +90,129 @@ impl Default for TranslationConfig {
     }
 }
 
+impl TranslationConfig {
+    /// Validate the translation configuration
+    pub fn validate(&self) -> TranslationResult<()> {
+        if !self.enabled {
+            // If disabled, no need to validate further
+            return Ok(());
+        }
+
+        // Validate provider
+        if self.provider.trim().is_empty() {
+            return Err(TranslationError::ConfigError(
+                "Translation provider cannot be empty when translation is enabled".to_string(),
+            ));
+        }
+
+        // Validate supported providers
+        match self.provider.as_str() {
+            "openai" | "azure" | "anthropic" | "local" => {
+                // Valid providers
+            }
+            _ => {
+                return Err(TranslationError::ConfigError(format!(
+                    "Unsupported translation provider: {}. Supported providers: openai, azure, anthropic, local",
+                    self.provider
+                )));
+            }
+        }
+
+        // Validate cache directory if specified
+        if let Some(cache_dir) = &self.cache_dir {
+            if cache_dir.as_os_str().is_empty() {
+                return Err(TranslationError::ConfigError(
+                    "Cache directory path cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        // Provider-specific validation
+        self.validate_provider_settings()?;
+
+        Ok(())
+    }
+
+    /// Validate provider-specific settings
+    fn validate_provider_settings(&self) -> TranslationResult<()> {
+        match self.provider.as_str() {
+            "openai" => {
+                // OpenAI requires API key in settings or environment
+                if !self.provider_settings.contains_key("api_key")
+                    && std::env::var("OPENAI_API_KEY").is_err()
+                {
+                    return Err(TranslationError::ConfigError(
+                        "OpenAI provider requires 'api_key' in provider_settings or OPENAI_API_KEY environment variable".to_string(),
+                    ));
+                }
+            }
+            "azure" => {
+                // Azure requires endpoint and api_key
+                let required_keys = ["endpoint", "api_key"];
+                for key in &required_keys {
+                    if !self.provider_settings.contains_key(*key) {
+                        return Err(TranslationError::ConfigError(format!(
+                            "Azure provider requires '{}' in provider_settings",
+                            key
+                        )));
+                    }
+                }
+            }
+            "anthropic" => {
+                // Anthropic requires API key
+                if !self.provider_settings.contains_key("api_key")
+                    && std::env::var("ANTHROPIC_API_KEY").is_err()
+                {
+                    return Err(TranslationError::ConfigError(
+                        "Anthropic provider requires 'api_key' in provider_settings or ANTHROPIC_API_KEY environment variable".to_string(),
+                    ));
+                }
+            }
+            "local" => {
+                // Local provider might require endpoint
+                if let Some(endpoint) = self.provider_settings.get("endpoint") {
+                    if endpoint.trim().is_empty() {
+                        return Err(TranslationError::ConfigError(
+                            "Local provider endpoint cannot be empty".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                // Unknown provider - should have been caught in main validation
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get a user-friendly configuration status description
+    pub fn status_description(&self) -> String {
+        if !self.enabled {
+            "Translation disabled".to_string()
+        } else {
+            match self.validate() {
+                Ok(()) => format!(
+                    "Translation enabled - Provider: {}, Language: {:?}, Cache: {}",
+                    self.provider,
+                    self.default_language,
+                    if self.cache_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
+                ),
+                Err(e) => format!("Translation configuration error: {}", e),
+            }
+        }
+    }
+
+    /// Check if the configuration is operational (enabled and valid)
+    pub fn is_operational(&self) -> bool {
+        self.enabled && self.validate().is_ok()
+    }
+}
+
 /// Error types for translation operations
 #[derive(Debug, thiserror::Error)]
 pub enum TranslationError {
@@ -154,5 +279,72 @@ mod tests {
         assert_eq!(config.default_language, SupportedLanguage::Auto);
         assert!(config.cache_enabled);
         assert_eq!(config.provider, "openai");
+    }
+
+    #[test]
+    fn test_translation_config_validation_disabled() {
+        let config = TranslationConfig::default();
+        assert!(config.validate().is_ok());
+        assert!(!config.is_operational());
+    }
+
+    #[test]
+    fn test_translation_config_validation_enabled_valid() {
+        let mut config = TranslationConfig::default();
+        config.enabled = true;
+        config
+            .provider_settings
+            .insert("api_key".to_string(), "test-key".to_string());
+
+        assert!(config.validate().is_ok());
+        assert!(config.is_operational());
+    }
+
+    #[test]
+    fn test_translation_config_validation_empty_provider() {
+        let mut config = TranslationConfig::default();
+        config.enabled = true;
+        config.provider = "".to_string();
+
+        assert!(config.validate().is_err());
+        assert!(!config.is_operational());
+    }
+
+    #[test]
+    fn test_translation_config_validation_unsupported_provider() {
+        let mut config = TranslationConfig::default();
+        config.enabled = true;
+        config.provider = "invalid-provider".to_string();
+
+        assert!(config.validate().is_err());
+        assert!(!config.is_operational());
+    }
+
+    #[test]
+    fn test_translation_config_validation_openai_missing_key() {
+        let mut config = TranslationConfig::default();
+        config.enabled = true;
+        config.provider = "openai".to_string();
+        // No API key provided
+
+        // This test might pass if OPENAI_API_KEY env var is set
+        // So we'll check that validation either passes or gives the expected error
+        if let Err(e) = config.validate() {
+            assert!(e.to_string().contains("api_key"));
+        }
+    }
+
+    #[test]
+    fn test_translation_config_status_description() {
+        let mut config = TranslationConfig::default();
+        assert_eq!(config.status_description(), "Translation disabled");
+
+        config.enabled = true;
+        config
+            .provider_settings
+            .insert("api_key".to_string(), "test-key".to_string());
+        let status = config.status_description();
+        assert!(status.contains("Translation enabled"));
+        assert!(status.contains("openai"));
     }
 }

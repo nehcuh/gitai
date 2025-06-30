@@ -919,6 +919,20 @@ impl AppConfig {
         } else {
             TranslationConfig::default()
         };
+
+        // Validate translation configuration
+        if let Err(e) = translation_config.validate() {
+            tracing::warn!("Translation configuration validation failed: {}", e);
+            tracing::info!(
+                "Translation status: {}",
+                translation_config.status_description()
+            );
+        } else if translation_config.enabled {
+            tracing::info!(
+                "Translation status: {}",
+                translation_config.status_description()
+            );
+        }
         // --- End Translation Configuration Loading ---
 
         if prompts.is_empty() {

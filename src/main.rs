@@ -6,6 +6,8 @@ mod handlers;
 mod types;
 mod utils;
 
+use ast_grep_analyzer::translation::SupportedLanguage;
+
 use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
@@ -55,6 +57,38 @@ async fn main() -> Result<(), AppError> {
         use_ai = true;
     } else {
         tracing::info!("智能启用 AI 能力");
+    }
+
+    // Extract and parse --lang parameter
+    let mut language_override: Option<SupportedLanguage> = None;
+
+    // Find --lang parameter
+    let mut i = 0;
+    while i < args.len() {
+        if let Some(arg) = args.get(i) {
+            if arg.starts_with("--lang=") {
+                // Handle --lang=value format
+                let lang_value = arg.strip_prefix("--lang=").unwrap();
+                language_override = parse_language_parameter(lang_value);
+                args.remove(i);
+                continue;
+            } else if arg == "--lang" && i + 1 < args.len() {
+                // Handle --lang value format
+                if let Some(lang_value) = args.get(i + 1) {
+                    language_override = parse_language_parameter(lang_value);
+                    args.remove(i); // Remove --lang
+                    args.remove(i); // Remove value (index shifts after first removal)
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // Apply language override to config if provided
+    if let Some(lang) = language_override {
+        config.translation.default_language = lang.clone();
+        tracing::info!("Language override applied: {:?}", lang);
     }
 
     // Filter ai flags
@@ -120,4 +154,20 @@ async fn main() -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+/// Parse language parameter from command line argument
+fn parse_language_parameter(lang_str: &str) -> Option<SupportedLanguage> {
+    match lang_str.to_lowercase().as_str() {
+        "zh" | "chinese" | "中文" => Some(SupportedLanguage::Chinese),
+        "en" | "english" | "英文" => Some(SupportedLanguage::English),
+        "auto" | "自动" => Some(SupportedLanguage::Auto),
+        _ => {
+            tracing::warn!(
+                "Unsupported language parameter: {}. Supported values: zh, en, auto",
+                lang_str
+            );
+            None
+        }
+    }
 }

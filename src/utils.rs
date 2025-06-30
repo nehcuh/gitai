@@ -199,6 +199,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("                     （可选，启用该选项会使用 AI 捕获标准输出与错误输出，即使运行成功也会启用 AI 解释，默认仅捕捉错误信息）\n");
     help.push_str("  --noai              禁用 AI 功能\n");
     help.push_str("                     （可选，启用该选项会使得 gitai 退化为标准 git）\n");
+    help.push_str("  --lang=LANG         设置翻译语言 (zh|en|auto)\n");
+    help.push_str("                     （可选，影响所有子命令的输出语言，auto为自动检测）\n");
     // Subcommands
     help.push_str("Gitai 特有命令:\n");
     help.push_str("  commit (cm)         增强的 git commit 命令，提供 AI 生成提交信息\n");
@@ -212,7 +214,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      -m, --message   直接传递消息给提交\n");
     help.push_str("      --issue-id=ISSUE_IDS\n");
     help.push_str("                      在提交信息前添加issue ID前缀 (例如: \"#123,#354\")\n");
-    help.push_str("      -r, --review        在提交前执行代码评审\n\n");
+    help.push_str("      -r, --review        在提交前执行代码评审\n");
+    help.push_str("      注意: commit命令可与全局--lang参数结合使用\n\n");
 
     help.push_str("  review (rv)          执行 AI 辅助的代码评审\n");
     help.push_str("    选项:\n");
@@ -241,7 +244,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --output=FILE    输出文件路径\n");
     help.push_str("      --max-issues=NUM 最大问题数量 (0=无限制)\n");
     help.push_str("      --parallel       启用并行处理\n");
-    help.push_str("      --verbose        详细输出\n\n");
+    help.push_str("      --verbose        详细输出\n");
+    help.push_str("      注意: scan命令支持全局--lang参数用于本地化输出\n\n");
 
     help.push_str("  update-rules (ur)   更新 AST-Grep 规则到最新版本\n");
     help.push_str("    选项:\n");
@@ -252,22 +256,38 @@ pub fn generate_gitai_help() -> String {
     help.push_str("      --backup         更新前备份现有规则\n");
     help.push_str("      --verify         下载后验证规则\n");
     help.push_str("      --list-sources   列出可用的规则源\n");
-    help.push_str("      --verbose        详细输出\n\n");
+    help.push_str("      --verbose        详细输出\n");
+    help.push_str("      注意: update-rules命令支持全局--lang参数用于本地化输出\n\n");
 
     help.push_str("标准 git 命令:\n");
     help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
-    help.push_str("  gitai status, gitai add, gitai push, 等等\n\n");
+    help.push_str("  gitai status, gitai add, gitai push, 等等\n");
+    help.push_str("  注意: 标准 git 命令也可与全局--lang参数结合使用\n\n");
     help.push_str("示例:\n");
+    help.push_str("基本使用:\n");
     help.push_str("  gitai commit        使用 AI 辅助生成提交信息\n");
     help.push_str("  gitai commit --noai 禁用 AI，使用标准 git commit\n");
     help.push_str("  gitai review        对当前更改执行 AI 辅助代码评审\n");
-    help.push_str("  gitai review --focus=\"性能问题\" --lang=zh\n");
-    help.push_str("                      执行代码评审，重点关注性能问题，使用中文\n");
     help.push_str("  gitai scan          扫描当前目录的代码质量问题\n");
+    help.push_str("  gitai update-rules  更新 AST-Grep 规则到最新版本\n\n");
+    help.push_str("翻译功能示例:\n");
+    help.push_str("  gitai --lang=zh commit\n");
+    help.push_str("                      使用中文生成提交信息和输出\n");
+    help.push_str("  gitai --lang=en review --focus=\"performance\"\n");
+    help.push_str("                      使用英文执行性能相关的代码评审\n");
+    help.push_str("  gitai review --lang=zh --focus=\"安全问题\"\n");
+    help.push_str("                      执行代码评审，重点关注安全问题，使用中文输出\n");
+    help.push_str("  gitai --lang=auto scan src/ --verbose\n");
+    help.push_str("                      自动检测语言，详细扫描 src 目录\n");
+    help.push_str("  gitai --lang=zh update-rules --list-sources\n");
+    help.push_str("                      使用中文列出所有可用的规则源\n\n");
+    help.push_str("高级功能示例:\n");
     help.push_str("  gitai scan src/ --format=json --max-issues=10\n");
     help.push_str("                      扫描 src 目录，输出 JSON 格式，最多10个问题\n");
-    help.push_str("  gitai update-rules  更新 AST-Grep 规则到最新版本\n");
-    help.push_str("  gitai ur --list-sources 列出所有可用的规则源\n");
+    help.push_str("  gitai review --no-scan --lang=en\n");
+    help.push_str("                      禁用自动扫描的英文代码评审\n");
+    help.push_str("  gitai ur --source=github --backup --lang=zh\n");
+    help.push_str("                      从GitHub更新规则，备份现有规则，使用中文输出\n");
 
     help.push_str("参考：原始 git 命令:\n");
     help.push_str(

@@ -3,6 +3,7 @@ use crate::{
         core::{CodeIssue, IssueSeverity, create_analysis_engine},
         language_support::{LanguageStats, LanguageSupport},
         rule_manager::RuleManager,
+        translation::{SupportedLanguage, TranslationManager},
     },
     config::AppConfig,
     errors::AppError,
@@ -121,11 +122,34 @@ impl ScanStats {
 }
 
 /// Main scan handler
-pub async fn handle_scan(_config: &AppConfig, args: &ScanArgs) -> Result<(), AppError> {
+pub async fn handle_scan(config: &AppConfig, args: &ScanArgs) -> Result<(), AppError> {
     let start_time = Instant::now();
 
-    info!("🔍 开始代码扫描");
-    info!("目标路径: {}", args.target);
+    // Initialize translation manager
+    let mut translation_manager = TranslationManager::new(config.translation.clone())
+        .map_err(|e| AppError::Generic(format!("Failed to create translation manager: {}", e)))?;
+
+    translation_manager.initialize().await.map_err(|e| {
+        AppError::Generic(format!("Failed to initialize translation manager: {}", e))
+    })?;
+
+    let is_chinese = translation_manager.is_enabled()
+        && translation_manager.target_language() == &SupportedLanguage::Chinese;
+
+    let scan_start_msg = if is_chinese {
+        "🔍 开始代码扫描"
+    } else {
+        "🔍 Starting code scan"
+    };
+
+    let target_msg = if is_chinese {
+        format!("目标路径: {}", args.target)
+    } else {
+        format!("Target path: {}", args.target)
+    };
+
+    info!("{}", scan_start_msg);
+    info!("{}", target_msg);
 
     // Initialize components
     let language_support = LanguageSupport::new();
@@ -142,17 +166,27 @@ pub async fn handle_scan(_config: &AppConfig, args: &ScanArgs) -> Result<(), App
     let files_to_scan = discover_files(&scan_config, &language_support)?;
 
     if files_to_scan.is_empty() {
-        warn!("⚠️  未找到符合条件的文件");
+        let no_files_msg = if is_chinese {
+            "⚠️  未找到符合条件的文件"
+        } else {
+            "⚠️  No matching files found"
+        };
+        warn!("{}", no_files_msg);
         return Ok(());
     }
 
-    info!("📂 发现 {} 个文件需要扫描", files_to_scan.len());
+    let files_found_msg = if is_chinese {
+        format!("📂 发现 {} 个文件需要扫描", files_to_scan.len())
+    } else {
+        format!("📂 Found {} files to scan", files_to_scan.len())
+    };
+    info!("{}", files_found_msg);
 
     // Perform scanning
     let results = if args.parallel {
-        perform_parallel_scan(&files_to_scan, &scan_config, &language_support).await?
+        perform_parallel_scan(&files_to_scan, &scan_config, &language_support, is_chinese).await?
     } else {
-        perform_sequential_scan(&files_to_scan, &scan_config, &language_support).await?
+        perform_sequential_scan(&files_to_scan, &scan_config, &language_support, is_chinese).await?
     };
 
     let scan_duration = start_time.elapsed();
@@ -171,11 +205,11 @@ pub async fn handle_scan(_config: &AppConfig, args: &ScanArgs) -> Result<(), App
     };
 
     // Output results
-    output_results(&final_results, args).await?;
+    output_results(&final_results, args, &translation_manager).await?;
 
     // Print statistics if requested
     if args.stats {
-        print_statistics(&final_results);
+        print_statistics(&final_results, &translation_manager);
     }
 
     // Exit with error code if issues found and fail_on_error is set
@@ -360,8 +394,14 @@ async fn perform_parallel_scan(
     files: &[(PathBuf, String)],
     config: &ScanConfig,
     language_support: &LanguageSupport,
+    is_chinese: bool,
 ) -> Result<ScanResults, AppError> {
-    info!("🚀 使用并行处理扫描 {} 个文件", files.len());
+    let scan_msg = if is_chinese {
+        format!("📝 使用并行处理扫描 {} 个文件", files.len())
+    } else {
+        format!("📝 Scanning {} files in parallel", files.len())
+    };
+    info!("{}", scan_msg);
 
     let stats = Arc::new(Mutex::new(ScanStats::default()));
     let file_results = Arc::new(Mutex::new(Vec::new()));
@@ -414,15 +454,29 @@ async fn perform_sequential_scan(
     files: &[(PathBuf, String)],
     config: &ScanConfig,
     language_support: &LanguageSupport,
+    is_chinese: bool,
 ) -> Result<ScanResults, AppError> {
-    info!("📝 使用顺序处理扫描 {} 个文件", files.len());
+    let scan_msg = if is_chinese {
+        format!("📝 使用顺序处理扫描 {} 个文件", files.len())
+    } else {
+        format!("📝 Scanning {} files sequentially", files.len())
+    };
+    info!("{}", scan_msg);
 
     let mut stats = ScanStats::default();
     let mut file_results = Vec::new();
 
     for (i, (path, language)) in files.iter().enumerate() {
         if config.max_issues > 0 && stats.total_issues >= config.max_issues {
-            info!("达到最大问题数限制 ({}), 停止扫描", config.max_issues);
+            let limit_msg = if is_chinese {
+                format!("达到最大问题数限制 ({}), 停止扫描", config.max_issues)
+            } else {
+                format!(
+                    "Reached maximum issue limit ({}), stopping scan",
+                    config.max_issues
+                )
+            };
+            info!("{}", limit_msg);
             break;
         }
 
@@ -508,18 +562,33 @@ fn should_include_issue(issue: &CodeIssue, config: &ScanConfig) -> bool {
 }
 
 /// Output scan results in the specified format
-async fn output_results(results: &ScanResults, args: &ScanArgs) -> Result<(), AppError> {
+async fn output_results(
+    results: &ScanResults,
+    args: &ScanArgs,
+    translation_manager: &TranslationManager,
+) -> Result<(), AppError> {
     let output_content = match args.format.as_str() {
         "json" => format_json_output(results)?,
         "sarif" => format_sarif_output(results)?,
         "csv" => format_csv_output(results)?,
-        "text" | _ => format_text_output(results, args.verbose),
+        "text" | _ => format_text_output(results, args.verbose, translation_manager),
     };
 
     if let Some(output_file) = &args.output {
-        fs::write(output_file, &output_content)
-            .map_err(|e| AppError::IO(format!("写入输出文件失败: {}", output_file), e))?;
-        info!("📄 结果已保存到: {}", output_file);
+        let is_chinese = translation_manager.is_enabled()
+            && translation_manager.target_language() == &SupportedLanguage::Chinese;
+        let write_error_msg = if is_chinese {
+            format!("写入输出文件失败: {}", output_file)
+        } else {
+            format!("Failed to write output file: {}", output_file)
+        };
+        fs::write(output_file, &output_content).map_err(|e| AppError::IO(write_error_msg, e))?;
+        let saved_msg = if is_chinese {
+            format!("📄 结果已保存到: {}", output_file)
+        } else {
+            format!("📄 Results saved to: {}", output_file)
+        };
+        info!("{}", saved_msg);
     } else {
         println!("{}", output_content);
     }
@@ -619,28 +688,69 @@ fn format_csv_output(results: &ScanResults) -> Result<String, AppError> {
 }
 
 /// Format results as text
-fn format_text_output(results: &ScanResults, verbose: bool) -> String {
+fn format_text_output(
+    results: &ScanResults,
+    verbose: bool,
+    translation_manager: &TranslationManager,
+) -> String {
     let mut output = String::new();
+    let is_chinese = translation_manager.is_enabled()
+        && translation_manager.target_language() == &SupportedLanguage::Chinese;
 
     // Header
-    output.push_str(&format!("🔍 {} 扫描完成\n", "AST-Grep".bright_blue()));
+    let scan_complete_msg = if is_chinese {
+        format!("🔍 {} 扫描完成\n", "AST-Grep".bright_blue())
+    } else {
+        format!("🔍 {} Scan Complete\n", "AST-Grep".bright_blue())
+    };
+    output.push_str(&scan_complete_msg);
+
+    let files_scanned_msg = if is_chinese { "扫描了" } else { "Scanned" };
+    let files_text = if is_chinese { "个文件" } else { "files" };
     output.push_str(&format!(
-        "📂 扫描了 {} 个文件\n",
-        results.files_scanned.to_string().bright_green()
+        "📂 {} {} {}\n",
+        files_scanned_msg,
+        results.files_scanned.to_string().bright_green(),
+        files_text
     ));
+
+    let issues_found_msg = if is_chinese { "发现" } else { "Found" };
+    let issues_text = if is_chinese { "个问题" } else { "issues" };
     output.push_str(&format!(
-        "⚠️  发现 {} 个问题\n",
-        results.total_issues.to_string().bright_yellow()
+        "⚠️  {} {} {}\n",
+        issues_found_msg,
+        results.total_issues.to_string().bright_yellow(),
+        issues_text
     ));
+
+    let duration_msg = if is_chinese { "耗时" } else { "Duration" };
     output.push_str(&format!(
-        "⏱️  耗时 {} ms\n\n",
+        "⏱️  {} {} ms\n\n",
+        duration_msg,
         results.scan_duration_ms.to_string().bright_blue()
     ));
 
     // Issues by severity
     if !results.issues_by_severity.is_empty() {
-        output.push_str("📊 问题分布:\n");
+        let distribution_msg = if is_chinese {
+            "📊 问题分布:"
+        } else {
+            "📊 Issue Distribution:"
+        };
+        output.push_str(&format!("{}\n", distribution_msg));
         for (severity, count) in &results.issues_by_severity {
+            let severity_display = if is_chinese {
+                match severity.as_str() {
+                    "error" => "错误",
+                    "warning" => "警告",
+                    "info" => "信息",
+                    "hint" => "提示",
+                    _ => severity,
+                }
+            } else {
+                severity
+            };
+
             let color = match severity.as_str() {
                 "error" => "red",
                 "warning" => "yellow",
@@ -651,11 +761,11 @@ fn format_text_output(results: &ScanResults, verbose: bool) -> String {
             output.push_str(&format!(
                 "  {}: {}\n",
                 match color {
-                    "red" => severity.bright_red(),
-                    "yellow" => severity.bright_yellow(),
-                    "blue" => severity.bright_blue(),
-                    "green" => severity.bright_green(),
-                    _ => severity.bright_white(),
+                    "red" => severity_display.bright_red(),
+                    "yellow" => severity_display.bright_yellow(),
+                    "blue" => severity_display.bright_blue(),
+                    "green" => severity_display.bright_green(),
+                    _ => severity_display.bright_white(),
                 },
                 count
             ));
@@ -677,7 +787,12 @@ fn format_text_output(results: &ScanResults, verbose: bool) -> String {
             ));
 
             if file_result.issues.is_empty() {
-                output.push_str("  ✅ 未发现问题\n");
+                let no_issues_msg = if is_chinese {
+                    "  ✅ 未发现问题\n"
+                } else {
+                    "  ✅ No issues found\n"
+                };
+                output.push_str(no_issues_msg);
             } else {
                 for issue in &file_result.issues {
                     let severity_color = match issue.severity {
@@ -715,19 +830,61 @@ fn format_text_output(results: &ScanResults, verbose: bool) -> String {
 }
 
 /// Print scan statistics
-fn print_statistics(results: &ScanResults) {
-    println!("📈 详细统计:");
-    println!("  文件总数: {}", results.files_scanned);
-    println!("  问题总数: {}", results.total_issues);
-    println!("  扫描耗时: {} ms", results.scan_duration_ms);
+fn print_statistics(results: &ScanResults, translation_manager: &TranslationManager) {
+    let is_chinese = translation_manager.is_enabled()
+        && translation_manager.target_language() == &SupportedLanguage::Chinese;
+
+    let stats_header = if is_chinese {
+        "📈 详细统计:"
+    } else {
+        "📈 Detailed Statistics:"
+    };
+    println!("{}", stats_header);
+
+    let files_label = if is_chinese {
+        "文件总数"
+    } else {
+        "Total Files"
+    };
+    println!("  {}: {}", files_label, results.files_scanned);
+
+    let issues_label = if is_chinese {
+        "问题总数"
+    } else {
+        "Total Issues"
+    };
+    println!("  {}: {}", issues_label, results.total_issues);
+
+    let duration_label = if is_chinese {
+        "扫描耗时"
+    } else {
+        "Scan Duration"
+    };
+    println!("  {}: {} ms", duration_label, results.scan_duration_ms);
 
     if let Some(stats) = &results.language_stats {
-        println!("  支持语言: {}", stats.total_languages);
-        println!("  启用语言: {}", stats.enabled_languages);
+        let supported_label = if is_chinese {
+            "支持语言"
+        } else {
+            "Supported Languages"
+        };
+        println!("  {}: {}", supported_label, stats.total_languages);
+
+        let enabled_label = if is_chinese {
+            "启用语言"
+        } else {
+            "Enabled Languages"
+        };
+        println!("  {}: {}", enabled_label, stats.enabled_languages);
     }
 
     if !results.issues_by_language.is_empty() {
-        println!("\n📊 按语言分布:");
+        let lang_dist_label = if is_chinese {
+            "\n📊 按语言分布:"
+        } else {
+            "\n📊 Distribution by Language:"
+        };
+        println!("{}", lang_dist_label);
         let mut lang_issues: Vec<_> = results.issues_by_language.iter().collect();
         lang_issues.sort_by(|a, b| b.1.cmp(a.1));
         for (language, count) in lang_issues {
@@ -736,7 +893,12 @@ fn print_statistics(results: &ScanResults) {
     }
 
     if !results.issues_by_rule.is_empty() {
-        println!("\n🔍 按规则分布 (前10):");
+        let rule_dist_label = if is_chinese {
+            "\n🔍 按规则分布 (前10):"
+        } else {
+            "\n🔍 Distribution by Rule (Top 10):"
+        };
+        println!("{}", rule_dist_label);
         let mut rule_issues: Vec<_> = results.issues_by_rule.iter().collect();
         rule_issues.sort_by(|a, b| b.1.cmp(a.1));
         for (rule, count) in rule_issues.iter().take(10) {
