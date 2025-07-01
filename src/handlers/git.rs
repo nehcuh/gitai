@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use crate::{
-    errors::{AppError, GitError},
+    errors::{AppError, GitError, map_command_output_error},
     types::{general::CommandOutput, git::ReviewArgs},
 };
 
@@ -129,12 +129,10 @@ pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
     let result = passthrough_to_git_with_error_handling(&args, false)?;
 
     if !result.status.success() {
-        return Err(AppError::Git(GitError::CommandFailed {
-            command: "git add -u".to_string(),
-            status_code: result.status.code(),
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }));
+        return Err(AppError::Git(map_command_output_error(
+            "git add -u",
+            result,
+        )));
     }
 
     Ok(())
@@ -149,12 +147,10 @@ pub fn get_untracked_files() -> Result<Vec<String>, AppError> {
     let result = passthrough_to_git_with_error_handling(&args, true)?;
 
     if !result.status.success() {
-        return Err(AppError::Git(GitError::CommandFailed {
-            command: "git ls-files --others --exclude-standard".to_string(),
-            status_code: result.status.code(),
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }));
+        return Err(AppError::Git(map_command_output_error(
+            "git ls-files --others --exclude-standard",
+            result,
+        )));
     }
 
     Ok(result.stdout.lines().map(String::from).collect())
@@ -177,12 +173,10 @@ pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> 
     let result = passthrough_to_git_with_error_handling(&args, false)?;
 
     if !result.status.success() {
-        return Err(AppError::Git(GitError::CommandFailed {
-            command: format!("git commit -m \"{}\"", message),
-            status_code: result.status.code(),
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }));
+        return Err(AppError::Git(map_command_output_error(
+            &format!("git commit -m \"{}\"", message),
+            result,
+        )));
     }
 
     Ok(())

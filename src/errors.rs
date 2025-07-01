@@ -1,15 +1,23 @@
+use crate::types::general::CommandOutput;
 use thiserror::Error; // Added for DevOpsError
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AppError {
-    Config(ConfigError),
-    Git(GitError),
-    AI(AIError),
-    Analysis(AnalysisError),
-    DevOps(DevOpsError),        // Added DevOpsError variant
-    IO(String, std::io::Error), // For generic I/O errors not covered by specific types
-    Generic(String),            // For simple string-based errors
+    #[error("Configuration error: {0}")]
+    Config(#[from] ConfigError),
+    #[error("Git command error: {0}")]
+    Git(#[from] GitError),
+    #[error("AI interaction error: {0}")]
+    AI(#[from] AIError),
+    #[error("Analysis error: {0}")]
+    Analysis(#[from] AnalysisError),
+    #[error("DevOps API error: {0}")]
+    DevOps(#[from] DevOpsError), // Added DevOpsError variant
+    #[error("I/O error while {0}: {1}")]
+    IO(String, #[source] std::io::Error), // For generic I/O errors not covered by specific types
+    #[error("Application error: {0}")]
+    Generic(String), // For simple string-based errors
 }
 
 // Copied and renamed ApiError from src/errors/devops.rs
@@ -44,18 +52,29 @@ pub enum DevOpsError {
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigError {
-    FileRead(String, std::io::Error),
-    FileWrite(String, std::io::Error),
-    TomlParse(String, toml::de::Error),
+    #[error("Failed to read file '{0}': {1}")]
+    FileRead(String, #[source] std::io::Error),
+    #[error("Failed to write to path '{0}': {1}")]
+    FileWrite(String, #[source] std::io::Error),
+    #[error("Failed to parse TOML from file '{0}': {1}")]
+    TomlParse(String, #[source] toml::de::Error),
+    #[error("Critical prompt file '{0}' is missing.")]
     PromptFileMissing(String),
+    #[error("Required configuration field '{0}' is missing or invalid")]
     FieldMissing(String), // Added for missing required fields
-    GitConfigRead(String, std::io::Error),
+    #[error("Failed to read Git configuration for {0}: {1}")]
+    GitConfigRead(String, #[source] std::io::Error),
+    #[error("Failed to read DevOps configuration: {0}")]
     DevOpsConfigMissing(String), // DevOps platform configuration missing
+    #[error("Unsupported DevOps platform: {0}")]
     UnsupportedPlatform(String), // Unsupported platform
+    #[error("Wrong url format: {0}")]
     InvalidUrl(String),
+    #[error("Empty token")]
     EmptyToken,
+    #[error("Other Config Error: {0}")]
     Other(String), // Other errors
 }
 
@@ -80,114 +99,47 @@ pub enum GitError {
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AIError {
-    RequestFailed(reqwest::Error),
-    ResponseParseFailed(reqwest::Error),
+    #[error("AI API request failed: {0}")]
+    RequestFailed(#[from] reqwest::Error),
+    #[error("Failed to parse AI API JSON response: {0}")]
+    ResponseParseFailed(#[source] reqwest::Error),
+    #[error("AI API responded with error {0}: {1}")]
     ApiResponseError(reqwest::StatusCode, String),
+    #[error("AI API response contained no choices.")]
     NoChoiceInResponse,
+    #[error("AI returned an empty message.")]
     EmptyMessage,
+    #[error("AI explanation generation failed: {0}")]
     ExplanationGenerationFailed(String), // For errors from ai_explaniner
+    #[error("AI explainer configuration error: {0}")]
     ExplainerConfigurationError(String), // For config errors specific to explainer
+    #[error("AI explainer network error: {0}")]
     ExplainerNetworkError(String), // For network errors from explainer not covered by reqwest::Error
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AnalysisError {
+    #[error("Unsupported language: {0}")]
     UnsupportedLanguage(String),
+    #[error("Language error: {0}")]
     LanguageError(String),
+    #[error("Parse error: {0}")]
     ParseError(String),
+    #[error("Query error: {0}")]
     QueryError(String),
+    #[error("Cache error: {0}")]
     CacheError(String),
+    #[error("Initialization error: {0}")]
     InitializationError(String),
+    #[error("Analysis timeout: {0}")]
     AnalysisTimeout(String),
-    IOError(std::io::Error),
+    #[error("I/O error: {0}")]
+    IOError(#[source] std::io::Error),
+    #[error("Analysis error: {0}")]
     Generic(String),
-}
-
-impl std::fmt::Display for AppError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppError::Config(e) => write!(f, "Configuration error: {}", e),
-            AppError::Git(e) => write!(f, "Git command error: {}", e),
-            AppError::AI(e) => write!(f, "AI interaction error: {}", e),
-            AppError::Analysis(e) => write!(f, "Analysis error: {}", e),
-            AppError::DevOps(e) => write!(f, "DevOps API error: {}", e), // Added for DevOps
-            AppError::IO(context, e) => write!(f, "I/O error while {}: {}", context, e),
-            AppError::Generic(s) => write!(f, "Application error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for AppError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AppError::Config(e) => Some(e),
-            AppError::Git(e) => Some(e),
-            AppError::AI(e) => Some(e),
-            AppError::Analysis(e) => Some(e),
-            AppError::DevOps(e) => Some(e), // Added for DevOps
-            AppError::IO(_, e) => Some(e),
-            AppError::Generic(_) => None,
-        }
-    }
-}
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConfigError::FileRead(file, e) => write!(f, "Failed to read file '{}': {}", file, e),
-            ConfigError::FileWrite(path, e) => {
-                write!(f, "Failed to write to path '{}': {}", path, e)
-            }
-            ConfigError::TomlParse(file, e) => {
-                write!(f, "Failed to parse TOML from file '{}': {}", file, e)
-            }
-            ConfigError::PromptFileMissing(file) => {
-                write!(f, "Critical prompt file '{}' is missing.", file)
-            }
-            ConfigError::FieldMissing(field) => write!(
-                f,
-                "Required configuration field '{}' is missing or invalid",
-                field
-            ),
-            ConfigError::GitConfigRead(context, e) => {
-                write!(f, "Failed to read Git configuration for {}: {}", context, e)
-            }
-            ConfigError::DevOpsConfigMissing(context) => {
-                write!(f, "Failed to read DevOps configuration: {}", context)
-            }
-            ConfigError::UnsupportedPlatform(context) => {
-                write!(f, "Unsupported DevOps platform: {}", context)
-            }
-            ConfigError::InvalidUrl(context) => {
-                write!(f, "Wrong url format: {}", context)
-            }
-            ConfigError::EmptyToken => {
-                write!(f, "Empty token")
-            }
-            ConfigError::Other(content) => write!(f, "Other Config Error: {}", content),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ConfigError::FileRead(_, e) => Some(e),
-            ConfigError::FileWrite(_, e) => Some(e),
-            ConfigError::TomlParse(_, e) => Some(e),
-            ConfigError::PromptFileMissing(_) => None,
-            ConfigError::FieldMissing(_) => None,
-            ConfigError::GitConfigRead(_, e) => Some(e),
-            ConfigError::DevOpsConfigMissing(_) => None,
-            ConfigError::UnsupportedPlatform(_) => None,
-            ConfigError::InvalidUrl(_) => None,
-            ConfigError::EmptyToken => None,
-            ConfigError::Other(_) => None,
-        }
-    }
 }
 
 impl std::fmt::Display for GitError {
@@ -241,98 +193,7 @@ impl std::error::Error for GitError {
     }
 }
 
-impl std::fmt::Display for AIError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AIError::RequestFailed(e) => write!(f, "AI API request failed: {}", e),
-            AIError::ResponseParseFailed(e) => {
-                write!(f, "Failed to parse AI API JSON response: {}", e)
-            }
-            AIError::ApiResponseError(status, body) => {
-                write!(f, "AI API responded with error {}: {}", status, body)
-            }
-            AIError::NoChoiceInResponse => write!(f, "AI API response contained no choices."),
-            AIError::EmptyMessage => write!(f, "AI returned an empty message."),
-            AIError::ExplanationGenerationFailed(s) => {
-                write!(f, "AI explanation generation failed: {}", s)
-            }
-            AIError::ExplainerConfigurationError(s) => {
-                write!(f, "AI explainer configuration error: {}", s)
-            }
-            AIError::ExplainerNetworkError(s) => write!(f, "AI explainer network error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for AIError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AIError::RequestFailed(e) => Some(e),
-            AIError::ResponseParseFailed(e) => Some(e),
-            _ => None, // Other values are self-contained or wrap String
-        }
-    }
-}
-
-impl std::fmt::Display for AnalysisError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnalysisError::UnsupportedLanguage(lang) => {
-                write!(f, "Unsupported language: {}", lang)
-            }
-            AnalysisError::LanguageError(msg) => write!(f, "Language error: {}", msg),
-            AnalysisError::ParseError(msg) => write!(f, "Parse error: {}", msg),
-            AnalysisError::QueryError(msg) => write!(f, "Query error: {}", msg),
-            AnalysisError::CacheError(msg) => write!(f, "Cache error: {}", msg),
-            AnalysisError::InitializationError(msg) => write!(f, "Initialization error: {}", msg),
-            AnalysisError::AnalysisTimeout(msg) => write!(f, "Analysis timeout: {}", msg),
-            AnalysisError::IOError(e) => write!(f, "I/O error: {}", e),
-            AnalysisError::Generic(msg) => write!(f, "Analysis error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for AnalysisError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AnalysisError::IOError(e) => Some(e),
-            _ => None, // Other values are self-contained
-        }
-    }
-}
-
 // --- From implementations for AppError ---
-
-impl From<ConfigError> for AppError {
-    fn from(err: ConfigError) -> Self {
-        AppError::Config(err)
-    }
-}
-
-impl From<GitError> for AppError {
-    fn from(err: GitError) -> Self {
-        AppError::Git(err)
-    }
-}
-
-impl From<AIError> for AppError {
-    fn from(err: AIError) -> Self {
-        AppError::AI(err)
-    }
-}
-
-impl From<AnalysisError> for AppError {
-    fn from(err: AnalysisError) -> Self {
-        AppError::Analysis(err)
-    }
-}
-
-// Added From<DevOpsError> for AppError
-impl From<DevOpsError> for AppError {
-    fn from(err: DevOpsError) -> Self {
-        AppError::DevOps(err)
-    }
-}
 
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
@@ -341,7 +202,6 @@ impl From<std::io::Error> for AppError {
 }
 
 // Helper for converting Command output to GitError when output is captured
-#[allow(unused)]
 pub fn map_command_error(
     cmd_str: &str,
     output: std::process::Output,     // Takes ownership
@@ -354,6 +214,16 @@ pub fn map_command_error(
         status_code: status.code(),
         stdout,
         stderr,
+    }
+}
+
+// Helper for converting CommandOutput to GitError
+pub fn map_command_output_error(cmd_str: &str, output: CommandOutput) -> GitError {
+    GitError::CommandFailed {
+        command: cmd_str.to_string(),
+        status_code: output.status.code(),
+        stdout: output.stdout,
+        stderr: output.stderr,
     }
 }
 

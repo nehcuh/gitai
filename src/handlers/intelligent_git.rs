@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig,
-    errors::AppError,
+    errors::{AppError, map_command_output_error},
     handlers::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling},
     types::general::CommandOutput,
 };
@@ -29,12 +29,10 @@ pub async fn handle_intelligent_git_command(
 
     // Maintain same exit status as original git command
     if !command_output.status.success() {
-        return Err(AppError::Git(crate::errors::GitError::CommandFailed {
-            command: format!("git {}", args.join(" ")),
-            status_code: command_output.status.code(),
-            stdout: command_output.stdout,
-            stderr: command_output.stderr,
-        }));
+        return Err(AppError::Git(map_command_output_error(
+            &format!("git {}", args.join(" ")),
+            command_output,
+        )));
     }
 
     Ok(())
