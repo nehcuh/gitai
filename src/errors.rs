@@ -201,7 +201,17 @@ impl From<std::io::Error> for AppError {
     }
 }
 
-// Helper for converting Command output to GitError when output is captured
+/// Helper for converting Command output to GitError when output is captured
+///
+/// # Arguments
+/// * `cmd_str` - The command string for error reporting
+/// * `output` - The process output containing stdout and stderr
+/// * `status` - The exit status of the process (provided separately as output is consumed)
+///
+/// # Note
+/// The `status_code` field in the returned `GitError::CommandFailed` may be `None`
+/// when the process was terminated by a signal (e.g., SIGKILL, SIGTERM) rather
+/// than exiting normally with an exit code. This is normal behavior on Unix systems.
 pub fn map_command_error(
     cmd_str: &str,
     output: std::process::Output,     // Takes ownership
@@ -217,7 +227,16 @@ pub fn map_command_error(
     }
 }
 
-// Helper for converting CommandOutput to GitError
+/// Helper for converting CommandOutput to GitError when output is captured
+///
+/// # Arguments
+/// * `cmd_str` - The command string for error reporting
+/// * `output` - The command output containing stdout, stderr, and exit status
+///
+/// # Note
+/// The `status_code` field in the returned `GitError::CommandFailed` may be `None`
+/// when the process was terminated by a signal (e.g., SIGKILL, SIGTERM) rather
+/// than exiting normally with an exit code. This is normal behavior on Unix systems.
 pub fn map_command_output_error(cmd_str: &str, output: CommandOutput) -> GitError {
     GitError::CommandFailed {
         command: cmd_str.to_string(),
@@ -345,6 +364,28 @@ mod tests {
 
         let err_other_git = GitError::Other("Some other issue".to_string());
         assert_eq!(format!("{}", err_other_git), "Git error: Some other issue");
+
+        // Test CommandFailed with status_code: None (process terminated by signal)
+        let err_cmd_failed_no_status = GitError::CommandFailed {
+            command: "git clone".to_string(),
+            status_code: None, // Process was terminated by signal
+            stdout: "".to_string(),
+            stderr: "Terminated".to_string(),
+        };
+        assert_eq!(
+            format!("{}", err_cmd_failed_no_status),
+            "Git command 'git clone' failed\nStderr:\nTerminated"
+        );
+
+        // Test PassthroughFailed with status_code: None
+        let err_passthrough_no_status = GitError::PassthroughFailed {
+            command: "git fetch".to_string(),
+            status_code: None, // Process was terminated by signal
+        };
+        assert_eq!(
+            format!("{}", err_passthrough_no_status),
+            "Git passthrough command 'git fetch' failed"
+        );
     }
 
     #[test]
