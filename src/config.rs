@@ -18,12 +18,12 @@ const COMMIT_DIVIATION_PROMPT: &str = "commit-deviation.md"; // For future devel
 const REVIEW_PROMPT: &str = "review.md";
 
 // Templates files
-const TEMPLATE_CONFIG_FILE: &str = "assets/config.example.toml";
-const TEMPLATE_HELPER: &str = "assets/helper-prompt.md";
-const TEMPLATE_TRANSLATOR: &str = "assets/translator.md";
-const TEMPLATE_COMMIT_GENERATOR: &str = "assets/commit-generator.md";
-const TEMPLATE_COMMIT_DEVIATION: &str = "assets/commit-deviation.md";
-const TEMPLATE_REVIEW: &str = "assets/review.md";
+const TEMPLATE_CONFIG_FILE: &str = "configs/examples/config.example.toml";
+const TEMPLATE_HELPER: &str = "docs/assets/helper-prompt.md";
+const TEMPLATE_TRANSLATOR: &str = "docs/assets/translator.md";
+const TEMPLATE_COMMIT_GENERATOR: &str = "docs/assets/commit-generator.md";
+const TEMPLATE_COMMIT_DEVIATION: &str = "docs/assets/commit-deviation.md";
+const TEMPLATE_REVIEW: &str = "docs/assets/review.md";
 
 // Total configuration files
 const TOTAL_CONFIG_FILE_COUNT: u32 = 6;

@@ -1555,7 +1555,7 @@ async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, A
         Some(prompt) => prompt.clone(),
         None => {
             // Fallback to embedded assets/review.md if not configured
-            include_str!("../../assets/review.md").to_string()
+            include_str!("../../docs/assets/review.md").to_string()
         }
     };
 

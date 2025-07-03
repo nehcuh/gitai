@@ -1,6 +1,5 @@
 use gitai::{
     config::{AIConfig, AppConfig, AstGrepConfig},
-    common::AppError,
     handlers::commit::handle_commit,
     types::git::CommitArgs,
 };
