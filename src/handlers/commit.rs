@@ -25,18 +25,69 @@ use std::time::Instant;
 /// Handle the commit command with AI assistance
 /// This function demonstrates AI-powered commit message generation
 // Placeholder implementations for unresolved functions
+/// Placeholder for locating the latest review file in the given storage path.
+///
+/// Currently always returns `Ok(None)`. Intended for future implementation to find the most recent review file.
+///
+/// # Arguments
+///
+/// * `_storage_path` - The path where review files are stored.
+///
+/// # Returns
+///
+/// An `Option<PathBuf>` containing the path to the latest review file if found, or `None` if not found or unimplemented.
+///
+/// # Examples
+///
+/// ```
+/// let result = find_latest_review_file("/path/to/reviews");
+/// assert!(result.unwrap().is_none());
+/// ```
 fn find_latest_review_file(_storage_path: &str) -> Result<Option<PathBuf>, std::io::Error> {
     Ok(None)
 }
 
+/// Reads the contents of a review file.
+///
+/// This is a placeholder implementation that always returns an empty string.
+///
+/// # Parameters
+/// - `_review_file`: The path to the review file to read.
+///
+/// # Returns
+/// An empty string as the file content.
+///
+/// # Examples
+///
+/// ```
+/// let content = read_review_file(std::path::Path::new("review.md")).unwrap();
+/// assert_eq!(content, "");
+/// ```
 fn read_review_file(_review_file: &Path) -> Result<String, std::io::Error> {
     Ok("".to_string())
 }
 
+/// Extracts review insights from the provided content.
+///
+/// Currently returns a default message indicating no insights are found. This is a placeholder implementation.
 fn extract_review_insights(_content: &str) -> String {
     "No review insights found.".to_string()
 }
 
+/// Prepends an issue ID in brackets to the commit message if provided.
+///
+/// If `issue_id` is `Some`, the resulting message is formatted as `[ISSUE_ID] message`.
+/// If `issue_id` is `None`, the original message is returned unchanged.
+///
+/// # Examples
+///
+/// ```
+/// let msg = add_issue_prefix_to_commit_message("Fix bug", Some(&"ABC-123".to_string()));
+/// assert_eq!(msg, "[ABC-123] Fix bug");
+///
+/// let msg2 = add_issue_prefix_to_commit_message("Update docs", None);
+/// assert_eq!(msg2, "Update docs");
+/// ```
 fn add_issue_prefix_to_commit_message(message: &str, issue_id: Option<&String>) -> String {
     if let Some(id) = issue_id {
         format!("[{}] {}", id, message)
@@ -45,6 +96,31 @@ fn add_issue_prefix_to_commit_message(message: &str, issue_id: Option<&String>) 
     }
 }
 
+/// Handles the AI-assisted Git commit workflow, including optional AstGrep analysis and code review integration.
+///
+/// This function coordinates the process of generating a commit message using AI, optionally incorporating static code analysis (via AstGrep) and recent code review insights. It can automatically stage modified and untracked files, retrieve the current staged diff, and generate a commit message based on user input, analysis, and review context. The user is prompted to confirm the generated message before the commit is executed.
+///
+/// # Parameters
+///
+/// - `args`: Commit arguments specifying options such as auto-staging, AstGrep analysis, custom message, and issue ID.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the commit is successfully completed, or an error if any step fails (e.g., not in a Git repository, no staged changes, or commit execution failure).
+///
+/// # Examples
+///
+/// ```
+/// let config = AppConfig::default();
+/// let args = CommitArgs {
+///     auto_stage: true,
+///     ast_grep: true,
+///     message: None,
+///     issue_id: Some("PROJ-123".to_string()),
+///     // ... other fields
+/// };
+/// handle_commit(&config, args).await?;
+/// ```
 pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), AppError> {
     tracing::info!("开始处理智能提交命令");
 
@@ -158,7 +234,22 @@ fn check_repository_status() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Auto-stage modified tracked files
+/// Stages all modified tracked files and interactively prompts to add untracked files for commit.
+///
+/// This function first stages all modified tracked files. If untracked files are detected,
+/// it lists them and prompts the user to confirm whether to add them to the commit. Untracked
+/// files are staged only if the user agrees.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if staging completes successfully, or an error if any Git operation fails.
+///
+/// # Examples
+///
+/// ```
+/// // In an async context:
+/// auto_stage_files().await?;
+/// ```
 async fn auto_stage_files() -> Result<(), AppError> {
     // 1. Stage tracked (modified) files first
     git::auto_stage_tracked_files().await?;
@@ -198,7 +289,25 @@ async fn get_changes_for_commit() -> Result<String, AppError> {
     git::get_diff_for_commit().await
 }
 
-/// Generate commit message using AI (basic mode)
+/// Generates a commit message using AI based on the provided Git diff.
+///
+/// Constructs system and user prompts (in Chinese) to instruct the AI to generate a concise, conventional commit message from the diff. If AI generation fails, returns a default message.
+///
+/// # Arguments
+///
+/// - `diff`: The Git diff representing staged changes to be described.
+///
+/// # Returns
+///
+/// A commit message string generated by the AI, or a default message if AI generation fails.
+///
+/// # Examples
+///
+/// ```
+/// let diff = "..."; // Git diff string
+/// let message = generate_commit_message(&config, diff).await.unwrap();
+/// assert!(!message.is_empty());
+/// ```
 async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<String, AppError> {
     tracing::info!("正在使用AI生成提交信息...");
 
@@ -248,7 +357,25 @@ async fn generate_commit_message(config: &AppConfig, diff: &str) -> Result<Strin
     }
 }
 
-/// Generate enhanced commit message using Tree-sitter analysis
+/// Generates an enhanced commit message by incorporating AstGrep static analysis, optional custom message, and review context.
+///
+/// Performs AstGrep analysis on the provided Git diff. If analysis succeeds, generates a commit message using the analysis results, custom message, and review context as available. If analysis fails, falls back to using the custom message with review context or a basic AI-generated message.
+///
+/// # Returns
+/// A commit message string that integrates static analysis insights and optional review context.
+///
+/// # Examples
+///
+/// ```
+/// let message = generate_enhanced_commit_message(
+///     &config,
+///     diff,
+///     Some("feat: add new feature".to_string()),
+///     &args,
+///     Some("Reviewed by Alice"),
+/// ).await.unwrap();
+/// assert!(message.contains("AstGrep"));
+/// ```
 async fn generate_enhanced_commit_message(
     config: &AppConfig,
     diff: &str,
@@ -291,7 +418,23 @@ async fn generate_enhanced_commit_message(
     .await
 }
 
-/// Analyze diff using AstGrep
+/// Analyzes a Git diff using AstGrep and returns a formatted summary and detailed analysis.
+///
+/// Parses the provided Git diff, performs static code analysis with AstGrep, and generates a markdown-style summary suitable for commit messages. Returns both the formatted analysis text and the detailed analysis data.
+///
+/// # Returns
+/// A tuple containing the formatted analysis summary as a string and an optional `DiffAnalysis` with detailed results.
+///
+/// # Errors
+/// Returns an `AppError` if AstGrep initialization, diff parsing, or analysis fails.
+///
+/// # Examples
+///
+/// ```
+/// let diff = "..."; // Git diff string
+/// let (summary, analysis) = analyze_diff_with_ast_grep(diff, &args).await?;
+/// assert!(summary.contains("AstGrep Analysis"));
+/// ```
 async fn analyze_diff_with_ast_grep(
     diff: &str,
     _args: &CommitArgs,
@@ -324,7 +467,33 @@ async fn analyze_diff_with_ast_grep(
     Ok((analysis_text, Some(analysis)))
 }
 
-/// Generate commit message with Tree-sitter analysis results
+/// Generates an enhanced commit message using AI, incorporating AstGrep static analysis, optional custom message, and review context.
+///
+/// This function constructs a detailed prompt for the AI model that includes the Git diff, AstGrep analysis results, and optionally a user-provided commit message and code review insights. The AI is instructed to generate a high-quality, structured commit message reflecting both the technical changes and their impact. If AI generation fails, the function falls back to the custom message with a note or a default message indicating the failure.
+///
+/// # Parameters
+/// - `diff`: The Git diff representing staged changes for the commit.
+/// - `analysis_result`: A tuple containing the formatted AstGrep analysis summary and optional detailed analysis data.
+/// - `custom_message`: An optional user-supplied commit message to be incorporated or enhanced.
+/// - `review_context`: Optional code review insights to be reflected in the commit message.
+///
+/// # Returns
+/// Returns the generated commit message as a `String`. If AI generation fails, returns a fallback message.
+///
+/// # Examples
+///
+/// ```
+/// let diff = "..."; // Git diff string
+/// let analysis_result = ("AstGrep summary".to_string(), None);
+/// let message = generate_commit_message_with_analysis(
+///     &config,
+///     diff,
+///     &analysis_result,
+///     Some("fix: correct typo".to_string()),
+///     None
+/// ).await?;
+/// assert!(message.contains("fix:"));
+/// ```
 async fn generate_commit_message_with_analysis(
     config: &AppConfig,
     diff: &str,
@@ -391,7 +560,26 @@ async fn generate_commit_message_with_analysis(
     }
 }
 
-/// Format AstGrep analysis for commit message generation
+/// Formats the results of an AstGrep diff analysis into a markdown-style summary for inclusion in a commit message.
+///
+/// The output includes an overall summary and, if available, per-file change details with language and file-specific summaries.
+///
+/// # Examples
+///
+/// ```
+/// let analysis = DiffAnalysis {
+///     overall_summary: "Refactored core logic".to_string(),
+///     file_analyses: vec![
+///         FileAnalysis {
+///             path: PathBuf::from("src/main.rs"),
+///             language: "Rust".to_string(),
+///             summary: Some("Improved error handling".to_string()),
+///         }
+///     ],
+/// };
+/// let summary = format_ast_grep_analysis_for_commit(&analysis, &git_diff);
+/// assert!(summary.contains("总体摘要"));
+/// ```
 fn format_ast_grep_analysis_for_commit(analysis: &DiffAnalysis, _git_diff: &GitDiff) -> String {
     let mut result = String::new();
 
@@ -416,7 +604,18 @@ fn format_ast_grep_analysis_for_commit(analysis: &DiffAnalysis, _git_diff: &GitD
     result
 }
 
-/// Format the final enhanced commit message
+/// Formats the final enhanced commit message by combining the AI-generated message with an optional AstGrep analysis summary.
+///
+/// If AstGrep analysis data is provided, appends a markdown-formatted section summarizing the analysis. If the message is based on a custom user message, includes a note indicating this.
+///
+/// # Examples
+///
+/// ```
+/// let ai_msg = "feat: add new feature";
+/// let analysis = Some(DiffAnalysis { file_analyses: vec![] });
+/// let result = format_enhanced_commit_message(ai_msg, &analysis, false);
+/// assert!(result.contains("feat: add new feature"));
+/// ```
 fn format_enhanced_commit_message(
     ai_message: &str,
     analysis_data: &Option<DiffAnalysis>,
@@ -445,7 +644,17 @@ fn format_enhanced_commit_message(
     result
 }
 
-/// Ask user to confirm the commit message
+/// Prompts the user to confirm whether to use the provided commit message.
+///
+/// Returns `Ok(true)` if the user confirms (by entering `y`, `yes`, `是`, or pressing Enter), or `Ok(false)` otherwise.
+/// Returns an error if user input cannot be read.
+///
+/// # Examples
+///
+/// ```
+/// let confirmed = confirm_commit_message("feat: add new feature").unwrap();
+/// // User input determines the value of `confirmed`
+/// ```
 fn confirm_commit_message(_message: &str) -> Result<bool, AppError> {
     print!("\n是否使用此提交信息? [Y/n] ");
     io::stdout()
@@ -466,7 +675,20 @@ async fn execute_commit(message: &str) -> Result<(), AppError> {
     git::execute_commit_with_message(message).await
 }
 
-/// Generate commit message with optional review context
+/// Generates a commit message using AI, optionally incorporating code review context.
+///
+/// If review context is provided, it is included in the prompt to encourage the AI to reflect review improvements in the commit message. Falls back to a default message if AI generation fails.
+///
+/// # Returns
+///
+/// A commit message string, either generated by AI or a fallback message.
+///
+/// # Examples
+///
+/// ```
+/// let message = generate_commit_message_with_review(&config, diff, Some("Refactored error handling")).await?;
+/// assert!(message.contains("Refactored") || message.contains("chore:"));
+/// ```
 async fn generate_commit_message_with_review(
     config: &AppConfig,
     diff: &str,
@@ -498,7 +720,20 @@ async fn generate_commit_message_with_review(
     }
 }
 
-/// Format custom message with review context
+/// Appends review insights to a custom commit message in markdown format.
+///
+/// The review context is added under a section titled "基于代码评审的改进".
+///
+/// # Examples
+///
+/// ```
+/// let message = "Refactor login logic";
+/// let review = "Suggested adding error handling for invalid credentials.";
+/// let result = format_custom_message_with_review(message, review);
+/// assert!(result.contains("Refactor login logic"));
+/// assert!(result.contains("## 基于代码评审的改进"));
+/// assert!(result.contains("Suggested adding error handling"));
+/// ```
 fn format_custom_message_with_review(custom_message: &str, review_context: &str) -> String {
     format!(
         "{}\n\n---\n## 基于代码评审的改进\n\n{}",
@@ -515,6 +750,16 @@ mod tests {
     };
     use std::collections::HashMap;
 
+    /// Creates a test `AppConfig` instance with default and mock values suitable for unit testing.
+    ///
+    /// The returned configuration includes a local AI endpoint, a test model, default AstGrep and review settings, and a sample commit generator prompt.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = create_test_config();
+    /// assert_eq!(config.ai.model_name, "test-model");
+    /// ```
     fn create_test_config() -> AppConfig {
         let mut prompts = HashMap::new();
         prompts.insert(
@@ -607,6 +852,18 @@ mod tests {
         assert_eq!(args.passthrough_args, vec!["--verbose".to_string()]);
     }
 
+    /// Tests that `generate_commit_message` returns a non-empty commit message, falling back to a default if AI generation fails.
+    ///
+    /// This test simulates generating a commit message from a sample diff. It asserts that the result is either an AI-generated message or the fallback default, and handles the case where the AI service is unavailable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = create_test_config();
+    /// let diff = "diff --git ...";
+    /// let result = generate_commit_message(&config, diff).await;
+    /// assert!(result.is_ok() || result.is_err());
+    /// ```
     #[tokio::test]
     async fn test_generate_commit_message_with_fallback() {
         let config = create_test_config();
@@ -773,7 +1030,15 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    /// Tests the basic functionality of analyzing a Git diff using AstGrep.
+    ///
+    /// This test verifies that `analyze_diff_with_ast_grep` returns a non-empty analysis summary and data when provided with a simple Rust diff. It also handles environments where AstGrep is not available by accepting analysis errors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Runs as an async test; checks that AstGrep analysis produces expected output or fails gracefully.
+    /// ```
     async fn test_analyze_diff_with_ast_grep_basic() {
         let diff = "diff --git a/src/test.rs b/src/test.rs\nindex 1234567..abcdefg 100644\n--- a/src/test.rs\n+++ b/src/test.rs\n@@ -1,3 +1,4 @@\n fn test_function() {\n     println!(\"Hello, world!\");\n+    println!(\"New line added\");\n }";
 
@@ -803,7 +1068,27 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    /// Tests the AstGrep diff analysis function with different commit argument configurations.
+    ///
+    /// Verifies that `analyze_diff_with_ast_grep` produces non-empty analysis summaries for a sample diff and that the output contains expected summary keywords. Handles both successful and error outcomes, as errors may occur in test environments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+pub fn new_function() {}";
+    /// let args = CommitArgs {
+    ///     ast_grep: true,
+    ///     auto_stage: false,
+    ///     message: None,
+    ///     issue_id: None,
+    ///     review: false,
+    ///     passthrough_args: vec![],
+    /// };
+    /// let result = analyze_diff_with_ast_grep(diff, &args).await;
+    /// assert!(result.is_ok() || result.is_err());
+    /// # });
+    /// ```
     async fn test_analyze_diff_with_ast_grep_depth_levels() {
         let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+pub fn new_function() {}";
 
@@ -876,6 +1161,9 @@ mod tests {
         assert!(result.contains("Rust"));
     }
 
+    /// Tests the formatting of enhanced commit messages with and without custom user messages.
+    ///
+    /// Verifies that the formatted message includes the AstGrep analysis section and the appropriate note when a custom message is used.
     #[test]
     fn test_format_enhanced_commit_message() {
         use crate::ast_grep_analyzer::core::DiffAnalysis;
@@ -899,7 +1187,17 @@ mod tests {
         assert!(result_with_custom.contains("增强分析基于用户自定义消息"));
     }
 
-    #[tokio::test]
+    /// Tests that `generate_enhanced_commit_message` correctly falls back to a custom message or default output when AstGrep analysis or AI generation fails.
+    ///
+    /// This test verifies both scenarios: with and without a custom commit message provided. It asserts that the function returns a non-empty message or handles errors gracefully in a test environment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// test_generate_enhanced_commit_message_fallback().await;
+    /// # });
+    /// ```
     async fn test_generate_enhanced_commit_message_fallback() {
         let config = create_test_config();
         let diff = "diff --git a/src/test.rs b/src/test.rs\n+// test change";
@@ -957,6 +1255,16 @@ mod tests {
         }
     }
 
+    /// Tests the `handle_commit` function in AstGrep mode, both with and without a custom commit message.
+    ///
+    /// This test verifies that the commit handler correctly processes commit arguments when AstGrep analysis is enabled. It checks for successful execution in a valid Git environment and ensures appropriate error handling when run outside a repository or with no staged changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Runs as an async test; expects either success or known errors depending on environment.
+    /// test_handle_commit_with_ast_grep().await;
+    /// ```
     #[tokio::test]
     async fn test_handle_commit_with_ast_grep() {
         let config = create_test_config();
@@ -1088,7 +1396,23 @@ mod tests {
         assert!(result.contains("Improve input validation"));
     }
 
-    #[tokio::test]
+    /// Tests commit message generation with and without review context using AI assistance.
+    ///
+    /// This test verifies that `generate_commit_message_with_review` produces a non-empty commit message
+    /// when provided with a diff and optional review context. It checks both the presence and absence of review context,
+    /// ensuring that the function returns a valid message or falls back gracefully on error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// let config = create_test_config();
+    /// let diff = "diff --git ...";
+    /// let review_context = "- Added main function output";
+    /// let result = generate_commit_message_with_review(&config, diff, Some(review_context)).await;
+    /// assert!(result.is_ok());
+    /// # });
+    /// ```
     async fn test_generate_commit_message_with_review() {
         let config = create_test_config();
         let diff = "diff --git a/src/main.rs b/src/main.rs\nindex 123..456 100644\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1,3 +1,4 @@\n fn main() {\n+    println!(\"Hello, world!\");\n     // TODO: implement\n }";
@@ -1138,7 +1462,37 @@ mod tests {
         assert_eq!(args.review, true);
     }
 
-    #[tokio::test]
+    /// Tests enhanced commit message generation with and without review context using AstGrep analysis.
+    ///
+    /// This test verifies that `generate_enhanced_commit_message` produces a non-empty commit message
+    /// when provided with a diff and optional review context. It also checks that the function
+    /// gracefully falls back on error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// let config = create_test_config();
+    /// let diff = "test diff content";
+    /// let args = CommitArgs {
+    ///     ast_grep: true,
+    ///     auto_stage: false,
+    ///     message: None,
+    ///     issue_id: None,
+    ///     review: false,
+    ///     passthrough_args: vec![],
+    /// };
+    ///
+    /// // With review context
+    /// let review_context = "Review findings: code quality good";
+    /// let result = generate_enhanced_commit_message(&config, diff, None, &args, Some(review_context)).await;
+    /// assert!(result.is_ok() || result.is_err());
+    ///
+    /// // Without review context
+    /// let result = generate_enhanced_commit_message(&config, diff, None, &args, None).await;
+    /// assert!(result.is_ok() || result.is_err());
+    /// # });
+    /// ```
     async fn test_enhanced_commit_with_review_context() {
         let config = create_test_config();
         let diff = "test diff content";

@@ -71,7 +71,10 @@ pub fn passthrough_to_git_with_error_handling(
     })
 }
 
-/// Check if current directory is a git repository
+/// Determines whether the current directory is inside a Git repository.
+///
+/// Returns `Ok(true)` if the directory is part of a Git working tree, or `Ok(false)` otherwise.
+/// Returns an error if the Git command cannot be executed.
 pub fn is_git_repository() -> Result<bool, AppError> {
     let result = Command::new("git")
         .args(&["rev-parse", "--is-inside-work-tree"])
@@ -81,7 +84,16 @@ pub fn is_git_repository() -> Result<bool, AppError> {
     Ok(result.status.success())
 }
 
-/// Get the status of staged files
+/// Returns the list of staged files in the current Git repository.
+///
+/// Executes `git diff --cached --name-only` and returns the output as a string.
+///
+/// # Examples
+///
+/// ```
+/// let staged = tokio_test::block_on(get_staged_files_status()).unwrap();
+/// println!("{}", staged);
+/// ```
 pub async fn get_staged_files_status() -> Result<String, AppError> {
     let args = vec![
         "diff".to_string(),
@@ -99,7 +111,26 @@ pub async fn get_staged_diff() -> Result<String, AppError> {
     Ok(result.stdout)
 }
 
-/// Get diff for commit analysis (staged changes with fallback to unstaged)
+/// Retrieves the diff for commit analysis, preferring staged changes and falling back to unstaged changes if none are staged.
+///
+/// Attempts to obtain the diff of staged changes first. If no staged changes are present, retrieves the diff of unstaged changes in the working directory. Returns an error if no changes are detected.
+///
+/// # Returns
+///
+/// A string containing the diff for commit analysis.
+///
+/// # Errors
+///
+/// Returns an error if neither staged nor unstaged changes are found.
+///
+/// # Examples
+///
+/// ```
+/// let diff = get_diff_for_commit().await?;
+/// if !diff.is_empty() {
+///     println!("Diff for analysis:\n{}", diff);
+/// }
+/// ```
 pub async fn get_diff_for_commit() -> Result<String, AppError> {
     // First try to get staged changes
     let staged_diff = get_staged_diff().await?;
@@ -123,7 +154,15 @@ pub async fn get_diff_for_commit() -> Result<String, AppError> {
     ))
 }
 
-/// Auto-stage tracked modified files
+/// Stages all tracked and modified files in the current Git repository.
+///
+/// Runs `git add -u` to update the index with changes to tracked files. Returns an error if the command fails.
+///
+/// # Examples
+///
+/// ```
+/// auto_stage_tracked_files().await?;
+/// ```
 pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
     let args = vec!["add".to_string(), "-u".to_string()];
     let result = passthrough_to_git_with_error_handling(&args, false)?;
@@ -138,6 +177,24 @@ pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Returns a list of untracked files in the current Git repository.
+///
+/// Runs `git ls-files --others --exclude-standard` to identify files not tracked by Git, excluding those ignored by standard rules.
+///
+/// # Returns
+/// A vector of file paths representing untracked files.
+///
+/// # Errors
+/// Returns an error if the Git command fails.
+///
+/// # Examples
+///
+/// ```
+/// let files = get_untracked_files().unwrap();
+/// for file in files {
+///     println!("{}", file);
+/// }
+/// ```
 pub fn get_untracked_files() -> Result<Vec<String>, AppError> {
     let args = vec![
         "ls-files".to_string(),
@@ -156,6 +213,17 @@ pub fn get_untracked_files() -> Result<Vec<String>, AppError> {
     Ok(result.stdout.lines().map(String::from).collect())
 }
 
+/// Stages the specified files in the Git index.
+///
+/// If the provided file list is empty, the function returns immediately without performing any action.
+/// Returns an error if the Git command fails.
+///
+/// # Examples
+///
+/// ```
+/// let files = vec!["src/main.rs".to_string(), "README.md".to_string()];
+/// stage_specific_files(&files)?;
+/// ```
 pub fn stage_specific_files(files: &[String]) -> Result<(), AppError> {
     if files.is_empty() {
         return Ok(());
@@ -167,7 +235,15 @@ pub fn stage_specific_files(files: &[String]) -> Result<(), AppError> {
     passthrough_to_git(&args)
 }
 
-/// Execute git commit with message
+/// Commits staged changes in the repository with the provided commit message.
+///
+/// Executes `git commit -m <message>` and returns an error if the commit fails.
+///
+/// # Examples
+///
+/// ```
+/// execute_commit_with_message("Initial commit").await?;
+/// ```
 pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> {
     let args = vec!["commit".to_string(), "-m".to_string(), message.to_string()];
     let result = passthrough_to_git_with_error_handling(&args, false)?;

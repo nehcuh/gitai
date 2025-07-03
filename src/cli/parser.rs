@@ -7,7 +7,24 @@ use clap::{Parser, error::ErrorKind};
 pub struct CLIParser;
 
 impl CLIParser {
-    /// 解析命令行参数
+    /// Parses command-line arguments from the environment and returns the interpreted CLI operation.
+    ///
+    /// Displays help or version information and exits if requested by the user. Returns an error if argument parsing fails.
+    ///
+    /// # Returns
+    ///
+    /// A `ParsedArgs` struct containing the determined operation, AI mode, and optional language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let parsed = CLIParser::parse().unwrap();
+    /// match parsed.operation {
+    ///     Operation::GitAI(_) => { /* handle GitAI command */ }
+    ///     Operation::GitPassthrough(args) => { /* handle passthrough */ }
+    ///     Operation::Help => { /* help was displayed */ }
+    /// }
+    /// ```
     pub fn parse() -> AppResult<ParsedArgs> {
         match GitAIArgs::try_parse() {
             Ok(args) => Self::process_args(args),
@@ -24,7 +41,17 @@ impl CLIParser {
         }
     }
 
-    /// 从环境参数解析
+    /// Parses command-line arguments from a provided vector of strings.
+    ///
+    /// Converts parsing errors into a CLI error and processes the arguments into a `ParsedArgs` struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = vec!["gitai".to_string(), "commit".to_string(), "-m".to_string(), "msg".to_string()];
+    /// let parsed = CLIParser::parse_from(args).unwrap();
+    /// assert!(matches!(parsed.operation, Operation::GitAI(_)));
+    /// ```
     pub fn parse_from(args: Vec<String>) -> AppResult<ParsedArgs> {
         let args = GitAIArgs::try_parse_from(args)
             .map_err(|e| AppError::cli(format!("参数解析失败: {}", e)))?;
@@ -32,7 +59,29 @@ impl CLIParser {
         Self::process_args(args)
     }
 
-    /// 处理解析后的参数
+    /// Processes parsed CLI arguments into a structured representation.
+    ///
+    /// Converts the provided `GitAIArgs` into a `ParsedArgs` struct, determining the operation type, AI mode, and optional language. Returns an error if mutually exclusive AI flags are set or if an unsupported language is specified.
+    ///
+    /// # Returns
+    ///
+    /// A `ParsedArgs` struct containing the determined operation, AI mode, and language option, or an error if argument validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = GitAIArgs {
+    ///     ai: false,
+    ///     noai: false,
+    ///     lang: Some("en".to_string()),
+    ///     command: Some(GitAICommand::Commit(Default::default())),
+    ///     git_args: vec![],
+    /// };
+    /// let parsed = process_args(args).unwrap();
+    /// assert!(matches!(parsed.operation, Operation::GitAI(_)));
+    /// assert_eq!(parsed.ai_mode, AIMode::Smart);
+    /// assert_eq!(parsed.language, Some(SupportedLanguage::English));
+    /// ```
     fn process_args(args: GitAIArgs) -> AppResult<ParsedArgs> {
         // 解析语言参数
         let language = if let Some(lang_str) = &args.lang {
@@ -107,7 +156,25 @@ pub enum AIMode {
 }
 
 impl AIMode {
-    /// 检查是否应该使用 AI
+    /// Determines whether AI should be used based on the current mode and context.
+    ///
+    /// Returns `true` if AI is enabled globally, or if in smart mode and the context suggests AI usage. Returns `false` if AI is disabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mode = AIMode::Global;
+    /// let context = AIContext::default();
+    /// assert!(mode.should_use_ai(&context));
+    ///
+    /// let mode = AIMode::Disabled;
+    /// assert!(!mode.should_use_ai(&context));
+    ///
+    /// let mode = AIMode::Smart;
+    /// let mut context = AIContext::default();
+    /// context.has_errors = true;
+    /// assert!(mode.should_use_ai(&context));
+    /// ```
     pub fn should_use_ai(&self, context: &AIContext) -> bool {
         match self {
             AIMode::Disabled => false,
@@ -126,13 +193,38 @@ pub struct AIContext {
 }
 
 impl AIContext {
-    /// 根据上下文判断是否建议使用 AI
+    /// Returns true if the context suggests that AI should be used.
+    ///
+    /// AI usage is recommended when there are errors or when the user has explicitly requested an explanation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let context = AIContext { has_errors: true, ..Default::default() };
+    /// assert!(context.suggests_ai_usage());
+    ///
+    /// let context = AIContext { user_requested_explanation: true, ..Default::default() };
+    /// assert!(context.suggests_ai_usage());
+    ///
+    /// let context = AIContext::default();
+    /// assert!(!context.suggests_ai_usage());
+    /// ```
     pub fn suggests_ai_usage(&self) -> bool {
         self.has_errors || self.user_requested_explanation
     }
 }
 
 impl Default for AIContext {
+    /// Returns a default `AIContext` with all fields set to `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let context = AIContext::default();
+    /// assert!(!context.has_errors);
+    /// assert!(!context.is_complex_command);
+    /// assert!(!context.user_requested_explanation);
+    /// ```
     fn default() -> Self {
         Self {
             has_errors: false,

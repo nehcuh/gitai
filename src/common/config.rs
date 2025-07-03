@@ -16,6 +16,16 @@ pub struct ConfigPaths {
 }
 
 impl ConfigPaths {
+    /// Creates a new `ConfigPaths` instance with default directories for configuration, prompts, and rules under `~/.config/gitai`.
+    ///
+    /// The returned struct contains paths for the main config file, prompts directory, rules directory, and the user config directory itself.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let paths = ConfigPaths::new();
+    /// assert!(paths.config_file.ends_with("config.toml"));
+    /// ```
     pub fn new() -> Self {
         let config_dir = expand_path("~/.config/gitai");
         Self {
@@ -26,6 +36,9 @@ impl ConfigPaths {
         }
     }
 
+    /// Ensures that the user config, prompts, and rules directories exist, creating them if necessary.
+    ///
+    /// Returns an error if any directory cannot be created.
     pub fn ensure_dirs_exist(&self) -> AppResult<()> {
         ensure_dir_exists(&self.user_config_dir)?;
         ensure_dir_exists(&self.prompts_dir)?;
@@ -45,6 +58,17 @@ pub struct GitAIConfig {
 }
 
 impl Default for GitAIConfig {
+    /// Returns a `GitAIConfig` instance with default values for all configuration sections.
+    ///
+    /// The AI, Git, Translation, and General configurations are set to their respective defaults.
+    /// The DevOps configuration is set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = GitAIConfig::default();
+    /// assert!(config.devops.is_none());
+    /// ```
     fn default() -> Self {
         Self {
             ai: AIConfig::default(),
@@ -71,6 +95,16 @@ pub struct AIConfig {
 }
 
 impl Default for AIConfig {
+    /// Returns the default AI configuration for the application.
+    ///
+    /// The default settings use the OpenAI API with the "gpt-3.5-turbo" model, a temperature of 0.7, a 30-second timeout, and 3 retries. Optional fields such as API key, max tokens, top_p, and top_k are unset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let default_ai = AIConfig::default();
+    /// assert_eq!(default_ai.model_name, "gpt-3.5-turbo");
+    /// ```
     fn default() -> Self {
         Self {
             api_url: "https://api.openai.com/v1/chat/completions".to_string(),
@@ -99,6 +133,11 @@ pub struct GitConfig {
 }
 
 impl Default for GitConfig {
+    /// Returns the default Git configuration settings for the application.
+    ///
+    /// The defaults include no auto-staging, SSL verification enabled, no commit template,
+    /// "main" as the default branch, exclusion of common sensitive files, a maximum of 1000 diff lines,
+    /// and a maximum commit message length of 100 characters.
     fn default() -> Self {
         Self {
             auto_stage: false,
@@ -127,6 +166,9 @@ pub struct TranslationConfig {
 }
 
 impl Default for TranslationConfig {
+    /// Returns the default translation configuration.
+    ///
+    /// The default uses automatic language detection, English as a fallback, enables caching, and sets the cache TTL to 24 hours.
     fn default() -> Self {
         Self {
             default_language: SupportedLanguage::Auto,
@@ -150,6 +192,10 @@ pub struct DevOpsConfig {
 }
 
 impl Default for DevOpsConfig {
+    /// Returns the default DevOps configuration for GitAI.
+    ///
+    /// The default configuration uses the GitHub platform with its API URL, an empty token,
+    /// a 30-second timeout, 3 retries, and no project or workspace IDs specified.
     fn default() -> Self {
         Self {
             platform: "github".to_string(),
@@ -175,6 +221,18 @@ pub struct GeneralConfig {
 }
 
 impl Default for GeneralConfig {
+    /// Returns the default general configuration settings for the application.
+    ///
+    /// The default values include "info" log level, "text" output format, color and progress enabled,
+    /// parallel processing enabled, and the maximum number of parallel jobs set to the number of CPU cores.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let general_config = GeneralConfig::default();
+    /// assert_eq!(general_config.log_level, "info");
+    /// assert!(general_config.color_enabled);
+    /// ```
     fn default() -> Self {
         Self {
             log_level: "info".to_string(),
@@ -195,7 +253,20 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-    /// 创建新的配置管理器
+    /// Creates and initializes a new configuration manager.
+    ///
+    /// Loads configuration from disk or creates a default configuration if none exists, ensures required directories are present, and loads prompt files into memory.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the initialized `ConfigManager` or an error if initialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ConfigManager::new().unwrap();
+    /// assert!(manager.config().ai.api_url.contains("openai"));
+    /// ```
     pub fn new() -> AppResult<Self> {
         let paths = ConfigPaths::new();
         paths.ensure_dirs_exist()?;
@@ -210,7 +281,15 @@ impl ConfigManager {
         })
     }
 
-    /// 加载配置文件
+    /// Loads the GitAI configuration from the specified file path, creating a default configuration if the file does not exist.
+    ///
+    /// If the configuration file is missing, a default configuration is created and saved. The loaded configuration is then updated with any relevant environment variable overrides.
+    ///
+    /// # Returns
+    /// The loaded and environment-overridden `GitAIConfig` instance.
+    ///
+    /// # Errors
+    /// Returns an error if reading, parsing, or saving the configuration file fails.
     fn load_config(paths: &ConfigPaths) -> AppResult<GitAIConfig> {
         if !paths.config_file.exists() {
             tracing::info!("配置文件不存在，创建默认配置: {:?}", paths.config_file);
@@ -229,7 +308,29 @@ impl ConfigManager {
         Ok(config)
     }
 
-    /// 应用环境变量覆盖
+    /// Applies environment variable overrides to the provided configuration.
+    ///
+    /// This function updates fields in the given `GitAIConfig` based on the presence of specific environment variables.
+    /// AI, DevOps, and general configuration fields are overridden if their corresponding environment variables are set.
+    ///
+    /// Environment variables checked:
+    /// - AI: `GITAI_API_KEY`, `GITAI_API_URL`, `GITAI_MODEL`
+    /// - DevOps: `GITAI_DEVOPS_PLATFORM`, `GITAI_DEVOPS_BASE_URL`, `GITAI_DEVOPS_TOKEN`
+    /// - General: `GITAI_LOG_LEVEL`
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if overrides are applied successfully.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::{GitAIConfig, apply_env_overrides};
+    /// std::env::set_var("GITAI_API_KEY", "test-key");
+    /// let mut config = GitAIConfig::default();
+    /// apply_env_overrides(&mut config).unwrap();
+    /// assert_eq!(config.ai.api_key.as_deref(), Some("test-key"));
+    /// ```
     fn apply_env_overrides(config: &mut GitAIConfig) -> AppResult<()> {
         // AI 配置
         if let Ok(api_key) = std::env::var("GITAI_API_KEY") {
@@ -264,7 +365,22 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// 加载提示文件
+    /// Loads predefined prompt files from the prompts directory into a hashmap.
+    ///
+    /// Attempts to read a set of known prompt markdown files from the specified prompts directory.
+    /// Each successfully loaded file is inserted into the hashmap with its filename (without the `.md` extension) as the key.
+    /// Missing files are logged as warnings.
+    ///
+    /// # Returns
+    /// A hashmap mapping prompt names to their file contents.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let paths = ConfigPaths::new();
+    /// let prompts = load_prompts(&paths).unwrap();
+    /// assert!(prompts.contains_key("helper-prompt"));
+    /// ```
     fn load_prompts(paths: &ConfigPaths) -> AppResult<HashMap<String, String>> {
         let mut prompts = HashMap::new();
         
@@ -290,7 +406,13 @@ impl ConfigManager {
         Ok(prompts)
     }
 
-    /// 保存配置到文件
+    /// Saves the provided configuration to a file in pretty TOML format.
+    ///
+    /// Serializes the given `GitAIConfig` and writes it to the specified file path, overwriting any existing content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails or if the file cannot be written.
     fn save_config_to_file(config: &GitAIConfig, path: &Path) -> AppResult<()> {
         let content = toml::to_string_pretty(config)
             .map_err(|e| AppError::config_with_source("配置序列化失败", e))?;
@@ -298,39 +420,82 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// 保存配置
+    /// Saves the current configuration to the configuration file on disk.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the configuration was successfully saved, or an error if the operation fails.
     pub fn save_config(&self) -> AppResult<()> {
         Self::save_config_to_file(&self.config, &self.paths.config_file)
     }
 
-    /// 获取配置
+    /// Returns a reference to the current GitAI configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ConfigManager::new().unwrap();
+    /// let config = manager.config();
+    /// assert_eq!(config.ai.model_name, "gpt-3.5-turbo");
+    /// ```
     pub fn config(&self) -> &GitAIConfig {
         &self.config
     }
 
-    /// 获取可变配置引用
+    /// Returns a mutable reference to the current GitAI configuration.
+    ///
+    /// Allows modification of the application's configuration in place.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = ConfigManager::new().unwrap();
+    /// manager.config_mut().ai.temperature = 1.0;
+    /// ```
     pub fn config_mut(&mut self) -> &mut GitAIConfig {
         &mut self.config
     }
 
-    /// 获取提示内容
+    /// Returns the content of a prompt by its name, if it exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ConfigManager::new().unwrap();
+    /// if let Some(content) = manager.get_prompt("commit") {
+    ///     assert!(content.contains("commit"));
+    /// }
+    /// ```
     pub fn get_prompt(&self, name: &str) -> Option<&String> {
         self.prompts.get(name)
     }
 
-    /// 获取所有提示
+    /// Returns a reference to all loaded prompt templates.
+    ///
+    /// The returned map contains prompt names as keys and their corresponding content as values.
     pub fn prompts(&self) -> &HashMap<String, String> {
         &self.prompts
     }
 
-    /// 重新加载配置
+    /// Reloads the configuration and prompts from disk, replacing the current values.
+    ///
+    /// Returns an error if loading the configuration or prompts fails.
     pub fn reload(&mut self) -> AppResult<()> {
         self.config = Self::load_config(&self.paths)?;
         self.prompts = Self::load_prompts(&self.paths)?;
         Ok(())
     }
 
-    /// 验证配置
+    /// Validates the current configuration for required fields and value ranges.
+    ///
+    /// Checks that the AI API key and URL are set and non-empty, and that the AI temperature is within the allowed range (0.0 to 2.0). If DevOps configuration is present, ensures its token and base URL are set and non-empty. Returns an error if any validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ConfigManager::new().unwrap();
+    /// assert!(manager.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> AppResult<()> {
         // 验证 AI 配置
         if self.config.ai.api_key.is_none() || self.config.ai.api_key.as_ref().unwrap().is_empty() {
@@ -358,13 +523,27 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// 获取配置路径
+    /// Returns a reference to the configuration file and directory paths used by the application.
+    ///
+    /// This includes paths for the user config directory, main config file, prompts directory, and rules directory.
     pub fn paths(&self) -> &ConfigPaths {
         &self.paths
     }
 }
 
 impl Default for ConfigManager {
+    /// Creates a new `ConfigManager` instance with default settings, panicking if initialization fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the configuration manager cannot be created due to file system or configuration errors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ConfigManager::default();
+    /// assert!(manager.config().ai.api_url.contains("openai"));
+    /// ```
     fn default() -> Self {
         Self::new().expect("无法创建默认配置管理器")
     }

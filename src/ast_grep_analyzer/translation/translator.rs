@@ -67,7 +67,17 @@ pub trait TranslationProvider: Send + Sync {
         request: &TranslationRequest,
     ) -> TranslationResult<TranslationResponse>;
 
-    /// Translate multiple rules in batch
+    /// Translates multiple rules in a batch by processing each translation request sequentially.
+    ///
+    /// Returns a vector of translation responses corresponding to each input request. This default implementation translates each rule one at a time.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests` - A slice of translation requests to process.
+    ///
+    /// # Returns
+    ///
+    /// A result containing a vector of translation responses, or an error if any translation fails.
     async fn translate_rules_batch(
         &self,
         requests: &[TranslationRequest],
@@ -99,7 +109,23 @@ pub struct OpenAITranslationProvider {
 }
 
 impl OpenAITranslationProvider {
-    /// Create a new OpenAI translation provider
+    /// Constructs a new `OpenAITranslationProvider` with the specified API key, model, base URL, and timeout.
+    ///
+    /// If the model, base URL, or timeout are not provided, defaults are used ("gpt-3.5-turbo", "https://api.openai.com/v1", and 30 seconds respectively).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = OpenAITranslationProvider::new(
+    ///     "sk-...".to_string(),
+    ///     None,
+    ///     None,
+    ///     Some(60),
+    /// );
+    /// assert_eq!(provider.model, "gpt-3.5-turbo");
+    /// assert_eq!(provider.base_url, "https://api.openai.com/v1");
+    /// assert_eq!(provider.timeout_seconds, 60);
+    /// ```
     pub fn new(
         api_key: String,
         model: Option<String>,
@@ -120,7 +146,16 @@ impl OpenAITranslationProvider {
         }
     }
 
-    /// Create translation prompt for a rule
+    /// Generates a prompt instructing a translation provider to translate an AST-Grep analysis rule into the specified target language, preserving technical terms and formatting the output as JSON.
+    ///
+    /// The prompt includes the rule's ID, name, message, and suggestion, and provides explicit instructions to maintain technical accuracy and clarity. The output format is strictly defined for downstream parsing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let prompt = provider.create_translation_prompt(&rule, &SupportedLanguage::Chinese);
+    /// assert!(prompt.contains("AST-Grep代码分析规则翻译为简体中文"));
+    /// ```
     fn create_translation_prompt(
         &self,
         rule: &AnalysisRule,
@@ -164,10 +199,22 @@ impl OpenAITranslationProvider {
 
 #[async_trait]
 impl TranslationProvider for OpenAITranslationProvider {
+    /// Returns the name of the translation provider, which is "openai".
     fn name(&self) -> &str {
         "openai"
     }
 
+    /// Checks if the OpenAI translation provider is available by sending a minimal request to the API.
+    ///
+    /// Returns `true` if the provider responds successfully, otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = OpenAITranslationProvider::new("api-key".to_string(), None, None, None);
+    /// let available = tokio_test::block_on(provider.is_available());
+    /// assert!(available || !available); // Availability depends on API key and network.
+    /// ```
     async fn is_available(&self) -> bool {
         // Simple health check - try to make a minimal request
         let url = format!("{}/models", self.base_url);
@@ -184,6 +231,13 @@ impl TranslationProvider for OpenAITranslationProvider {
         }
     }
 
+    /// Translates an analysis rule into the target language using the OpenAI API.
+    ///
+    /// Sends a chat completion request to the OpenAI API with a generated prompt, parses the AI's JSON response, and constructs a translated rule. Returns a `TranslationResponse` containing the translated rule, a fixed confidence score, and metadata about the translation process.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TranslationError` if the API request fails, the response format is invalid, or the AI's output cannot be parsed as JSON.
     async fn translate_rule(
         &self,
         request: &TranslationRequest,
@@ -282,6 +336,12 @@ impl TranslationProvider for OpenAITranslationProvider {
         })
     }
 
+    /// Translates a batch of rules into the target language, processing requests in smaller chunks to avoid token limits.
+    ///
+    /// Each rule is translated individually; if a translation fails, a fallback response with the original rule and zero confidence is returned for that rule.
+    ///
+    /// # Returns
+    /// A vector of `TranslationResponse` objects, each containing the translated rule or the original rule if translation failed.
     async fn translate_rules_batch(
         &self,
         requests: &[TranslationRequest],
@@ -321,6 +381,17 @@ impl TranslationProvider for OpenAITranslationProvider {
         Ok(all_responses)
     }
 
+    /// Returns the list of languages supported by this translation provider.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = OpenAITranslationProvider::new("api-key".to_string(), None, None, None);
+    /// let langs = provider.supported_languages();
+    /// assert!(langs.contains(&SupportedLanguage::English));
+    /// assert!(langs.contains(&SupportedLanguage::Chinese));
+    /// assert!(langs.contains(&SupportedLanguage::Auto));
+    /// ```
     fn supported_languages(&self) -> Vec<SupportedLanguage> {
         vec![
             SupportedLanguage::English,
@@ -329,6 +400,9 @@ impl TranslationProvider for OpenAITranslationProvider {
         ]
     }
 
+    /// Returns the configuration of the OpenAI translation provider as key-value pairs.
+    ///
+    /// The configuration includes the model name, base URL, and timeout in seconds.
     fn get_config(&self) -> HashMap<String, String> {
         let mut config = HashMap::new();
         config.insert("model".to_string(), self.model.clone());
@@ -350,7 +424,14 @@ pub struct MockTranslationProvider {
 }
 
 impl MockTranslationProvider {
-    /// Create a new mock translation provider
+    /// Creates a new `MockTranslationProvider` with preset English-to-Chinese translations, a default delay, and no failure mode enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new();
+    /// assert_eq!(provider.name(), "mock");
+    /// ```
     pub fn new() -> Self {
         let mut translations = HashMap::new();
 
@@ -374,13 +455,36 @@ impl MockTranslationProvider {
         }
     }
 
-    /// Set artificial delay for testing
+    /// Sets an artificial delay in milliseconds for translation operations, used for testing purposes.
+    ///
+    /// # Parameters
+    ///
+    /// - `delay_ms`: The delay duration in milliseconds.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new instance of the provider with the specified delay applied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new().with_delay(500);
+    /// ```
     pub fn with_delay(mut self, delay_ms: u64) -> Self {
         self.delay_ms = delay_ms;
         self
     }
 
-    /// Make the provider fail for testing
+    /// Configures the mock provider to simulate failure for testing purposes.
+    ///
+    /// When set to `true`, subsequent translation attempts will return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new().with_failure(true);
+    /// assert!(!provider.is_available());
+    /// ```
     pub fn with_failure(mut self, should_fail: bool) -> Self {
         self.should_fail = should_fail;
         self
@@ -389,14 +493,49 @@ impl MockTranslationProvider {
 
 #[async_trait]
 impl TranslationProvider for MockTranslationProvider {
+    /// Returns the name of the mock translation provider.
     fn name(&self) -> &str {
         "mock"
     }
 
+    /// Indicates whether the mock translation provider is available.
+    ///
+    /// Returns `false` if the provider is configured to simulate failure; otherwise, returns `true`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new();
+    /// assert!(provider.is_available().await);
+    ///
+    /// let failing_provider = MockTranslationProvider::new().with_failure(true);
+    /// assert!(!failing_provider.is_available().await);
+    /// ```
     async fn is_available(&self) -> bool {
         !self.should_fail
     }
 
+    /// Translates an analysis rule using mock translation logic for testing purposes.
+    ///
+    /// Simulates translation by returning a preset translation if available, or by prefixing the message with the target language code. Can be configured to introduce artificial delay or to simulate failure.
+    ///
+    /// # Returns
+    ///
+    /// A `TranslationResponse` containing the translated rule, a fixed confidence score, and metadata about the translation process. Returns an error if the mock provider is configured to fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new();
+    /// let request = TranslationRequest {
+    ///     rule: create_test_rule(),
+    ///     target_language: SupportedLanguage::Chinese,
+    ///     context: None,
+    ///     priority: 1,
+    /// };
+    /// let response = provider.translate_rule(&request).await.unwrap();
+    /// assert_eq!(response.translated_rule.message, "模拟翻译信息");
+    /// ```
     async fn translate_rule(
         &self,
         request: &TranslationRequest,
@@ -447,10 +586,22 @@ impl TranslationProvider for MockTranslationProvider {
         })
     }
 
+    /// Returns the list of languages supported by this translation provider.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let provider = MockTranslationProvider::new();
+    /// let langs = provider.supported_languages();
+    /// assert_eq!(langs, vec![SupportedLanguage::Chinese]);
+    /// ```
     fn supported_languages(&self) -> Vec<SupportedLanguage> {
         vec![SupportedLanguage::Chinese]
     }
 
+    /// Returns an empty configuration map for the mock translation provider.
+    ///
+    /// This implementation does not require any configuration parameters.
     fn get_config(&self) -> HashMap<String, String> {
         HashMap::new()
     }
@@ -465,7 +616,9 @@ pub struct RuleTranslator {
 }
 
 impl RuleTranslator {
-    /// Create a new rule translator
+    /// Creates a new `RuleTranslator` with the specified translation provider and optional cache manager.
+    ///
+    /// The translator is initialized with default retry settings: 3 maximum retries and a 1000 ms delay between retries.
     pub fn new(
         provider: Arc<dyn TranslationProvider>,
         cache_manager: Option<TranslationCacheManager>,
@@ -478,14 +631,49 @@ impl RuleTranslator {
         }
     }
 
-    /// Set retry configuration
+    /// Configures the maximum number of translation retries and the delay between retries.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_retries`: The maximum number of retry attempts for failed translations.
+    /// - `retry_delay_ms`: The delay in milliseconds between retry attempts.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `RuleTranslator` instance with the updated retry configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let translator = RuleTranslator::new(provider, None)
+    ///     .with_retries(5, 2000);
+    /// ```
     pub fn with_retries(mut self, max_retries: u32, retry_delay_ms: u64) -> Self {
         self.max_retries = max_retries;
         self.retry_delay_ms = retry_delay_ms;
         self
     }
 
-    /// Translate a single rule
+    /// Translates a single analysis rule into the specified target language, using caching and retry logic.
+    ///
+    /// If the target language is English, returns the original rule without translation. Checks the cache for an existing translation before making a translation request. On a cache miss, performs translation with retries and stores the result in the cache. Returns the translated rule or an error if translation fails.
+    ///
+    /// # Arguments
+    ///
+    /// * `rule` - The analysis rule to translate.
+    /// * `target_language` - The language to translate the rule into.
+    ///
+    /// # Returns
+    ///
+    /// The translated analysis rule, or an error if translation is unsuccessful.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut translator = RuleTranslator::new(provider, Some(cache_manager));
+    /// let translated_rule = translator.translate_rule(&rule, &SupportedLanguage::Chinese).await?;
+    /// assert_eq!(translated_rule.language, SupportedLanguage::Chinese);
+    /// ```
     pub async fn translate_rule(
         &mut self,
         rule: &AnalysisRule,
@@ -540,7 +728,21 @@ impl RuleTranslator {
         Ok(response.translated_rule)
     }
 
-    /// Translate multiple rules
+    /// Translates a list of analysis rules into the specified target language.
+    ///
+    /// Each rule is translated individually. If translation fails for a rule, the original rule is used as a fallback in the result.
+    ///
+    /// # Returns
+    /// A vector containing the translated rules, or the original rules if translation failed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut translator = RuleTranslator::new(provider, None);
+    /// let rules = vec![create_test_rule()];
+    /// let translated = translator.translate_rules(&rules, &SupportedLanguage::Chinese).await.unwrap();
+    /// assert_eq!(translated.len(), rules.len());
+    /// ```
     pub async fn translate_rules(
         &mut self,
         rules: &[AnalysisRule],
@@ -562,17 +764,45 @@ impl RuleTranslator {
         Ok(translated_rules)
     }
 
-    /// Check if provider is available
+    /// Checks whether the translation provider is currently available.
+    ///
+    /// Returns `true` if the provider is reachable and operational, otherwise `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let available = rule_translator.is_provider_available().await;
+    /// assert!(available || !available); // Availability depends on provider state
+    /// ```
     pub async fn is_provider_available(&self) -> bool {
         self.provider.is_available().await
     }
 
-    /// Get provider information
+    /// Returns the translation provider's name and configuration details.
+    ///
+    /// The configuration is a map of provider-specific settings such as model, base URL, or timeout.
     pub fn get_provider_info(&self) -> (String, HashMap<String, String>) {
         (self.provider.name().to_string(), self.provider.get_config())
     }
 
-    /// Translate with retry logic
+    /// Attempts to translate a rule using the provider, retrying on failure up to the configured number of times.
+    ///
+    /// Retries translation if an error occurs, waiting for the specified delay between attempts. Returns the translation response on success, or the last encountered error if all attempts fail.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The translation request containing the rule and target language.
+    ///
+    /// # Returns
+    ///
+    /// A `TranslationResponse` on success, or a `TranslationError` if all retries fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let response = translator.translate_with_retries(&request).await?;
+    /// assert!(response.confidence > 0.0);
+    /// ```
     async fn translate_with_retries(
         &self,
         request: &TranslationRequest,
@@ -602,7 +832,18 @@ impl RuleTranslator {
         }))
     }
 
-    /// Calculate hash for rule content
+    /// Computes a hash string representing the content of an analysis rule.
+    ///
+    /// The hash is based on the rule's ID, name, message, and suggestion fields. This can be used for caching or change detection purposes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = create_test_rule();
+    /// let translator = RuleTranslator::new(Arc::new(MockTranslationProvider::new()), None);
+    /// let hash = translator.calculate_rule_hash(&rule);
+    /// assert!(!hash.is_empty());
+    /// ```
     fn calculate_rule_hash(&self, rule: &AnalysisRule) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -622,6 +863,17 @@ mod tests {
     use super::*;
     use crate::ast_grep_analyzer::core::{IssueCategory, IssueSeverity};
 
+    /// Creates a sample `AnalysisRule` for testing purposes.
+    ///
+    /// The returned rule is configured for JavaScript and checks for strict equality comparison.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = create_test_rule();
+    /// assert_eq!(rule.id, "test-rule");
+    /// assert_eq!(rule.language, "javascript");
+    /// ```
     fn create_test_rule() -> AnalysisRule {
         AnalysisRule {
             id: "test-rule".to_string(),

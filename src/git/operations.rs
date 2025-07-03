@@ -31,21 +31,45 @@ pub struct GitOps {
 }
 
 impl GitOps {
-    /// 创建新的 Git 操作实例
+    /// Creates a new instance for performing Git operations on the specified repository path.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let git_ops = GitOps::new("/path/to/repo");
+    /// ```
     pub fn new(repository_path: impl AsRef<Path>) -> Self {
         Self {
             repository_path: repository_path.as_ref().to_path_buf(),
         }
     }
 
-    /// 在当前目录创建 Git 操作实例
+    /// Creates a `GitOps` instance for the current working directory.
+    ///
+    /// Returns an error if the current directory cannot be determined.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let git_ops = GitOps::current_dir().unwrap();
+    /// assert!(git_ops.is_git_repository() || !git_ops.is_git_repository());
+    /// ```
     pub fn current_dir() -> AppResult<Self> {
         let current_dir = std::env::current_dir()
             .map_err(|e| AppError::io(format!("获取当前目录失败: {}", e)))?;
         Ok(Self::new(current_dir))
     }
 
-    /// 查找 Git 仓库根目录
+    /// Recursively searches upward from the given path to locate the root of a Git repository.
+    ///
+    /// Returns the path to the directory containing the `.git` folder, or an error if no Git repository is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let repo_root = find_repository_root("/path/to/some/subdir")?;
+    /// assert!(repo_root.join(".git").exists());
+    /// ```
     pub fn find_repository_root(start_path: impl AsRef<Path>) -> AppResult<std::path::PathBuf> {
         let mut current = start_path.as_ref().to_path_buf();
         
@@ -64,6 +88,17 @@ impl GitOps {
 
 #[async_trait]
 impl GitOperations for GitOps {
+    /// Executes a Git command with the specified arguments in the repository directory.
+    ///
+    /// Runs the given Git command asynchronously, capturing both standard output and error output.
+    /// Returns a `CommandOutput` containing the command's output and exit status, or an error if the command fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let output = git_ops.execute_git_command(&["status", "--porcelain"]).await?;
+    /// assert!(output.stdout.contains("M"));
+    /// ```
     async fn execute_git_command(&self, args: &[&str]) -> AppResult<CommandOutput> {
         let mut cmd = Command::new("git");
         cmd.current_dir(&self.repository_path)
@@ -97,11 +132,43 @@ impl GitOperations for GitOps {
         })
     }
 
+    /// Retrieves the Git repository status in porcelain format.
+    ///
+    /// Returns the output of `git status --porcelain`, which provides a machine-readable summary of the repository's current state.
+    ///
+    /// # Returns
+    ///
+    /// A string containing the porcelain status output.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use your_module::{GitOps, GitOperations};
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let git = GitOps::current_dir()?;
+    /// let status = git.get_status().await?;
+    /// println!("{}", status);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn get_status(&self) -> AppResult<String> {
         let output = self.execute_git_command(&["status", "--porcelain"]).await?;
         Ok(output.stdout)
     }
 
+    /// Retrieves the Git diff output for the repository.
+    ///
+    /// If `staged` is `true`, returns the diff of staged changes (`git diff --staged`); otherwise, returns the diff of unstaged changes (`git diff`).
+    ///
+    /// # Returns
+    /// The diff output as a string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let diff = git_ops.get_diff(false).await?;
+    /// println!("{}", diff);
+    /// ```
     async fn get_diff(&self, staged: bool) -> AppResult<String> {
         let args = if staged {
             vec!["diff", "--staged"]
@@ -113,15 +180,45 @@ impl GitOperations for GitOps {
         Ok(output.stdout)
     }
 
+    /// Checks if the repository path contains a `.git` directory, indicating a Git repository.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let git_ops = GitOps::new("/path/to/repo");
+    /// assert!(git_ops.is_git_repository());
+    /// ```
     fn is_git_repository(&self) -> bool {
         self.repository_path.join(".git").exists()
     }
 
+    /// Retrieves the name of the current Git branch.
+    ///
+    /// # Returns
+    ///
+    /// The name of the currently checked-out branch as a `String`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let branch = git_ops.get_current_branch().await?;
+    /// assert!(!branch.is_empty());
+    /// ```
     async fn get_current_branch(&self) -> AppResult<String> {
         let output = self.execute_git_command(&["branch", "--show-current"]).await?;
         Ok(output.stdout.trim().to_string())
     }
 
+    /// Retrieves a list of recent Git commits, limited by the specified count.
+    ///
+    /// Each commit includes the hash, author name and email, commit message, and date.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let commits = git_ops.get_recent_commits(5).await?;
+    /// assert!(commits.len() <= 5);
+    /// ```
     async fn get_recent_commits(&self, count: usize) -> AppResult<Vec<GitCommit>> {
         let count_arg = format!("-{}", count);
         let args = vec![
@@ -153,7 +250,18 @@ pub struct GitCommit {
 }
 
 impl GitCommit {
-    /// 从 git log 输出行解析提交信息
+    /// Parses a single line of `git log` output into a `GitCommit`.
+    ///
+    /// The input line must contain exactly five fields separated by `|` in the order: hash, author name, author email, commit message, and date.
+    /// Returns `Some(GitCommit)` if parsing succeeds, or `None` if the format is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let line = "abc1234|Alice|alice@example.com|Initial commit|2024-07-01";
+    /// let commit = GitCommit::from_log_line(line);
+    /// assert!(commit.is_some());
+    /// ```
     pub fn from_log_line(line: &str) -> Option<Self> {
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() == 5 {
@@ -169,7 +277,20 @@ impl GitCommit {
         }
     }
 
-    /// 获取短哈希
+    /// Returns the first 7 characters of the commit hash, or the full hash if it is shorter.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let commit = GitCommit {
+    ///     hash: "abcdef1234567890".to_string(),
+    ///     author_name: "Alice".to_string(),
+    ///     author_email: "alice@example.com".to_string(),
+    ///     message: "Initial commit".to_string(),
+    ///     date: "2024-06-01".to_string(),
+    /// };
+    /// assert_eq!(commit.short_hash(), "abcdef1");
+    /// ```
     pub fn short_hash(&self) -> String {
         if self.hash.len() >= 7 {
             self.hash[..7].to_string()
@@ -190,7 +311,19 @@ pub struct GitStatus {
 }
 
 impl GitStatus {
-    /// 从 git status --porcelain 输出解析状态
+    /// Parses the output of `git status --porcelain` into a `GitStatus` struct, categorizing files by their change type.
+    ///
+    /// This method processes each line of the porcelain output and assigns file paths to the appropriate lists for modified, added, deleted, untracked, and staged files.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let output = " M file1.txt\nA  file2.txt\n?? file3.txt\n";
+    /// let status = GitStatus::from_porcelain(output);
+    /// assert!(status.modified.contains(&"file1.txt".to_string()));
+    /// assert!(status.added.contains(&"file2.txt".to_string()));
+    /// assert!(status.untracked.contains(&"file3.txt".to_string()));
+    /// ```
     pub fn from_porcelain(output: &str) -> Self {
         let mut status = GitStatus {
             modified: Vec::new(),
@@ -227,7 +360,20 @@ impl GitStatus {
         status
     }
 
-    /// 检查是否有任何变更
+    /// Returns `true` if there are any modified, added, deleted, or staged files in the repository status.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let status = GitStatus {
+    ///     modified: vec!["file1.txt".into()],
+    ///     added: vec![],
+    ///     deleted: vec![],
+    ///     untracked: vec![],
+    ///     staged: vec![],
+    /// };
+    /// assert!(status.has_changes());
+    /// ```
     pub fn has_changes(&self) -> bool {
         !self.modified.is_empty() || 
         !self.added.is_empty() || 
@@ -235,7 +381,20 @@ impl GitStatus {
         !self.staged.is_empty()
     }
 
-    /// 检查是否有暂存的变更
+    /// Returns `true` if there are any staged changes in the repository.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let status = GitStatus {
+    ///     modified: vec![],
+    ///     added: vec![],
+    ///     deleted: vec![],
+    ///     untracked: vec![],
+    ///     staged: vec!["file1.txt".to_string()],
+    /// };
+    /// assert!(status.has_staged_changes());
+    /// ```
     pub fn has_staged_changes(&self) -> bool {
         !self.staged.is_empty()
     }

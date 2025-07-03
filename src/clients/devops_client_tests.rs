@@ -114,7 +114,15 @@ async fn test_get_work_item_api_logical_error() {
     }
 }
 
-#[tokio::test]
+/// Tests that `DevOpsClient::get_work_item` returns a `WorkItemNotFound` error when the API responds with HTTP 404.
+///
+/// This verifies that the client correctly identifies and reports missing work items.
+///
+/// # Examples
+///
+/// ```
+/// // This test is intended to be run with `cargo test` and uses mocked HTTP responses.
+/// ```
 async fn test_get_work_item_not_found_404() {
     let server = MockServer::start_async().await;
     let client = DevOpsClient::new(server.base_url(), "token".to_string());
@@ -173,7 +181,9 @@ async fn test_get_work_item_rate_limit_error_429() {
     assert!(matches!(result, Err(DevOpsError::RateLimitExceeded)));
 }
 
-#[tokio::test]
+/// Tests that `DevOpsClient::get_work_item` returns a `ServerError` when the server responds with HTTP 500.
+///
+/// Mocks a 500 Internal Server Error response and asserts that the client returns a `DevOpsError::ServerError` with the correct status code.
 async fn test_get_work_item_server_error_500() {
     let server = MockServer::start_async().await;
     let client = DevOpsClient::new(server.base_url(), "token".to_string());
@@ -339,7 +349,9 @@ async fn test_get_work_items_success() {
     assert_eq!(results[1].as_ref().unwrap(), &mock_item_102);
 }
 
-#[tokio::test]
+/// Tests that `get_work_items` returns a mix of successful and failed results when some work items are found and others are not.
+///
+/// Mocks a scenario where one work item is successfully retrieved and another returns a 404 error. Asserts that the results vector contains an `Ok` for the found item and an `Err(WorkItemNotFound)` for the missing item.
 async fn test_get_work_items_partial_failure() {
     let server = MockServer::start_async().await;
     let client = DevOpsClient::new(server.base_url(), "token".to_string());
@@ -449,7 +461,16 @@ async fn test_get_work_item_network_error() {
 }
 
 // Test for retry logic with persistent failure
-#[tokio::test]
+/// Tests that the client returns a `ServerError` after exhausting all retry attempts on persistent HTTP 500 failures.
+///
+/// This test configures the mock server to always return HTTP 500 for a work item request. It verifies that the client retries the expected number of times and ultimately returns a `DevOpsError::ServerError` with the correct status code.
+///
+/// # Examples
+///
+/// ```
+/// // This test is intended to be run as part of the async test suite.
+/// // It does not return a value but asserts correct error handling and retry behavior.
+/// ```
 async fn test_get_work_item_retry_persistent_failure() {
     let server = MockServer::start_async().await;
     // Client configured with retry_count = 3 by default

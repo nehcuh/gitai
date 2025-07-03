@@ -71,7 +71,20 @@ pub struct UpdateInfo {
 }
 
 impl RuleManager {
-    /// Create a new rule manager
+    /// Creates a new `RuleManager` instance with the specified or default rules directory.
+    ///
+    /// If no directory is provided, the rules directory is set to a default location under the user's config directory. Ensures the directory exists, initializes the HTTP client, and loads default rule sources.
+    ///
+    /// # Returns
+    ///
+    /// A `RuleManager` ready to manage rule sources and updates, or an error if initialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(None).unwrap();
+    /// assert!(manager.get_rules_dir().exists());
+    /// ```
     pub fn new(rules_dir: Option<PathBuf>) -> Result<Self, AnalysisError> {
         let rules_dir = rules_dir.unwrap_or_else(|| {
             dirs::config_dir()
@@ -101,7 +114,14 @@ impl RuleManager {
         Ok(manager)
     }
 
-    /// Initialize default rule sources
+    /// Adds the default rule sources to the manager, including official, community, and security repositories.
+    ///
+    /// This method populates the sources list with three preconfigured GitHub repositories for ast-grep rules:
+    /// - "official": The main ast-grep rules repository (enabled, highest priority)
+    /// - "community": Community-contributed rules (enabled)
+    /// - "security": Security-focused rules (disabled by default)
+    ///
+    /// Existing sources with the same names will be overwritten.
     fn initialize_default_sources(&mut self) {
         // Official ast-grep rules repository
         self.sources.insert(
@@ -146,24 +166,84 @@ impl RuleManager {
         );
     }
 
-    /// List available rule sources
+    /// Returns all configured rule sources sorted by descending priority.
+    ///
+    /// Each returned tuple contains the source name and its corresponding `RuleSource`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(None).unwrap();
+    /// let sources = manager.list_sources();
+    /// assert!(!sources.is_empty());
+    /// ```
     pub fn list_sources(&self) -> Vec<(&String, &RuleSource)> {
         let mut sources: Vec<_> = self.sources.iter().collect();
         sources.sort_by(|a, b| b.1.priority.cmp(&a.1.priority));
         sources
     }
 
-    /// Add a new rule source
+    /// Adds or replaces a rule source with the specified name.
+    ///
+    /// If a source with the same name already exists, it will be replaced.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = RuleManager::new(Some(temp_dir())).unwrap();
+    /// let source = RuleSource {
+    ///     source_type: "github".to_string(),
+    ///     location: "owner/repo".to_string(),
+    ///     reference: "main".to_string(),
+    ///     description: "Test source".to_string(),
+    ///     enabled: true,
+    ///     last_updated: None,
+    ///     priority: 50,
+    /// };
+    /// manager.add_source("test".to_string(), source);
+    /// assert!(manager.sources.contains_key("test"));
+    /// ```
     pub fn add_source(&mut self, name: String, source: RuleSource) {
         self.sources.insert(name, source);
     }
 
-    /// Remove a rule source
+    /// Removes a rule source by name.
+    ///
+    /// Returns `true` if the source was present and removed, or `false` if no source with the given name existed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = RuleManager::new(Some(temp_dir())).unwrap();
+    /// manager.add_source("custom".to_string(), RuleSource::default());
+    /// assert!(manager.remove_source("custom"));
+    /// assert!(!manager.remove_source("nonexistent"));
+    /// ```
     pub fn remove_source(&mut self, name: &str) -> bool {
         self.sources.remove(name).is_some()
     }
 
-    /// Check for available updates
+    /// Checks for available updates for rule sources.
+    ///
+    /// If a specific source name is provided, checks for updates only for that source. Otherwise, checks all enabled sources. Returns a vector of source names and their corresponding update information. If a source fails to check for updates, a warning is logged and the process continues for other sources.
+    ///
+    /// # Returns
+    ///
+    /// A vector of tuples containing the source name and its `UpdateInfo`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the specified source name does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(None).unwrap();
+    /// let updates = tokio_test::block_on(manager.check_updates(None)).unwrap();
+    /// for (name, info) in updates {
+    ///     println!("Source: {}, Update available: {}", name, info.update_available);
+    /// }
+    /// ```
     pub async fn check_updates(
         &self,
         source_name: Option<&str>,
@@ -201,7 +281,18 @@ impl RuleManager {
         Ok(updates)
     }
 
-    /// Check for updates from a specific source
+    /// Checks for available updates from a specific rule source.
+    ///
+    /// Determines the update status by dispatching to the appropriate update check method based on the source type (`github`, `url`, or `local`). Returns detailed update information, including version and changelog, or an error if the source type is unsupported.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let update_info = rule_manager.check_source_update("official", &source).await?;
+    /// if update_info.update_available {
+    ///     println!("Update available: {}", update_info.available_version);
+    /// }
+    /// ```
     async fn check_source_update(
         &self,
         source_name: &str,
@@ -221,7 +312,25 @@ impl RuleManager {
         }
     }
 
-    /// Check for GitHub repository updates
+    /// Checks for updates to a GitHub repository rule source by comparing the latest commit SHA with the current version.
+    ///
+    /// Queries the GitHub API for the latest commit on the specified branch or tag, determines if an update is available, and retrieves the commit message as a changelog.
+    ///
+    /// # Returns
+    /// An `UpdateInfo` struct containing the current and available versions, update availability, changelog, and download size (if available).
+    ///
+    /// # Errors
+    /// Returns an `AnalysisError` if the GitHub API request fails or the response cannot be parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let update_info = manager
+    ///     .check_github_update(&source, Some("abcdef12".to_string()))
+    ///     .await
+    ///     .unwrap();
+    /// assert!(update_info.available_version.len() == 8);
+    /// ```
     async fn check_github_update(
         &self,
         source: &RuleSource,
@@ -278,7 +387,23 @@ impl RuleManager {
         })
     }
 
-    /// Check for URL-based updates
+    /// Checks for updates to a rule source provided via a direct URL.
+    ///
+    /// Sends a HEAD request to the specified URL, retrieves the `etag` header (or uses the current timestamp if unavailable) as the available version, and compares it to the current version to determine if an update is available. Also extracts the content length if present.
+    ///
+    /// # Returns
+    ///
+    /// An `UpdateInfo` struct containing the current and available versions, update availability, and download size.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let update_info = rule_manager
+    ///     .check_url_update(&source, Some("previous-etag".to_string()))
+    ///     .await
+    ///     .unwrap();
+    /// assert!(update_info.update_available || !update_info.update_available);
+    /// ```
     async fn check_url_update(
         &self,
         source: &RuleSource,
@@ -324,7 +449,25 @@ impl RuleManager {
         })
     }
 
-    /// Check for local file updates
+    /// Checks if a local file or directory has been updated by comparing its last modification time to the current version.
+    ///
+    /// Returns update information including the available version (as the modification timestamp), whether an update is available, and the file size. Returns an error if the local path does not exist or cannot be accessed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let source = RuleSource {
+    ///     source_type: "local".to_string(),
+    ///     location: "/path/to/rules".to_string(),
+    ///     reference: "".to_string(),
+    ///     description: "".to_string(),
+    ///     enabled: true,
+    ///     last_updated: None,
+    ///     priority: 0,
+    /// };
+    /// let info = manager.check_local_update(&source, None)?;
+    /// assert!(info.update_available);
+    /// ```
     fn check_local_update(
         &self,
         source: &RuleSource,
@@ -362,7 +505,30 @@ impl RuleManager {
         })
     }
 
-    /// Update rules from a specific source
+    /// Updates rules from a specified or default source, optionally creating a backup and verifying the rules.
+    ///
+    /// If a custom repository is provided in the arguments, it is added as a "custom" source and used for the update; otherwise, the "official" source is used. Depending on the source type (`github`, `url`, or `local`), the function downloads or copies the rules, installs them, and updates the source metadata. Optionally, it creates a backup before updating and verifies the installed rules after the update.
+    ///
+    /// # Returns
+    /// Metadata about the updated rules, including version, rule count, and checksum.
+    ///
+    /// # Errors
+    /// Returns an error if the source is not found, the source type is unsupported, downloading or copying fails, verification fails, or metadata cannot be saved.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = RuleManager::new(Some(temp_dir.clone()))?;
+    /// let args = UpdateRulesArgs {
+    ///     repository: None,
+    ///     source: "github".to_string(),
+    ///     reference: "main".to_string(),
+    ///     backup: false,
+    ///     verify: true,
+    /// };
+    /// let metadata = manager.update_rules(&args).await?;
+    /// assert!(metadata.rule_count > 0);
+    /// ```
     pub async fn update_rules(
         &mut self,
         args: &UpdateRulesArgs,
@@ -443,7 +609,24 @@ impl RuleManager {
         Ok(metadata)
     }
 
-    /// Download rules from GitHub
+    /// Downloads and installs rule files from a GitHub repository archive.
+    ///
+    /// Fetches a ZIP archive of the specified repository and reference (branch or tag),
+    /// then extracts and installs rule files into the appropriate source directory.
+    ///
+    /// # Returns
+    ///
+    /// Returns metadata about the installed rules, including version, checksum, and file list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let metadata = rule_manager
+    ///     .download_github_rules(&source, "official", &args)
+    ///     .await
+    ///     .unwrap();
+    /// assert!(metadata.rule_count > 0);
+    /// ```
     async fn download_github_rules(
         &self,
         source: &RuleSource,
@@ -481,7 +664,27 @@ impl RuleManager {
             .await
     }
 
-    /// Download rules from URL
+    /// Downloads rules from a URL and installs them for the specified source.
+    ///
+    /// If the URL ends with `.zip`, the content is extracted and rule files are installed. Otherwise, the content is treated as a raw rule file and installed directly.
+    ///
+    /// # Returns
+    ///
+    /// Metadata about the installed rules, including version, checksum, and file list.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the download fails, the response cannot be read, or installation encounters an issue.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let metadata = rule_manager
+    ///     .download_url_rules(&source, "custom", &args)
+    ///     .await
+    ///     .unwrap();
+    /// assert!(metadata.rule_count > 0);
+    /// ```
     async fn download_url_rules(
         &self,
         source: &RuleSource,
@@ -512,7 +715,32 @@ impl RuleManager {
         }
     }
 
-    /// Copy rules from local path
+    /// Copies rule files from a local file or directory into the rule source directory.
+    ///
+    /// If the source is a file, it is copied directly. If the source is a directory, all rule files are recursively copied. Returns metadata describing the installed rules.
+    ///
+    /// # Returns
+    /// Metadata about the copied rules, including file list and rule count.
+    ///
+    /// # Errors
+    /// Returns an error if the source path is invalid, not found, or if file operations fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.clone())).unwrap();
+    /// let source = RuleSource {
+    ///     source_type: "local".to_string(),
+    ///     location: "/path/to/rules".to_string(),
+    ///     reference: "".to_string(),
+    ///     description: "".to_string(),
+    ///     enabled: true,
+    ///     last_updated: None,
+    ///     priority: 50,
+    /// };
+    /// let metadata = manager.copy_local_rules(&source, "custom", &UpdateRulesArgs::default()).unwrap();
+    /// assert!(metadata.rule_count > 0);
+    /// ```
     fn copy_local_rules(
         &self,
         source: &RuleSource,
@@ -566,7 +794,17 @@ impl RuleManager {
         }
     }
 
-    /// Extract and install rules from zip content
+    /// Extracts rule files from a ZIP archive and installs them into the source directory.
+    ///
+    /// Only files with supported rule file extensions (`yaml`, `yml`, `toml`, `json`) are extracted. The top-level directory in the archive is removed from the file paths. Existing files in the target directory are deleted before extraction. Returns metadata about the installed rules.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let zip_bytes = std::fs::read("rules.zip").unwrap();
+    /// let metadata = manager.extract_and_install_rules("official", &zip_bytes, &args).await.unwrap();
+    /// assert!(metadata.rule_count > 0);
+    /// ```
     async fn extract_and_install_rules(
         &self,
         source_name: &str,
@@ -638,7 +876,19 @@ impl RuleManager {
         })
     }
 
-    /// Install raw rule content
+    /// Installs raw rule content as a single `rules.yaml` file in the specified source directory.
+    ///
+    /// Creates the target directory if it does not exist, writes the provided content to `rules.yaml`,
+    /// and returns metadata describing the installed rule.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.clone())).unwrap();
+    /// let content = b"pattern: foo";
+    /// let metadata = tokio_test::block_on(manager.install_raw_rules("custom", content, &UpdateRulesArgs::default())).unwrap();
+    /// assert_eq!(metadata.files, vec!["rules.yaml"]);
+    /// ```
     async fn install_raw_rules(
         &self,
         source_name: &str,
@@ -667,7 +917,18 @@ impl RuleManager {
         })
     }
 
-    /// Check if a file is a rule file
+    /// Determines whether the given path refers to a rule file based on its extension.
+    ///
+    /// Returns `true` if the file extension is `yaml`, `yml`, `toml`, or `json`; otherwise, returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(None).unwrap();
+    /// assert!(manager.is_rule_file(Path::new("rule.yaml")));
+    /// assert!(manager.is_rule_file(Path::new("config.toml")));
+    /// assert!(!manager.is_rule_file(Path::new("README.md")));
+    /// ```
     fn is_rule_file(&self, path: &Path) -> bool {
         if let Some(ext) = path.extension() {
             matches!(
@@ -679,7 +940,13 @@ impl RuleManager {
         }
     }
 
-    /// Copy directory recursively
+    /// Recursively copies rule files from a source directory to a target directory, preserving directory structure.
+    ///
+    /// Only files recognized as rule files (`yaml`, `yml`, `toml`, or `json`) are copied. Non-rule files are ignored.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `AnalysisError` if any file or directory operation fails.
     fn copy_directory(&self, source: &Path, target: &Path) -> Result<(), AnalysisError> {
         if !target.exists() {
             fs::create_dir_all(target).map_err(|e| AnalysisError::IOError(e))?;
@@ -700,12 +967,33 @@ impl RuleManager {
         Ok(())
     }
 
-    /// Get directory for a specific source
+    /// Returns the directory path for the specified rule source within the rules directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(PathBuf::from("/tmp/rules"))).unwrap();
+    /// let dir = manager.get_source_dir("official");
+    /// assert_eq!(dir, PathBuf::from("/tmp/rules/official"));
+    /// ```
     fn get_source_dir(&self, source_name: &str) -> PathBuf {
         self.rules_dir.join(source_name)
     }
 
-    /// List rule files in a directory
+    /// Recursively lists all rule files in a directory and its subdirectories.
+    ///
+    /// Returns a vector of relative file paths for files recognized as rule files
+    /// (with extensions `yaml`, `yml`, `toml`, or `json`). If the directory does not exist,
+    /// returns an empty vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule_files = manager.list_rule_files(Path::new("./rules")).unwrap();
+    /// for file in rule_files {
+    ///     println!("{}", file);
+    /// }
+    /// ```
     fn list_rule_files(&self, dir: &Path) -> Result<Vec<String>, AnalysisError> {
         let mut files = Vec::new();
 
@@ -736,7 +1024,22 @@ impl RuleManager {
         Ok(files)
     }
 
-    /// Create backup of existing rules
+    /// Creates a timestamped backup of the specified rule source's directory.
+    ///
+    /// If the source directory does not exist, no backup is created.
+    /// The backup is stored under the `backups` subdirectory of the rules directory, with a name including the source and current timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup directory cannot be created or files cannot be copied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.clone())).unwrap();
+    /// manager.create_backup("official").unwrap();
+    /// // A backup directory for "official" now exists under "backups"
+    /// ```
     fn create_backup(&self, source_name: &str) -> Result<(), AnalysisError> {
         let source_dir = self.get_source_dir(source_name);
         if !source_dir.exists() {
@@ -758,7 +1061,21 @@ impl RuleManager {
         Ok(())
     }
 
-    /// Verify downloaded rules
+    /// Verifies the existence and syntax of all rule files listed in the provided metadata for a given source.
+    ///
+    /// Checks that each rule file exists in the source directory and validates its syntax according to its file type (YAML, TOML, or JSON).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any rule file is missing or contains invalid syntax.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.clone())).unwrap();
+    /// let metadata = manager.load_metadata("official").unwrap();
+    /// manager.verify_rules("official", &metadata).unwrap();
+    /// ```
     fn verify_rules(
         &self,
         source_name: &str,
@@ -803,7 +1120,22 @@ impl RuleManager {
         Ok(())
     }
 
-    /// Save metadata for a source
+    /// Saves the metadata for a rule source as a `metadata.json` file in the source's directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.clone())).unwrap();
+    /// let metadata = RuleMetadata {
+    ///     version: "1.0".to_string(),
+    ///     downloaded_at: 1234567890,
+    ///     source: "official".to_string(),
+    ///     rule_count: 5,
+    ///     checksum: "abc123".to_string(),
+    ///     files: vec!["rule1.yaml".to_string()],
+    /// };
+    /// manager.save_metadata("official", &metadata).unwrap();
+    /// ```
     fn save_metadata(
         &self,
         source_name: &str,
@@ -818,7 +1150,22 @@ impl RuleManager {
         Ok(())
     }
 
-    /// Load metadata for a source
+    /// Loads and deserializes the metadata for a given rule source from its `metadata.json` file.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_name` - The name of the rule source whose metadata should be loaded.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `RuleMetadata` for the specified source, or an error if the file cannot be read or parsed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let metadata = rule_manager.load_metadata("official")?;
+    /// assert_eq!(metadata.source, "official");
+    /// ```
     fn load_metadata(&self, source_name: &str) -> Result<RuleMetadata, AnalysisError> {
         let metadata_file = self.get_source_dir(source_name).join("metadata.json");
         let content = fs::read_to_string(&metadata_file).map_err(|e| AnalysisError::IOError(e))?;
@@ -827,7 +1174,22 @@ impl RuleManager {
             .map_err(|e| AnalysisError::Generic(format!("Failed to parse metadata: {}", e)))
     }
 
-    /// Get all installed rule sources
+    /// Returns a list of all installed rule sources and their metadata.
+    ///
+    /// Each entry contains the source name and its associated `RuleMetadata`. Sources without valid metadata are skipped. The "backups" directory is excluded.
+    ///
+    /// # Returns
+    ///
+    /// A vector of tuples containing the source name and its metadata.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let installed = manager.get_installed_sources().unwrap();
+    /// for (name, metadata) in installed {
+    ///     println!("Source: {}, Version: {}", name, metadata.version);
+    /// }
+    /// ```
     pub fn get_installed_sources(&self) -> Result<Vec<(String, RuleMetadata)>, AnalysisError> {
         let mut installed = Vec::new();
 
@@ -851,7 +1213,25 @@ impl RuleManager {
         Ok(installed)
     }
 
-    /// Clean up old backups
+    /// Removes the oldest backup directories, keeping only the specified number of recent backups.
+    ///
+    /// Returns the number of backups that were removed.
+    ///
+    /// # Parameters
+    /// - `keep_count`: The number of most recent backups to retain.
+    ///
+    /// # Returns
+    /// The number of backup directories deleted.
+    ///
+    /// # Errors
+    /// Returns an error if reading or deleting backup directories fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let removed = rule_manager.cleanup_backups(3)?;
+    /// assert!(removed >= 0);
+    /// ```
     pub fn cleanup_backups(&self, keep_count: usize) -> Result<usize, AnalysisError> {
         let backup_dir = self.rules_dir.join("backups");
         if !backup_dir.exists() {
@@ -884,17 +1264,46 @@ impl RuleManager {
         Ok(removed)
     }
 
-    /// Get rules directory path
+    /// Returns the path to the rules directory managed by this instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(None).unwrap();
+    /// let path = manager.get_rules_dir();
+    /// assert!(path.exists());
+    /// ```
     pub fn get_rules_dir(&self) -> &Path {
         &self.rules_dir
     }
 
-    /// Get total disk usage of all rules
+    /// Returns the total disk usage in bytes of the rules directory, including all rule files and subdirectories.
+    ///
+    /// # Returns
+    ///
+    /// The total size in bytes of all files within the rules directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = RuleManager::new(Some(temp_dir.into())).unwrap();
+    /// let usage = manager.get_disk_usage().unwrap();
+    /// assert!(usage >= 0);
+    /// ```
     pub fn get_disk_usage(&self) -> Result<u64, AnalysisError> {
         self.calculate_directory_size(&self.rules_dir)
     }
 
-    /// Calculate directory size recursively
+    /// Recursively calculates the total size in bytes of all files within a directory.
+    ///
+    /// Returns the sum of file sizes for the specified directory and all its subdirectories. Returns 0 if the directory does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let size = rule_manager.calculate_directory_size(std::path::Path::new("/path/to/dir")).unwrap();
+    /// assert!(size >= 0);
+    /// ```
     fn calculate_directory_size(&self, dir: &Path) -> Result<u64, AnalysisError> {
         let mut total_size = 0;
 

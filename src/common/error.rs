@@ -79,6 +79,13 @@ pub enum AppError {
 
 impl AppError {
     // 配置错误构建器
+    /// Creates a configuration error with the given message.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::config("Missing configuration file");
+    /// ```
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config { 
             message: msg.into(), 
@@ -86,6 +93,16 @@ impl AppError {
         }
     }
 
+    /// Creates a configuration error with a message and an associated source error.
+    ///
+    /// # Parameters
+    ///
+    /// - `msg`: The error message describing the configuration issue.
+    /// - `err`: The underlying source error to associate with this configuration error.
+    ///
+    /// # Returns
+    ///
+    /// An `AppError::Config` variant containing the provided message and source error.
     pub fn config_with_source(msg: impl Into<String>, err: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::Config { 
             message: msg.into(), 
@@ -94,6 +111,16 @@ impl AppError {
     }
 
     // Git 错误构建器
+    /// Creates a new Git-related error with the provided message.
+    ///
+    /// This constructor initializes a `Git` error variant without additional context such as exit code, command, or output streams. Use this for general Git errors where detailed information is not available.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::git("Failed to fetch repository");
+    /// assert!(matches!(err, AppError::Git { .. }));
+    /// ```
     pub fn git(msg: impl Into<String>) -> Self {
         Self::Git { 
             message: msg.into(), 
@@ -104,6 +131,16 @@ impl AppError {
         }
     }
 
+    /// Creates a Git-related error with a message and exit code.
+    ///
+    /// This constructor is used when a Git operation fails and an exit code is available, but no additional context such as command, stdout, or stderr is provided.
+    ///
+    /// # Parameters
+    /// - `msg`: Description of the Git error.
+    /// - `code`: Exit code returned by the Git command.
+    ///
+    /// # Returns
+    /// An `AppError` variant representing a Git error with the specified message and exit code.
     pub fn git_with_exit_code(msg: impl Into<String>, code: i32) -> Self {
         Self::Git { 
             message: msg.into(), 
@@ -114,6 +151,23 @@ impl AppError {
         }
     }
 
+    /// Constructs a `Git` error variant representing a failed Git command, including command details, exit code, and captured output.
+    ///
+    /// # Parameters
+    /// - `cmd`: The Git command that was executed.
+    /// - `exit_code`: Optional exit code returned by the command.
+    /// - `stdout`: Standard output captured from the command.
+    /// - `stderr`: Standard error captured from the command.
+    ///
+    /// # Returns
+    /// An `AppError::Git` variant containing a descriptive message and contextual information about the failed command.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::git_command_failed("git status", Some(1), "", "fatal: not a git repository");
+    /// assert!(matches!(err, AppError::Git { .. }));
+    /// ```
     pub fn git_command_failed(
         cmd: impl Into<String>, 
         exit_code: Option<i32>, 
@@ -142,6 +196,13 @@ impl AppError {
     }
 
     // AI 错误构建器
+    /// Creates an AI service error with the provided message.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::ai("AI model failed to respond");
+    /// ```
     pub fn ai(msg: impl Into<String>) -> Self {
         Self::AI { 
             message: msg.into(), 
@@ -149,6 +210,18 @@ impl AppError {
         }
     }
 
+    /// Creates an AI service error with a message and an associated source error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let source = std::io::Error::new(std::io::ErrorKind::Other, "underlying error");
+    /// let err = AppError::ai_with_source("AI request failed", source);
+    /// match err {
+    ///     AppError::AI { message, source: Some(_) } => assert_eq!(message, "AI request failed"),
+    ///     _ => panic!("Expected AI error variant"),
+    /// }
+    /// ```
     pub fn ai_with_source(msg: impl Into<String>, err: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::AI { 
             message: msg.into(), 
@@ -157,6 +230,17 @@ impl AppError {
     }
 
     // 分析错误构建器
+    /// Creates an AST-Grep analysis error with the given message and no additional context.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::analysis("Failed to analyze syntax tree");
+    /// match err {
+    ///     AppError::Analysis { message, .. } => assert_eq!(message, "Failed to analyze syntax tree"),
+    ///     _ => panic!("Expected Analysis variant"),
+    /// }
+    /// ```
     pub fn analysis(msg: impl Into<String>) -> Self {
         Self::Analysis { 
             message: msg.into(), 
@@ -165,6 +249,13 @@ impl AppError {
         }
     }
 
+    /// Creates an AST-Grep analysis error with a specified message and analysis type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::analysis_with_type("Pattern not found", "syntax-check");
+    /// ```
     pub fn analysis_with_type(msg: impl Into<String>, analysis_type: impl Into<String>) -> Self {
         Self::Analysis { 
             message: msg.into(), 
@@ -173,6 +264,14 @@ impl AppError {
         }
     }
 
+    /// Creates an AST-Grep analysis error with a message, optional analysis type, and a source error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let source_err = std::io::Error::new(std::io::ErrorKind::Other, "parse failed");
+    /// let err = AppError::analysis_with_source("AST analysis failed", Some("syntax".to_string()), source_err);
+    /// ```
     pub fn analysis_with_source(
         msg: impl Into<String>, 
         analysis_type: Option<String>,
@@ -186,6 +285,20 @@ impl AppError {
     }
 
     // 翻译错误构建器
+    /// Creates a translation service error with the given message and no specified language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::translation("Translation service unavailable");
+    /// match err {
+    ///     AppError::Translation { message, language } => {
+    ///         assert_eq!(message, "Translation service unavailable");
+    ///         assert!(language.is_none());
+    ///     }
+    ///     _ => panic!("Expected Translation variant"),
+    /// }
+    /// ```
     pub fn translation(msg: impl Into<String>) -> Self {
         Self::Translation { 
             message: msg.into(), 
@@ -193,6 +306,13 @@ impl AppError {
         }
     }
 
+    /// Creates a translation service error with a specified message and language code.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::translation_with_language("Translation failed", "fr");
+    /// ```
     pub fn translation_with_language(msg: impl Into<String>, lang: impl Into<String>) -> Self {
         Self::Translation { 
             message: msg.into(), 
@@ -201,6 +321,9 @@ impl AppError {
     }
 
     // DevOps 错误构建器
+    /// Creates a DevOps integration error with the given message.
+    ///
+    /// The error will not include a status code or source error.
     pub fn devops(msg: impl Into<String>) -> Self {
         Self::DevOps { 
             message: msg.into(), 
@@ -209,6 +332,16 @@ impl AppError {
         }
     }
 
+    /// Creates a DevOps error with a message and an associated status code.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::devops_with_status("Deployment failed", 502);
+    /// if let AppError::DevOps { status_code: Some(code), .. } = err {
+    ///     assert_eq!(code, 502);
+    /// }
+    /// ```
     pub fn devops_with_status(msg: impl Into<String>, status_code: u16) -> Self {
         Self::DevOps { 
             message: msg.into(), 
@@ -217,6 +350,20 @@ impl AppError {
         }
     }
 
+    /// Creates a DevOps integration error with a message and a source error.
+    ///
+    /// The status code is set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let source = std::io::Error::new(std::io::ErrorKind::Other, "connection failed");
+    /// let err = AppError::devops_with_source("DevOps API error", source);
+    /// if let AppError::DevOps { message, source, .. } = err {
+    ///     assert_eq!(message, "DevOps API error");
+    ///     assert!(source.is_some());
+    /// }
+    /// ```
     pub fn devops_with_source(msg: impl Into<String>, err: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::DevOps { 
             message: msg.into(), 
@@ -226,6 +373,9 @@ impl AppError {
     }
 
     // IO 错误构建器
+    /// Creates a file I/O error with the given message.
+    ///
+    /// The error will not include a file path or source error.
     pub fn io(msg: impl Into<String>) -> Self {
         Self::IO { 
             message: msg.into(), 
@@ -234,6 +384,14 @@ impl AppError {
         }
     }
 
+    /// Creates an `IO` error variant with a message and associated file path.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::io_with_path("Failed to read file", "/tmp/data.txt");
+    /// assert!(matches!(err, AppError::IO { .. }));
+    /// ```
     pub fn io_with_path(msg: impl Into<String>, path: impl Into<String>) -> Self {
         Self::IO { 
             message: msg.into(), 
@@ -242,6 +400,17 @@ impl AppError {
         }
     }
 
+    /// Creates an `IO` error variant with a message, optional file path, and a source error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::AppError;
+    /// use std::io;
+    ///
+    /// let io_err = io::Error::new(io::ErrorKind::NotFound, "file missing");
+    /// let app_err = AppError::io_with_source("Failed to read file", Some("data.txt".to_string()), io_err);
+    /// ```
     pub fn io_with_source(
         msg: impl Into<String>, 
         path: Option<String>,
@@ -255,6 +424,14 @@ impl AppError {
     }
 
     // 网络错误构建器
+    /// Creates a network error with the specified message and no associated URL or source error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::network("Failed to connect to server");
+    /// assert!(matches!(err, AppError::Network { .. }));
+    /// ```
     pub fn network(msg: impl Into<String>) -> Self {
         Self::Network { 
             message: msg.into(), 
@@ -263,6 +440,14 @@ impl AppError {
         }
     }
 
+    /// Creates a network error with a message and associated URL.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::network_with_url("Failed to connect", "https://example.com");
+    /// assert!(matches!(err, AppError::Network { .. }));
+    /// ```
     pub fn network_with_url(msg: impl Into<String>, url: impl Into<String>) -> Self {
         Self::Network { 
             message: msg.into(), 
@@ -271,6 +456,14 @@ impl AppError {
         }
     }
 
+    /// Creates a network error with a message, optional URL, and a source error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = std::io::Error::new(std::io::ErrorKind::Other, "connection failed");
+    /// let app_err = AppError::network_with_source("Failed to reach server", Some("https://api.example.com".to_string()), err);
+    /// ```
     pub fn network_with_source(
         msg: impl Into<String>, 
         url: Option<String>,
@@ -284,6 +477,9 @@ impl AppError {
     }
 
     // CLI 错误构建器
+    /// Creates a CLI argument error with the given message.
+    ///
+    /// Use this for errors related to command-line arguments where no specific argument needs to be referenced.
     pub fn cli(msg: impl Into<String>) -> Self {
         Self::CLI { 
             message: msg.into(), 
@@ -291,6 +487,14 @@ impl AppError {
         }
     }
 
+    /// Creates a CLI error with a message and an associated argument.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::cli_with_argument("Invalid value", "--foo");
+    /// assert!(matches!(err, AppError::CLI { .. }));
+    /// ```
     pub fn cli_with_argument(msg: impl Into<String>, arg: impl Into<String>) -> Self {
         Self::CLI { 
             message: msg.into(), 
@@ -299,6 +503,10 @@ impl AppError {
     }
 
     // 通用错误构建器
+    /// Creates a generic application error with the provided message.
+    ///
+    /// Use this for errors that do not fit into a specific category.
+    #[inline]
     pub fn generic(msg: impl Into<String>) -> Self {
         Self::Generic { 
             message: msg.into(), 
@@ -306,6 +514,16 @@ impl AppError {
         }
     }
 
+    /// Creates a generic error with a specified message and category.
+    ///
+    /// # Parameters
+    ///
+    /// - `msg`: The error message.
+    /// - `category`: The category describing the type of generic error.
+    ///
+    /// # Returns
+    ///
+    /// An `AppError::Generic` variant containing the provided message and category.
     pub fn generic_with_category(msg: impl Into<String>, category: impl Into<String>) -> Self {
         Self::Generic { 
             message: msg.into(), 
@@ -313,7 +531,16 @@ impl AppError {
         }
     }
 
-    /// 获取错误的退出码
+    /// Returns the appropriate process exit code for the error.
+    ///
+    /// The exit code is determined based on the error variant and its context. Git and DevOps errors use their respective codes if available; configuration and CLI errors return 2; all other errors return 1.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::Config { message: "Invalid config".to_string(), source: None };
+    /// assert_eq!(err.exit_code(), 2);
+    /// ```
     pub fn exit_code(&self) -> i32 {
         match self {
             AppError::Git { exit_code: Some(code), .. } => *code,
@@ -324,24 +551,61 @@ impl AppError {
         }
     }
 
-    /// 检查是否为特定类型的错误
+    /// Returns `true` if the error is a configuration error (`AppError::Config`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::config("Missing config file");
+    /// assert!(err.is_config_error());
+    /// ```
     pub fn is_config_error(&self) -> bool {
         matches!(self, AppError::Config { .. })
     }
 
+    /// Returns `true` if the error is a Git-related error variant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::git("Failed to fetch repository");
+    /// assert!(err.is_git_error());
+    /// ```
     pub fn is_git_error(&self) -> bool {
         matches!(self, AppError::Git { .. })
     }
 
+    /// Returns `true` if the error is an AI service error variant.
     pub fn is_ai_error(&self) -> bool {
         matches!(self, AppError::AI { .. })
     }
 
+    /// Returns `true` if the error is a network-related error variant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::network("Failed to connect", Some("https://example.com".to_string()), None);
+    /// assert!(err.is_network_error());
+    /// ```
     pub fn is_network_error(&self) -> bool {
         matches!(self, AppError::Network { .. })
     }
 
-    /// 获取详细的错误信息（包括上下文）
+    /// Returns a detailed error message including contextual information for the error variant.
+    ///
+    /// The message includes additional details such as command, path, URL, analysis type, language, status code, argument, or category, depending on the error type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let err = AppError::IO {
+    ///     message: "Failed to read file".to_string(),
+    ///     path: Some("config.toml".into()),
+    ///     source: None,
+    /// };
+    /// assert!(err.detailed_message().contains("config.toml"));
+    /// ```
     pub fn detailed_message(&self) -> String {
         match self {
             AppError::Git { message, stdout, stderr, command, .. } => {
@@ -417,12 +681,14 @@ impl AppError {
 
 // 实现从常见错误类型的转换
 impl From<std::io::Error> for AppError {
+    /// Converts a `std::io::Error` into an `AppError::IO` variant with a default message and the original error as the source.
     fn from(err: std::io::Error) -> Self {
         Self::io_with_source("文件操作失败".to_string(), None, err)
     }
 }
 
 impl From<reqwest::Error> for AppError {
+    /// Converts a `reqwest::Error` into an `AppError::Network` variant, preserving the URL and source error if available.
     fn from(err: reqwest::Error) -> Self {
         let url = err.url().map(|u| u.to_string());
         Self::network_with_source("网络请求失败".to_string(), url, err)
@@ -430,6 +696,9 @@ impl From<reqwest::Error> for AppError {
 }
 
 impl From<serde_json::Error> for AppError {
+    /// Converts a `serde_json::Error` into a generic application error with the category "serialization".
+    ///
+    /// The error message includes details from the original JSON parsing or serialization error.
     fn from(err: serde_json::Error) -> Self {
         Self::generic_with_category(
             format!("JSON 解析错误: {}", err),
@@ -439,12 +708,14 @@ impl From<serde_json::Error> for AppError {
 }
 
 impl From<toml::de::Error> for AppError {
+    /// Converts a TOML deserialization error into a configuration error variant of `AppError`, preserving the original error as the source.
     fn from(err: toml::de::Error) -> Self {
         Self::config_with_source("TOML 配置解析错误".to_string(), err)
     }
 }
 
 impl From<toml::ser::Error> for AppError {
+    /// Converts a TOML serialization error into a configuration error variant of `AppError`, preserving the original error as the source.
     fn from(err: toml::ser::Error) -> Self {
         Self::config_with_source("TOML 配置序列化错误".to_string(), err)
     }
@@ -452,6 +723,17 @@ impl From<toml::ser::Error> for AppError {
 
 // 从旧错误系统的转换支持
 impl From<crate::errors::AppError> for AppError {
+    /// Converts a legacy `crate::errors::AppError` into the unified `AppError` type, preserving relevant context and details from the original error.
+    ///
+    /// This function maps each variant of the old error type to the corresponding variant in the new error system, including nested error information such as commands, exit codes, messages, and source errors. This enables seamless migration and interoperability between the old and new error handling mechanisms.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let legacy_error = crate::errors::AppError::Generic("Some error".to_string());
+    /// let unified_error = AppError::from(legacy_error);
+    /// assert!(matches!(unified_error, AppError::Generic(_)));
+    /// ```
     fn from(old_err: crate::errors::AppError) -> Self {
         match old_err {
             crate::errors::AppError::Config(config_err) => {

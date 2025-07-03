@@ -37,6 +37,10 @@ pub struct TranslationConfig {
 }
 
 impl Default for TranslationConfig {
+    /// Returns the default translation configuration.
+    ///
+    /// By default, translation is disabled, the target language is set to automatic detection,
+    /// caching is enabled, the provider is set to "openai", and no custom cache directory or provider settings are specified.
     fn default() -> Self {
         Self {
             enabled: false, // Disabled by default for backward compatibility
@@ -50,7 +54,9 @@ impl Default for TranslationConfig {
 }
 
 impl TranslationConfig {
-    /// Validate the translation configuration
+    /// Validates the translation configuration, ensuring all required fields and provider-specific settings are correctly set.
+    ///
+    /// Returns `Ok(())` if the configuration is valid, or a `TranslationError` if any validation check fails. If translation is disabled, validation always succeeds.
     pub fn validate(&self) -> TranslationResult<()> {
         if !self.enabled {
             // If disabled, no need to validate further
@@ -92,7 +98,15 @@ impl TranslationConfig {
         Ok(())
     }
 
-    /// Validate provider-specific settings
+    /// Validates provider-specific settings for the selected translation provider.
+    ///
+    /// Checks that all required configuration values are present for the chosen provider.
+    /// Returns an error if any mandatory setting is missing or invalid. For example, ensures API keys or endpoints are provided as needed for OpenAI, Azure, Anthropic, or local providers.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if all required provider settings are valid.
+    /// - `Err(TranslationError::ConfigError)` if any required setting is missing or invalid.
     fn validate_provider_settings(&self) -> TranslationResult<()> {
         match self.provider.as_str() {
             "openai" => {
@@ -145,7 +159,17 @@ impl TranslationConfig {
         Ok(())
     }
 
-    /// Get a user-friendly configuration status description
+    /// Returns a user-friendly string describing the current translation configuration status.
+    ///
+    /// If translation is disabled, the description indicates so. If enabled, it reports the provider, target language, and cache status, or an error message if the configuration is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = TranslationConfig::default();
+    /// let status = config.status_description();
+    /// assert_eq!(status, "Translation disabled");
+    /// ```
     pub fn status_description(&self) -> String {
         if !self.enabled {
             "Translation disabled".to_string()
@@ -166,7 +190,17 @@ impl TranslationConfig {
         }
     }
 
-    /// Check if the configuration is operational (enabled and valid)
+    /// Returns `true` if translation is enabled and the configuration is valid.
+    ///
+    /// This method checks both the `enabled` flag and whether the configuration passes validation.
+    /// Use this to determine if translation operations can proceed with the current settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = TranslationConfig::default();
+    /// assert!(!config.is_operational());
+    /// ```
     pub fn is_operational(&self) -> bool {
         self.enabled && self.validate().is_ok()
     }

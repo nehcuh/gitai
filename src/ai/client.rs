@@ -20,7 +20,21 @@ pub trait AIClient: Send + Sync {
 pub struct AIClientBuilder;
 
 impl AIClientBuilder {
-    /// 从配置创建 AI 客户端
+    /// Creates an AI client instance from the provided application configuration.
+    ///
+    /// This function is a placeholder and is not yet implemented. It is intended to construct an AI client based on the given configuration settings.
+    ///
+    /// # Returns
+    ///
+    /// An error indicating that the implementation is pending.
+    ///
+    /// # Examples
+    ///
+    /// ```should_panic
+    /// // This will panic because the function is not yet implemented.
+    /// let config = crate::config::AppConfig::default();
+    /// let _client = AIClientBuilder::from_config(&config);
+    /// ```
     pub fn from_config(_config: &crate::config::AppConfig) -> AppResult<Box<dyn AIClient>> {
         // TODO: 实现实际的客户端创建逻辑
         todo!("AI 客户端实现待迁移")

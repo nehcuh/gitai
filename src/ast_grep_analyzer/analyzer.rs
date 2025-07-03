@@ -13,6 +13,16 @@ pub struct AstGrepAnalyzer {
 }
 
 impl AstGrepAnalyzer {
+    /// Creates a new `AstGrepAnalyzer` with the given configuration.
+    ///
+    /// Initializes the AST analysis engine. Returns an error if initialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = AstGrepConfig::default();
+    /// let analyzer = AstGrepAnalyzer::new(config).unwrap();
+    /// ```
     pub fn new(config: AstGrepConfig) -> Result<Self, AnalysisError> {
         Ok(Self {
             config,
@@ -20,7 +30,17 @@ impl AstGrepAnalyzer {
         })
     }
 
-    /// Check if language is supported for analysis
+    /// Returns `true` if the given language is supported for AST-based analysis.
+    ///
+    /// Supported languages include Rust, Python, JavaScript, TypeScript, Java, C, C++, and Go.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let analyzer = AstGrepAnalyzer::new(config).unwrap();
+    /// assert!(analyzer.is_supported_language("rust"));
+    /// assert!(!analyzer.is_supported_language("php"));
+    /// ```
     fn is_supported_language(&self, lang: &str) -> bool {
         matches!(
             lang,
@@ -28,6 +48,26 @@ impl AstGrepAnalyzer {
         )
     }
 
+    /// Analyzes a git diff and returns structured results for each changed file.
+    ///
+    /// For each file in the diff, detects its language and, if supported, performs AST-based analysis to identify code issues and collect code metrics. If AST analysis fails or the language is unsupported, falls back to simple pattern matching or reports lack of support. Aggregates per-file analyses, issue counts, and overall summary including analysis duration.
+    ///
+    /// # Returns
+    ///
+    /// A `DiffAnalysis` containing per-file analysis results, overall summary, total issues found, number of files analyzed, and analysis duration in milliseconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `AnalysisError` if the diff cannot be parsed or if file analysis encounters unrecoverable errors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut analyzer = AstGrepAnalyzer::new(config).unwrap();
+    /// let diff_text = "..."; // git diff text
+    /// let analysis = analyzer.analyze_diff(diff_text).unwrap();
+    /// assert!(analysis.total_files_analyzed > 0);
+    /// ```
     pub fn analyze_diff(&mut self, diff_text: &str) -> Result<DiffAnalysis, AnalysisError> {
         let start_time = Instant::now();
         let git_diff = parse_git_diff(diff_text)?;
@@ -101,6 +141,18 @@ impl AstGrepAnalyzer {
         })
     }
 
+    /// Analyzes a changed file using AST-based analysis, with a fallback to pattern matching if AST analysis fails.
+    ///
+    /// Attempts to read the file content and perform AST-based code analysis for the specified language.
+    /// If AST analysis is unsuccessful, falls back to simple pattern-based checks for common issues.
+    /// Returns a tuple containing the list of detected code issues and calculated code metrics, or an error if the file cannot be read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let (issues, metrics) = analyzer.analyze_file_with_ast_grep(&changed_file, "rust")?;
+    /// assert!(!issues.is_empty() || metrics.lines_of_code > 0);
+    /// ```
     fn analyze_file_with_ast_grep(
         &self,
         changed_file: &crate::types::git::ChangedFile,
@@ -139,6 +191,23 @@ impl AstGrepAnalyzer {
         Ok((issues, metrics))
     }
 
+    /// Performs simple pattern-based code analysis as a fallback when AST analysis is unavailable.
+    ///
+    /// Dispatches to language-specific pattern checks for Rust, Python, JavaScript, and TypeScript to identify common code issues using text matching. Returns a list of detected issues.
+    ///
+    /// # Parameters
+    /// - `content`: The source code to analyze.
+    /// - `language`: The programming language of the source code.
+    ///
+    /// # Returns
+    /// A vector of `CodeIssue` instances representing issues found by pattern matching.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let issues = analyzer.analyze_code_patterns_fallback("let x = foo.unwrap();", "rust");
+    /// assert!(!issues.is_empty());
+    /// ```
     fn analyze_code_patterns_fallback(&self, content: &str, language: &str) -> Vec<CodeIssue> {
         let mut issues = Vec::new();
 
@@ -161,7 +230,28 @@ impl AstGrepAnalyzer {
         issues
     }
 
-    /// Fallback text-based pattern matching for simple cases
+    /// Creates a `CodeIssue` with default position and code quality category.
+    ///
+    /// This helper is used when generating issues from simple pattern matching, where precise location and matched text are unavailable.
+    ///
+    /// # Parameters
+    ///
+    /// - `rule_id`: Identifier for the rule that triggered the issue.
+    /// - `message`: Description of the issue.
+    /// - `severity`: Severity level of the issue.
+    ///
+    /// # Returns
+    ///
+    /// A `CodeIssue` with default line and column set to 1, no matched text, no suggestion, and category set to code quality.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let issue = analyzer.create_simple_issue("rust-unwrap", "Avoid using unwrap()", IssueSeverity::Warning);
+    /// assert_eq!(issue.rule_id, "rust-unwrap");
+    /// assert_eq!(issue.severity, IssueSeverity::Warning);
+    /// assert_eq!(issue.line, 1);
+    /// ```
     fn create_simple_issue(
         &self,
         rule_id: &str,
@@ -182,6 +272,18 @@ impl AstGrepAnalyzer {
         }
     }
 
+    /// Performs simple pattern checks for common risky patterns in Rust code.
+    ///
+    /// Detects usage of `.unwrap()` and `todo!()` macros, returning issues with appropriate severity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let code = "let x = some_option.unwrap();\ntodo!()";
+    /// let analyzer = AstGrepAnalyzer::new(default_config).unwrap();
+    /// let issues = analyzer.check_rust_patterns_simple(code);
+    /// assert_eq!(issues.len(), 2);
+    /// ```
     fn check_rust_patterns_simple(&self, content: &str) -> Vec<CodeIssue> {
         let mut issues = Vec::new();
 
@@ -206,6 +308,27 @@ impl AstGrepAnalyzer {
         issues
     }
 
+    /// Performs simple pattern checks on Python code to identify common issues.
+    ///
+    /// Detects usage of `print` statements (recommending the use of the logging module)
+    /// and potential SQL injection risks via `execute(` calls.
+    ///
+    /// # Returns
+    ///
+    /// A vector of `CodeIssue` instances representing detected issues.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let code = r#"
+    /// def foo():
+    ///     print('debug')
+    ///     cursor.execute('SELECT * FROM users')
+    /// "#;
+    /// let issues = analyzer.check_python_patterns_simple(code);
+    /// assert!(issues.iter().any(|i| i.rule_id == "python-print"));
+    /// assert!(issues.iter().any(|i| i.rule_id == "python-sql-injection"));
+    /// ```
     fn check_python_patterns_simple(&self, content: &str) -> Vec<CodeIssue> {
         let mut issues = Vec::new();
 
@@ -230,6 +353,24 @@ impl AstGrepAnalyzer {
         issues
     }
 
+    /// Performs simple pattern-based checks for common JavaScript and TypeScript code issues.
+    ///
+    /// Scans the provided code content for usage of `console.log`, non-strict equality (`==`), and `innerHTML`,
+    /// returning issues that may indicate logging in production, lack of strict equality, or potential XSS risks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let js_code = r#"
+    ///     console.log('debug');
+    ///     if (a == b) { /* ... */ }
+    ///     element.innerHTML = userInput;
+    /// "#;
+    /// let issues = analyzer.check_js_patterns_simple(js_code);
+    /// assert!(issues.iter().any(|i| i.rule_id == "js-console-log"));
+    /// assert!(issues.iter().any(|i| i.rule_id == "js-strict-equality"));
+    /// assert!(issues.iter().any(|i| i.rule_id == "js-xss-innerhtml"));
+    /// ```
     fn check_js_patterns_simple(&self, content: &str) -> Vec<CodeIssue> {
         let mut issues = Vec::new();
 
@@ -263,6 +404,20 @@ impl AstGrepAnalyzer {
         issues
     }
 
+    /// Generates a summary string for a changed file, including change type, issue counts by severity, and code metrics.
+    ///
+    /// The summary describes the file change (added, modified, deleted, or renamed), the number and severity of detected issues, and key code metrics such as lines of code, function and class counts, and maintainability index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let summary = analyzer.generate_file_summary(
+    ///     &changed_file,
+    ///     &issues,
+    ///     &metrics,
+    /// );
+    /// println!("{}", summary);
+    /// ```
     fn generate_file_summary(
         &self,
         changed_file: &crate::types::git::ChangedFile,

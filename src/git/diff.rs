@@ -16,7 +16,27 @@ pub struct DiffAnalysis {
 pub struct DiffParser;
 
 impl DiffParser {
-    /// 解析 git diff 输出
+    /// Parses the output of a Git diff and returns a summary analysis.
+    ///
+    /// Currently, this function returns a default `DiffAnalysis` with no file changes and a placeholder summary.
+    /// The actual parsing logic is not yet implemented.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let diff_output = "\
+    /// diff --git a/file.txt b/file.txt
+    /// index 83db48f..f735c60 100644
+    /// --- a/file.txt
+    /// +++ b/file.txt
+    /// @@ -1,3 +1,4 @@
+    /// +new line
+    /// ";
+    /// let analysis = DiffParser::parse_diff(diff_output).unwrap();
+    /// assert_eq!(analysis.files_changed.len(), 0);
+    /// assert_eq!(analysis.lines_added, 0);
+    /// assert_eq!(analysis.lines_removed, 0);
+    /// ```
     pub fn parse_diff(_diff_output: &str) -> AppResult<DiffAnalysis> {
         // TODO: 实现实际的 diff 解析逻辑
         Ok(DiffAnalysis {

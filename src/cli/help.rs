@@ -1,6 +1,14 @@
 use crate::common::SupportedLanguage;
 
-/// 生成 GitAI 帮助信息
+/// Returns the general help information for the GitAI CLI tool in the specified language.
+///
+/// If the language is Chinese, returns the help message in Chinese; otherwise, returns the English help message. Defaults to English if no language is specified.
+///
+/// # Parameters
+/// - `language`: The desired language for the help message, or `None` to use English.
+///
+/// # Returns
+/// A string containing the general usage instructions, options, commands, and examples for GitAI in the selected language.
 pub fn generate_help(language: Option<&SupportedLanguage>) -> String {
     match language {
         Some(SupportedLanguage::Chinese) => generate_help_zh(),
@@ -9,7 +17,19 @@ pub fn generate_help(language: Option<&SupportedLanguage>) -> String {
     }
 }
 
-/// 生成英文帮助信息
+/// Returns the main help message for GitAI in English.
+///
+/// The help message includes usage instructions, global options, available commands, example usages, and a brief description of GitAI's features.
+///
+/// # Returns
+/// An English-language help message as a `String`.
+///
+/// # Examples
+///
+/// ```
+/// let help = generate_help_en();
+/// assert!(help.contains("USAGE:"));
+/// ```
 fn generate_help_en() -> String {
     r#"GitAI - AI-powered Git Tools Suite
 
@@ -56,7 +76,20 @@ GitAI integrates AI capabilities into your Git workflow for smarter
 development experience."#.to_string()
 }
 
-/// 生成中文帮助信息
+/// Returns the main help message for GitAI in Chinese.
+///
+/// The help message includes usage instructions, global options, available commands, examples, and a brief description of GitAI's features, all localized in Chinese.
+///
+/// # Returns
+///
+/// A `String` containing the full Chinese help text for the GitAI CLI.
+///
+/// # Examples
+///
+/// ```
+/// let help_text = generate_help_zh();
+/// assert!(help_text.contains("GitAI - AI 驱动的 Git 工具套件"));
+/// ```
 fn generate_help_zh() -> String {
     r#"GitAI - AI 驱动的 Git 工具套件
 
@@ -103,7 +136,16 @@ GitAI 将 AI 能力集成到您的 Git 工作流中，提供更智能的
 开发体验。"#.to_string()
 }
 
-/// 生成命令特定的帮助信息
+/// Returns help information for a specific GitAI command in the selected language.
+///
+/// If the command is recognized, returns detailed help for that command; otherwise, returns the general help message. Supports both English and Chinese output based on the `language` parameter.
+///
+/// # Examples
+///
+/// ```
+/// let help = generate_command_help("commit", Some(&SupportedLanguage::English));
+/// assert!(help.contains("Usage: gitai commit"));
+/// ```
 pub fn generate_command_help(command: &str, language: Option<&SupportedLanguage>) -> String {
     match command {
         "commit" | "cm" => generate_commit_help(language),
@@ -114,6 +156,19 @@ pub fn generate_command_help(command: &str, language: Option<&SupportedLanguage>
     }
 }
 
+/// Returns help information for the `commit` command in the specified language.
+///
+/// The help text describes usage, available options, and examples for generating commit messages with AI assistance. If the language is Chinese, the output is localized; otherwise, English is used.
+///
+/// # Examples
+///
+/// ```
+/// let help_en = generate_commit_help(Some(&SupportedLanguage::English));
+/// assert!(help_en.contains("AI-powered commit message generation"));
+///
+/// let help_zh = generate_commit_help(Some(&SupportedLanguage::Chinese));
+/// assert!(help_zh.contains("AI 驱动的提交信息生成"));
+/// ```
 fn generate_commit_help(language: Option<&SupportedLanguage>) -> String {
     match language {
         Some(SupportedLanguage::Chinese) => {
@@ -159,6 +214,19 @@ EXAMPLES:
     }
 }
 
+/// Returns help information for the "review" command in the specified language.
+///
+/// Provides usage instructions, available options, and example invocations for the `gitai review` command in either English or Chinese, depending on the language parameter.
+///
+/// # Examples
+///
+/// ```
+/// let help_en = generate_review_help(Some(&SupportedLanguage::English));
+/// assert!(help_en.contains("AI-driven code review"));
+///
+/// let help_zh = generate_review_help(Some(&SupportedLanguage::Chinese));
+/// assert!(help_zh.contains("AI 驱动的代码审查"));
+/// ```
 fn generate_review_help(language: Option<&SupportedLanguage>) -> String {
     match language {
         Some(SupportedLanguage::Chinese) => {
@@ -208,6 +276,19 @@ EXAMPLES:
     }
 }
 
+/// Returns help information for the `scan` command in the specified language.
+///
+/// Provides usage instructions, available options, and example invocations for the `gitai scan` command, supporting both English and Chinese output based on the language parameter.
+///
+/// # Examples
+///
+/// ```
+/// let help_en = generate_scan_help(Some(&SupportedLanguage::English));
+/// assert!(help_en.contains("USAGE:"));
+///
+/// let help_zh = generate_scan_help(Some(&SupportedLanguage::Chinese));
+/// assert!(help_zh.contains("用法:"));
+/// ```
 fn generate_scan_help(language: Option<&SupportedLanguage>) -> String {
     match language {
         Some(SupportedLanguage::Chinese) => {
@@ -257,6 +338,19 @@ EXAMPLES:
     }
 }
 
+/// Returns help information for the `update-rules` command in the specified language.
+///
+/// Provides usage instructions, available options, and examples for updating AST-Grep rules with GitAI. The help text is localized to English or Chinese based on the `language` parameter. Defaults to English if no language is specified.
+///
+/// # Examples
+///
+/// ```
+/// let help_en = generate_update_rules_help(Some(&SupportedLanguage::English));
+/// assert!(help_en.contains("USAGE:"));
+///
+/// let help_zh = generate_update_rules_help(Some(&SupportedLanguage::Chinese));
+/// assert!(help_zh.contains("用法:"));
+/// ```
 fn generate_update_rules_help(language: Option<&SupportedLanguage>) -> String {
     match language {
         Some(SupportedLanguage::Chinese) => {

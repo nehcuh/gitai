@@ -185,6 +185,9 @@ impl std::fmt::Display for GitError {
 }
 
 impl std::error::Error for GitError {
+    /// Returns the underlying source error if available.
+    ///
+    /// For `GitError::DiffError`, returns the wrapped `std::io::Error`. For other variants, returns `None`.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             GitError::DiffError(e) => Some(e),
@@ -196,22 +199,36 @@ impl std::error::Error for GitError {
 // --- From implementations for AppError ---
 
 impl From<std::io::Error> for AppError {
+    /// Converts a `std::io::Error` into an `AppError::IO` with a default context message.
     fn from(err: std::io::Error) -> Self {
         AppError::IO("I/O operation failed".to_string(), err)
     }
 }
 
-/// Helper for converting Command output to GitError when output is captured
+/// Converts process output and exit status into a `GitError::CommandFailed`.
 ///
-/// # Arguments
-/// * `cmd_str` - The command string for error reporting
-/// * `output` - The process output containing stdout and stderr
-/// * `status` - The exit status of the process (provided separately as output is consumed)
+/// This function extracts the standard output and error streams from a completed process,
+/// along with its exit status, and constructs a `GitError::CommandFailed` variant for error reporting.
+/// The `status_code` field will be `None` if the process was terminated by a signal rather than an exit code.
 ///
-/// # Note
-/// The `status_code` field in the returned `GitError::CommandFailed` may be `None`
-/// when the process was terminated by a signal (e.g., SIGKILL, SIGTERM) rather
-/// than exiting normally with an exit code. This is normal behavior on Unix systems.
+/// # Examples
+///
+/// ```
+/// use crate::errors::{map_command_error, GitError};
+/// use std::process::{Command, Stdio};
+///
+/// let output = Command::new("false")
+///     .stdout(Stdio::piped())
+///     .stderr(Stdio::piped())
+///     .output()
+///     .expect("failed to execute process");
+/// let status = output.status;
+/// let err = map_command_error("false", output, status);
+/// if let GitError::CommandFailed { command, status_code, .. } = err {
+///     assert_eq!(command, "false");
+///     assert_eq!(status_code, Some(1));
+/// }
+/// ```
 pub fn map_command_error(
     cmd_str: &str,
     output: std::process::Output,     // Takes ownership
@@ -227,16 +244,26 @@ pub fn map_command_error(
     }
 }
 
-/// Helper for converting CommandOutput to GitError when output is captured
+/// Converts a captured `CommandOutput` into a `GitError::CommandFailed`.
 ///
-/// # Arguments
-/// * `cmd_str` - The command string for error reporting
-/// * `output` - The command output containing stdout, stderr, and exit status
+/// The resulting error includes the command string, optional exit code, and captured stdout and stderr. If the process was terminated by a signal, `status_code` will be `None`.
 ///
-/// # Note
-/// The `status_code` field in the returned `GitError::CommandFailed` may be `None`
-/// when the process was terminated by a signal (e.g., SIGKILL, SIGTERM) rather
-/// than exiting normally with an exit code. This is normal behavior on Unix systems.
+/// # Examples
+///
+/// ```
+/// let output = CommandOutput {
+///     status: std::process::ExitStatus::from_raw(1),
+///     stdout: String::from("output"),
+///     stderr: String::from("error"),
+/// };
+/// let err = map_command_output_error("git status", output);
+/// if let GitError::CommandFailed { command, status_code, stdout, stderr } = err {
+///     assert_eq!(command, "git status");
+///     assert_eq!(status_code, Some(1));
+///     assert_eq!(stdout, "output");
+///     assert_eq!(stderr, "error");
+/// }
+/// ```
 pub fn map_command_output_error(cmd_str: &str, output: CommandOutput) -> GitError {
     GitError::CommandFailed {
         command: cmd_str.to_string(),

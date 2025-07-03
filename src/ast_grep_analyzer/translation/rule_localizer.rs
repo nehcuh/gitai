@@ -24,7 +24,9 @@ pub struct LocalizedRule {
 }
 
 impl LocalizedRule {
-    /// Create a new localized rule from an original rule
+    /// Creates a new `LocalizedRule` with the given original rule and no localizations.
+    ///
+    /// The resulting rule defaults to English and is not marked as localized.
     pub fn new(original_rule: AnalysisRule) -> Self {
         Self {
             original_rule,
@@ -34,14 +36,31 @@ impl LocalizedRule {
         }
     }
 
-    /// Add a localized version of the rule
+    /// Adds a localized version of the rule for the specified language.
+    ///
+    /// Marks the rule as localized if at least one localization exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut localized_rule = LocalizedRule::new(original_rule);
+    /// localized_rule.add_localization(&SupportedLanguage::French, french_rule);
+    /// assert!(localized_rule.has_localization_for(&SupportedLanguage::French));
+    /// ```
     pub fn add_localization(&mut self, language: &SupportedLanguage, localized_rule: AnalysisRule) {
         self.localizations
             .insert(language.code().to_string(), localized_rule);
         self.is_localized = true;
     }
 
-    /// Get the rule in the specified language, fallback to original if not available
+    /// Returns the rule localized to the specified language, or the original rule if no localization exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = localized_rule.get_rule_for_language(&SupportedLanguage::French);
+    /// // Returns the French version if available, otherwise returns the original English rule.
+    /// ```
     pub fn get_rule_for_language(&self, language: &SupportedLanguage) -> &AnalysisRule {
         if let Some(localized) = self.localizations.get(language.code()) {
             localized
@@ -50,12 +69,31 @@ impl LocalizedRule {
         }
     }
 
-    /// Check if localization exists for a language
+    /// Returns `true` if a localized rule exists for the specified language; otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut rule = LocalizedRule::new(original_rule);
+    /// assert!(!rule.has_localization_for(&SupportedLanguage::French));
+    /// rule.add_localization(SupportedLanguage::French, localized_rule);
+    /// assert!(rule.has_localization_for(&SupportedLanguage::French));
+    /// ```
     pub fn has_localization_for(&self, language: &SupportedLanguage) -> bool {
         self.localizations.contains_key(language.code())
     }
 
-    /// Get available languages for this rule
+    /// Returns a list of languages for which this rule is available, always including English.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut rule = LocalizedRule::new(original_rule);
+    /// rule.add_localization(SupportedLanguage::Japanese, localized_rule_jp);
+    /// let langs = rule.available_languages();
+    /// assert!(langs.contains(&SupportedLanguage::English));
+    /// assert!(langs.contains(&SupportedLanguage::Japanese));
+    /// ```
     pub fn available_languages(&self) -> Vec<SupportedLanguage> {
         let mut languages = vec![SupportedLanguage::English]; // Original is always English
 
@@ -83,7 +121,16 @@ pub struct RuleLocalizer {
 }
 
 impl RuleLocalizer {
-    /// Create a new rule localizer
+    /// Creates a new `RuleLocalizer` with the specified active language.
+    ///
+    /// Initializes an empty set of localized rules and resets localization statistics.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// assert_eq!(localizer.get_current_language(), SupportedLanguage::English);
+    /// ```
     pub fn new(language: SupportedLanguage, _cache_dir: Option<PathBuf>) -> Self {
         Self {
             localized_rules: HashMap::new(),
@@ -92,7 +139,18 @@ impl RuleLocalizer {
         }
     }
 
-    /// Add original rules to the localizer
+    /// Adds a list of original (English) analysis rules to the localizer, replacing any existing rules and updating the total rule count.
+    ///
+    /// # Parameters
+    /// - `rules`: A vector of original `AnalysisRule` instances to be managed by the localizer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// localizer.add_original_rules(vec![rule1, rule2]);
+    /// assert_eq!(localizer.get_stats().total_rules, 2);
+    /// ```
     pub fn add_original_rules(&mut self, rules: Vec<AnalysisRule>) {
         for rule in rules {
             let rule_id = rule.id.clone();
@@ -107,7 +165,14 @@ impl RuleLocalizer {
         );
     }
 
-    /// Add a localized version of a rule
+    /// Adds a localized version of an existing rule by rule ID and language.
+    ///
+    /// Returns an error if the original rule with the specified ID does not exist.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the localization was added successfully.
+    /// - `Err(TranslationError)` if the original rule is not found.
     pub fn add_localized_rule(
         &mut self,
         rule_id: &str,
@@ -131,12 +196,33 @@ impl RuleLocalizer {
         }
     }
 
-    /// Get all rules in the current language
+    /// Returns all analysis rules localized to the current language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// let rules = localizer.get_rules_for_current_language();
+    /// assert!(rules.is_empty() || rules.iter().all(|r| r.language == SupportedLanguage::English));
+    /// ```
     pub fn get_rules_for_current_language(&self) -> Vec<AnalysisRule> {
         self.get_rules_for_language(&self.current_language)
     }
 
-    /// Get all rules in the specified language
+    /// Returns all analysis rules localized to the specified language, falling back to the original rule if a localization is unavailable.
+    ///
+    /// # Parameters
+    /// - `language`: The target language for which to retrieve rules. If set to `Auto`, the system default language is used.
+    ///
+    /// # Returns
+    /// A vector of `AnalysisRule` instances in the specified language, with original rules provided where localizations are missing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rules = rule_localizer.get_rules_for_language(&SupportedLanguage::French);
+    /// assert!(!rules.is_empty());
+    /// ```
     pub fn get_rules_for_language(&self, language: &SupportedLanguage) -> Vec<AnalysisRule> {
         let effective_language = self.resolve_language(language);
 
@@ -150,12 +236,21 @@ impl RuleLocalizer {
             .collect()
     }
 
-    /// Get a specific rule by ID in the current language
+    /// Retrieves a rule by its ID, returning the version localized to the current language if available.
+    ///
+    /// Returns `Some(AnalysisRule)` if the rule exists, otherwise `None`.
     pub fn get_rule_by_id(&self, rule_id: &str) -> Option<AnalysisRule> {
         self.get_rule_by_id_for_language(rule_id, &self.current_language)
     }
 
-    /// Get a specific rule by ID in the specified language
+    /// Retrieves a rule by its ID, returning the localized version for the specified language if available, or the original rule otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = localizer.get_rule_by_id_for_language("no-foo", &SupportedLanguage::French);
+    /// assert!(rule.is_some());
+    /// ```
     pub fn get_rule_by_id_for_language(
         &self,
         rule_id: &str,
@@ -170,7 +265,9 @@ impl RuleLocalizer {
         })
     }
 
-    /// Set the current active language
+    /// Sets the current active language for rule localization.
+    ///
+    /// Updates the language used for retrieving localized rules.
     pub fn set_current_language(&mut self, language: SupportedLanguage) {
         self.current_language = language;
         info!(
@@ -179,27 +276,52 @@ impl RuleLocalizer {
         );
     }
 
-    /// Get the current active language
+    /// Returns the currently active language used for rule localization.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// assert_eq!(localizer.get_current_language(), &SupportedLanguage::English);
+    /// ```
     pub fn get_current_language(&self) -> &SupportedLanguage {
         &self.current_language
     }
 
-    /// Get localization statistics
+    /// Returns statistics about rule localization coverage and progress.
+    ///
+    /// The returned `LocalizationStats` includes the total number of rules, the number of localized rules in the current language, and the localization coverage percentage.
     pub fn get_stats(&self) -> &LocalizationStats {
         &self.stats
     }
 
-    /// Check if a rule exists
+    /// Returns `true` if a rule with the specified ID exists in the localizer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// // Assume "rule1" has been added previously
+    /// assert!(localizer.has_rule("rule1"));
+    /// assert!(!localizer.has_rule("nonexistent_rule"));
+    /// ```
     pub fn has_rule(&self, rule_id: &str) -> bool {
         self.localized_rules.contains_key(rule_id)
     }
 
-    /// Get all rule IDs
+    /// Returns a vector of all rule IDs managed by the localizer.
     pub fn get_rule_ids(&self) -> Vec<String> {
         self.localized_rules.keys().cloned().collect()
     }
 
-    /// Filter rules by category
+    /// Returns all analysis rules in the current language that match the specified issue category.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rules = localizer.get_rules_by_category(IssueCategory::Security);
+    /// assert!(rules.iter().all(|r| r.category == IssueCategory::Security));
+    /// ```
     pub fn get_rules_by_category(&self, category: IssueCategory) -> Vec<AnalysisRule> {
         self.get_rules_for_current_language()
             .into_iter()
@@ -207,7 +329,14 @@ impl RuleLocalizer {
             .collect()
     }
 
-    /// Filter rules by severity
+    /// Returns all analysis rules with the specified severity in the current language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rules = localizer.get_rules_by_severity(IssueSeverity::Warning);
+    /// assert!(rules.iter().all(|r| r.severity == IssueSeverity::Warning));
+    /// ```
     pub fn get_rules_by_severity(&self, severity: IssueSeverity) -> Vec<AnalysisRule> {
         self.get_rules_for_current_language()
             .into_iter()
@@ -215,7 +344,15 @@ impl RuleLocalizer {
             .collect()
     }
 
-    /// Get rules that need localization for the specified language
+    /// Returns a list of original rules that lack localization for the specified language.
+    ///
+    /// # Parameters
+    ///
+    /// - `language`: The language for which to check localization status.
+    ///
+    /// # Returns
+    ///
+    /// A vector of references to `AnalysisRule` instances that do not have a localized version for the given language.
     pub fn get_rules_needing_localization(
         &self,
         language: &SupportedLanguage,
@@ -227,7 +364,7 @@ impl RuleLocalizer {
             .collect()
     }
 
-    /// Update localization statistics
+    /// Updates the statistics for localized rules, including the count and coverage percentage for the current language.
     pub fn update_stats(&mut self) {
         let mut localized_count = 0;
         let current_lang_code = self.current_language.code();
@@ -246,7 +383,11 @@ impl RuleLocalizer {
         };
     }
 
-    /// Clear all localizations for a specific language
+    /// Removes all localized rule variants for the specified language and updates localization statistics.
+    ///
+    /// # Arguments
+    ///
+    /// * `language` - The language for which all localizations should be cleared.
     pub fn clear_localizations_for_language(&mut self, language: &SupportedLanguage) {
         let lang_code = language.code();
         let mut cleared_count = 0;
@@ -264,7 +405,17 @@ impl RuleLocalizer {
         );
     }
 
-    /// Resolve the effective language (handle Auto language)
+    /// Resolves the effective language, converting `Auto` to the system default language.
+    ///
+    /// If the provided language is `SupportedLanguage::Auto`, returns the system default language; otherwise, returns the given language unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let localizer = RuleLocalizer::new(SupportedLanguage::English, None);
+    /// assert_eq!(localizer.resolve_language(&SupportedLanguage::Auto), SupportedLanguage::system_default());
+    /// assert_eq!(localizer.resolve_language(&SupportedLanguage::French), SupportedLanguage::French);
+    /// ```
     fn resolve_language(&self, language: &SupportedLanguage) -> SupportedLanguage {
         match language {
             SupportedLanguage::Auto => SupportedLanguage::system_default(),
@@ -272,7 +423,19 @@ impl RuleLocalizer {
         }
     }
 
-    /// Export localized rules to file
+    /// Exports all localized rules for the specified language to a JSON file.
+    ///
+    /// Serializes the localized rules for the given language and writes them to the provided output path.
+    /// Returns an error if serialization or file writing fails.
+    ///
+    /// # Arguments
+    ///
+    /// * `language` - The language for which to export localized rules.
+    /// * `output_path` - The file path where the JSON output will be written.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the export succeeds, or a `TranslationError` if an error occurs.
     pub fn export_localized_rules(
         &self,
         language: &SupportedLanguage,
@@ -291,7 +454,15 @@ impl RuleLocalizer {
         Ok(())
     }
 
-    /// Import localized rules from file
+    /// Imports localized analysis rules from a JSON file for a specified language.
+    ///
+    /// Reads a JSON file containing a list of `AnalysisRule` objects, adds each as a localized rule for the given language, updates localization statistics, and returns the number of successfully imported rules.
+    ///
+    /// # Returns
+    /// The number of localized rules successfully imported.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or if deserialization fails.
     pub fn import_localized_rules(
         &mut self,
         language: &SupportedLanguage,
@@ -331,12 +502,21 @@ pub struct LocalizationStats {
 }
 
 impl LocalizationStats {
-    /// Get rules that still need localization
+    /// Returns the number of rules that have not yet been localized.
+    ///
+    /// This value is calculated as the total number of rules minus the number of localized rules, never returning a negative number.
     pub fn rules_needing_localization(&self) -> usize {
         self.total_rules.saturating_sub(self.localized_rules)
     }
 
-    /// Check if localization is complete
+    /// Returns true if all rules are localized (coverage is 100% or more).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = LocalizationStats { total_rules: 10, localized_rules: 10, localization_coverage: 100.0 };
+    /// assert!(stats.is_complete());
+    /// ```
     pub fn is_complete(&self) -> bool {
         self.localization_coverage >= 100.0
     }
@@ -346,6 +526,24 @@ impl LocalizationStats {
 mod tests {
     use super::*;
 
+    /// Creates a test `AnalysisRule` with the specified ID and message.
+    ///
+    /// The returned rule uses fixed values for all other fields, suitable for unit testing scenarios.
+    ///
+    /// # Parameters
+    /// - `id`: The unique identifier for the rule.
+    /// - `message`: The message to associate with the rule.
+    ///
+    /// # Returns
+    /// An `AnalysisRule` instance populated with test data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = create_test_rule("test_id", "This is a test message");
+    /// assert_eq!(rule.id, "test_id");
+    /// assert_eq!(rule.message, "This is a test message");
+    /// ```
     fn create_test_rule(id: &str, message: &str) -> AnalysisRule {
         AnalysisRule {
             id: id.to_string(),

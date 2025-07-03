@@ -1,7 +1,17 @@
 use std::path::{Path, PathBuf};
 use crate::common::{AppError, AppResult};
 
-/// 展开路径中的波浪号（~）为用户主目录
+/// Expands a path starting with `~` to the user's home directory.
+///
+/// If the input path begins with `~/`, replaces the tilde with the user's home directory.
+/// Returns the original path if it does not start with `~/` or if the home directory cannot be determined.
+///
+/// # Examples
+///
+/// ```
+/// let home_expanded = expand_path("~/Documents");
+/// assert!(home_expanded.to_str().unwrap().contains("Documents"));
+/// ```
 pub fn expand_path(path: impl AsRef<Path>) -> PathBuf {
     let path = path.as_ref();
     if let Some(path_str) = path.to_str() {
@@ -14,7 +24,20 @@ pub fn expand_path(path: impl AsRef<Path>) -> PathBuf {
     path.to_path_buf()
 }
 
-/// 确保目录存在，如果不存在则创建
+/// Ensures that a directory exists at the specified path, creating it and any missing parent directories if necessary.
+///
+/// Returns an error if the directory cannot be created.
+///
+/// # Examples
+///
+/// ```
+/// use crate::common::utils::ensure_dir_exists;
+/// use std::path::PathBuf;
+///
+/// let dir = PathBuf::from("some/test/dir");
+/// ensure_dir_exists(&dir).unwrap();
+/// assert!(dir.exists() && dir.is_dir());
+/// ```
 pub fn ensure_dir_exists(path: impl AsRef<Path>) -> AppResult<()> {
     let path = path.as_ref();
     if !path.exists() {
@@ -24,13 +47,29 @@ pub fn ensure_dir_exists(path: impl AsRef<Path>) -> AppResult<()> {
     Ok(())
 }
 
-/// 检查文件是否存在且可读
+/// Returns `true` if the specified path exists, is a file, and its metadata can be accessed, indicating the file is readable.
+///
+/// # Examples
+///
+/// ```
+/// let readable = is_file_readable("Cargo.toml");
+/// assert!(readable || !std::path::Path::new("Cargo.toml").exists());
+/// ```
 pub fn is_file_readable(path: impl AsRef<Path>) -> bool {
     let path = path.as_ref();
     path.exists() && path.is_file() && std::fs::metadata(path).is_ok()
 }
 
-/// 安全地读取文件内容
+/// Reads the contents of a file as a UTF-8 string, returning an error if the file does not exist or is not readable.
+///
+/// Returns an `AppError` if the file is missing, unreadable, or if reading fails.
+///
+/// # Examples
+///
+/// ```
+/// let content = read_file_safe("example.txt")?;
+/// assert!(content.contains("example"));
+/// ```
 pub fn read_file_safe(path: impl AsRef<Path>) -> AppResult<String> {
     let path = path.as_ref();
     if !is_file_readable(path) {
@@ -41,7 +80,19 @@ pub fn read_file_safe(path: impl AsRef<Path>) -> AppResult<String> {
         .map_err(|e| AppError::io(format!("读取文件失败 {}: {}", path.display(), e)))
 }
 
-/// 安全地写入文件内容
+/// Writes string content to a file, ensuring the parent directory exists.
+///
+/// If the parent directory does not exist, it is created before writing. Any I/O errors are wrapped in `AppError`.
+///
+/// # Examples
+///
+/// ```
+/// use crate::common::utils::write_file_safe;
+/// let tmp_dir = tempfile::tempdir().unwrap();
+/// let file_path = tmp_dir.path().join("example.txt");
+/// write_file_safe(&file_path, "Hello, world!").unwrap();
+/// assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "Hello, world!");
+/// ```
 pub fn write_file_safe(path: impl AsRef<Path>, content: &str) -> AppResult<()> {
     let path = path.as_ref();
     
@@ -54,7 +105,16 @@ pub fn write_file_safe(path: impl AsRef<Path>, content: &str) -> AppResult<()> {
         .map_err(|e| AppError::io(format!("写入文件失败 {}: {}", path.display(), e)))
 }
 
-/// 获取文件的修改时间（Unix 时间戳）
+/// Returns the last modification time of a file as a Unix timestamp (seconds since epoch).
+///
+/// Returns an error if the file metadata or modification time cannot be retrieved, or if the time cannot be converted.
+///
+/// # Examples
+///
+/// ```
+/// let mtime = get_file_mtime("/etc/hosts")?;
+/// assert!(mtime > 0);
+/// ```
 pub fn get_file_mtime(path: impl AsRef<Path>) -> AppResult<u64> {
     let path = path.as_ref();
     let metadata = std::fs::metadata(path)
@@ -68,7 +128,15 @@ pub fn get_file_mtime(path: impl AsRef<Path>) -> AppResult<u64> {
         .map_err(|e| AppError::generic(format!("时间转换失败: {}", e)))
 }
 
-/// 格式化字节大小为人类可读的格式
+/// Converts a byte count into a human-readable string with appropriate units (B, KB, MB, GB, TB).
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(format_bytes(500), "500 B");
+/// assert_eq!(format_bytes(2048), "2.0 KB");
+/// assert_eq!(format_bytes(5_242_880), "5.0 MB");
+/// ```
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     const THRESHOLD: u64 = 1024;
@@ -88,7 +156,18 @@ pub fn format_bytes(bytes: u64) -> String {
     format!("{:.1} {}", size, UNITS[unit_index])
 }
 
-/// 截断字符串到指定长度，如果超长则添加省略号
+/// Truncates a string to a maximum length, appending an ellipsis if truncated.
+///
+/// If the input string exceeds `max_len` characters, it is shortened and "..." is appended. If `max_len` is 3 or less, returns only "...". Returns the original string if it fits within `max_len`.
+///
+/// # Examples
+///
+/// ```
+/// let s = "Hello, world!";
+/// assert_eq!(truncate_string(s, 5), "He...");
+/// assert_eq!(truncate_string(s, 20), "Hello, world!");
+/// assert_eq!(truncate_string(s, 3), "...");
+/// ```
 pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -99,7 +178,16 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
     }
 }
 
-/// 清理和标准化文件路径
+/// Expands and canonicalizes a file path, resolving `~` to the home directory and symbolic links if possible.
+///
+/// If canonicalization fails, returns the expanded path without further modification.
+///
+/// # Examples
+///
+/// ```
+/// let normalized = normalize_path("~/myfolder/../file.txt");
+/// // Returns the absolute, canonical path if possible, or the expanded path with `~` resolved.
+/// ```
 pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
     let path = path.as_ref();
     let path = expand_path(path);
@@ -112,7 +200,19 @@ pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
     }
 }
 
-/// 检查路径是否在指定的父目录下（防止路径遍历攻击）
+/// Checks whether a path is within a specified base directory to prevent path traversal.
+///
+/// Returns `true` if the normalized `path` is inside the normalized `base` directory, otherwise `false`.
+///
+/// # Examples
+///
+/// ```
+/// let base = "/home/user/data";
+/// let safe_path = "/home/user/data/file.txt";
+/// let unsafe_path = "/home/user/other/file.txt";
+/// assert!(is_path_safe(safe_path, base));
+/// assert!(!is_path_safe(unsafe_path, base));
+/// ```
 pub fn is_path_safe(path: impl AsRef<Path>, base: impl AsRef<Path>) -> bool {
     let path = normalize_path(path);
     let base = normalize_path(base);

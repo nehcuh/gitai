@@ -30,7 +30,23 @@ pub struct ScanCacheEntry {
 }
 
 impl ScanCacheEntry {
-    /// Create a new scan cache entry
+    /// Constructs a new `ScanCacheEntry` for a scanned file.
+    ///
+    /// Initializes the entry with the provided file path, hash, scan results, file size, and last modified time.
+    /// The creation timestamp is set to the current system time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let entry = ScanCacheEntry::new(
+    ///     "src/main.rs".to_string(),
+    ///     "abc123".to_string(),
+    ///     scan_results,
+    ///     1024,
+    ///     1680000000,
+    /// );
+    /// assert_eq!(entry.file_path, "src/main.rs");
+    /// ```
     pub fn new(
         file_path: String,
         file_hash: String,
@@ -53,7 +69,18 @@ impl ScanCacheEntry {
         }
     }
 
-    /// Check if the cache entry is expired
+    /// Returns `true` if the cache entry is older than the specified maximum age in hours.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_age_hours`: The maximum allowed age for the cache entry, in hours.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let entry = ScanCacheEntry::new("file.rs".into(), "hash".into(), results, 123, 456);
+    /// assert!(!entry.is_expired(24));
+    /// ```
     pub fn is_expired(&self, max_age_hours: u32) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -64,12 +91,28 @@ impl ScanCacheEntry {
         now.saturating_sub(self.created_at) > max_age_seconds
     }
 
-    /// Get cache key for this entry
+    /// Generates a unique cache key for the entry by combining the file path (slashes replaced with underscores) and the file hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let entry = ScanCacheEntry::new(
+    ///     "src/main.rs".to_string(),
+    ///     "abc123".to_string(),
+    ///     scan_results,
+    ///     1024,
+    ///     1680000000,
+    /// );
+    /// let key = entry.cache_key();
+    /// assert_eq!(key, "src_main.rs:abc123");
+    /// ```
     pub fn cache_key(&self) -> String {
         format!("{}:{}", self.file_path.replace('/', "_"), self.file_hash)
     }
 
-    /// Check if cache is valid for current file state
+    /// Determines whether the cache entry matches the current file's size and modification time.
+    ///
+    /// Returns `Ok(true)` if the file exists and both its size and last modified timestamp match those stored in the cache entry; otherwise, returns `Ok(false)`. Returns an error if file metadata cannot be accessed.
     pub fn is_valid_for_file(&self, file_path: &Path) -> Result<bool, AppError> {
         if !file_path.exists() {
             return Ok(false);
@@ -108,7 +151,19 @@ pub struct ScanCacheManager {
 }
 
 impl ScanCacheManager {
-    /// Create a new scan cache manager
+    /// Creates a new `ScanCacheManager`, initializing the cache directory and loading existing cache entries from disk.
+    ///
+    /// If no cache directory is provided, a default location is used. Ensures the cache directory exists before loading any existing cache files.
+    ///
+    /// # Returns
+    /// Returns a `ScanCacheManager` instance on success, or an `AppError` if the cache directory cannot be created or cache files cannot be loaded.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ScanCacheManager::new(None).unwrap();
+    /// assert!(manager.get_cache_dir().exists());
+    /// ```
     pub fn new(cache_dir: Option<PathBuf>) -> Result<Self, AppError> {
         let cache_dir = cache_dir.unwrap_or_else(|| {
             dirs::cache_dir()
@@ -143,7 +198,9 @@ impl ScanCacheManager {
         Ok(manager)
     }
 
-    /// Get cached scan results for a file
+    /// Retrieves cached scan results for a file if present, not expired, and valid for the current file state.
+    ///
+    /// Returns `Some(ScanResults)` if a valid, non-expired cache entry exists for the specified file and hash; otherwise returns `None`. The cache entry is also validated against the current file's metadata to ensure consistency.
     pub fn get_cached_results(&self, file_path: &Path, file_hash: &str) -> Option<ScanResults> {
         let cache_key = format!(
             "{}:{}",
@@ -181,7 +238,13 @@ impl ScanCacheManager {
         None
     }
 
-    /// Store scan results in cache
+    /// Stores scan results for a file in both memory and disk caches.
+    ///
+    /// If the in-memory cache exceeds its size limit, the oldest entries are evicted before storing the new result. The cache entry includes file metadata to ensure validity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `AppError` if file metadata cannot be retrieved or if writing to disk fails.
     pub fn store_results(
         &mut self,
         file_path: &Path,
@@ -229,12 +292,19 @@ impl ScanCacheManager {
         Ok(())
     }
 
-    /// Check if scan results are cached and valid
+    /// Returns `true` if valid cached scan results exist for the specified file and hash.
+    ///
+    /// Checks whether a non-expired, file-state-matching cache entry is available for the given file path and hash.
     pub fn is_cache_valid(&self, file_path: &Path, file_hash: &str) -> bool {
         self.get_cached_results(file_path, file_hash).is_some()
     }
 
-    /// Clean up expired cache entries
+    /// Removes expired scan cache entries from both memory and disk.
+    ///
+    /// Returns the total number of expired entries removed from the cache.
+    ///
+    /// # Returns
+    /// The number of expired cache entries that were deleted.
     pub fn cleanup_expired_cache(&mut self) -> Result<usize, AppError> {
         let mut removed_count = 0;
 
@@ -261,7 +331,19 @@ impl ScanCacheManager {
         Ok(removed_count)
     }
 
-    /// Get cache statistics
+    /// Returns statistics about the current in-memory scan cache, including total, expired, and valid entries, as well as the cache directory path.
+    ///
+    /// # Returns
+    /// A `ScanCacheStats` struct containing counts of total, expired, and valid cache entries, and the cache directory location.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = cache_manager.get_cache_stats();
+    /// println!("Total entries: {}", stats.total_entries);
+    /// println!("Expired entries: {}", stats.expired_entries);
+    /// println!("Valid entries: {}", stats.valid_entries);
+    /// ```
     pub fn get_cache_stats(&self) -> ScanCacheStats {
         let total_entries = self.memory_cache.len();
         let expired_entries = self
@@ -278,12 +360,22 @@ impl ScanCacheManager {
         }
     }
 
-    /// Get cache directory path
+    /// Returns the path to the cache directory used for storing scan cache files.
     pub fn get_cache_dir(&self) -> &Path {
         &self.cache_dir
     }
 
-    /// Calculate file hash for caching
+    /// Computes a hash string for a file based on its content, size, and last modification time.
+    ///
+    /// The resulting hash can be used to uniquely identify the file's state for caching purposes. Returns an error if the file cannot be read or its metadata cannot be accessed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = ScanCacheManager::new(None).unwrap();
+    /// let hash = manager.calculate_file_hash(Path::new("src/main.rs")).unwrap();
+    /// assert!(!hash.is_empty());
+    /// ```
     pub fn calculate_file_hash(&self, file_path: &Path) -> Result<String, AppError> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
@@ -313,7 +405,14 @@ impl ScanCacheManager {
         Ok(format!("{:x}", hasher.finish()))
     }
 
-    /// Load cache from disk into memory
+    /// Loads scan cache entries from disk into memory.
+    ///
+    /// Scans the cache directory for JSON files, deserializes valid cache entries, and inserts them into the in-memory cache.
+    /// Corrupted or unreadable cache files are removed from disk. Returns an error if the cache directory cannot be read.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `AppError` if the cache directory cannot be accessed or read.
     fn load_disk_cache(&mut self) -> Result<(), AppError> {
         if !self.cache_dir.exists() {
             return Ok(());
@@ -362,7 +461,9 @@ impl ScanCacheManager {
         Ok(())
     }
 
-    /// Save a cache entry to disk
+    /// Serializes a cache entry as JSON and writes it to disk in the cache directory.
+    ///
+    /// Overwrites any existing file with the same cache key. Returns an error if serialization or file writing fails.
     fn save_cache_entry_to_disk(&self, cache_entry: &ScanCacheEntry) -> Result<(), AppError> {
         let filename = format!("{}.json", cache_entry.cache_key());
         let file_path = self.cache_dir.join(filename);
@@ -381,7 +482,13 @@ impl ScanCacheManager {
         Ok(())
     }
 
-    /// Load a cache entry from disk
+    /// Loads a scan cache entry from a JSON file on disk.
+    ///
+    /// Reads the specified file and deserializes its contents into a `ScanCacheEntry`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `AppError` if the file cannot be read or if the contents cannot be parsed as a valid cache entry.
     fn load_cache_entry_from_disk(&self, file_path: &Path) -> Result<ScanCacheEntry, AppError> {
         let content = fs::read_to_string(file_path).map_err(|e| {
             AppError::IO(
@@ -396,7 +503,17 @@ impl ScanCacheManager {
         Ok(cache_entry)
     }
 
-    /// Clean up expired entries from disk
+    /// Removes expired or corrupted cache entry files from the disk cache directory.
+    ///
+    /// Returns the number of files removed. Only JSON files are considered for cleanup.
+    /// Expired entries are determined by the default cache expiry setting.
+    /// Corrupted cache files that cannot be deserialized are also deleted.
+    ///
+    /// # Returns
+    /// The number of cache files removed from disk.
+    ///
+    /// # Errors
+    /// Returns an error if the cache directory cannot be read.
     fn cleanup_disk_cache(&self) -> Result<usize, AppError> {
         if !self.cache_dir.exists() {
             return Ok(0);
@@ -439,7 +556,11 @@ impl ScanCacheManager {
         Ok(removed_count)
     }
 
-    /// Evict oldest entries from memory cache
+    /// Removes the specified number of oldest entries from the in-memory cache based on creation time.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of oldest cache entries to evict.
     fn evict_oldest_entries(&mut self, count: usize) {
         let mut entries: Vec<(String, u64)> = self
             .memory_cache
@@ -465,7 +586,19 @@ pub struct ScanCacheStats {
 }
 
 impl ScanCacheStats {
-    /// Get cache hit ratio as percentage
+    /// Returns the percentage of valid cache entries relative to the total number of entries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = ScanCacheStats {
+    ///     total_entries: 10,
+    ///     expired_entries: 2,
+    ///     valid_entries: 8,
+    ///     cache_dir: std::path::PathBuf::from("/tmp/cache"),
+    /// };
+    /// assert_eq!(stats.hit_ratio(), 80.0);
+    /// ```
     pub fn hit_ratio(&self) -> f64 {
         if self.total_entries == 0 {
             0.0
@@ -481,6 +614,17 @@ mod tests {
     use crate::handlers::scan::ScanResults;
     use tempfile::TempDir;
 
+    /// Creates a `ScanResults` instance populated with default test values.
+    ///
+    /// This function is intended for use in unit tests or benchmarks where a minimal, valid `ScanResults` object is required.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let results = create_test_scan_results();
+    /// assert_eq!(results.files_scanned, 1);
+    /// assert_eq!(results.total_issues, 0);
+    /// ```
     fn create_test_scan_results() -> ScanResults {
         ScanResults {
             files_scanned: 1,

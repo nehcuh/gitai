@@ -143,6 +143,13 @@ impl AccountConfig {
         }))
     }
 
+    /// Validates the account configuration fields for correctness.
+    ///
+    /// Ensures that the DevOps platform is supported, the base URL has a valid HTTP(S) scheme, and the token is present.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ConfigError` if the platform is unsupported, the URL is invalid, or the token is missing.
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Validate platform support
         match self.devops_platform.to_lowercase().as_str() {
@@ -186,6 +193,11 @@ pub struct AstGrepConfig {
 }
 
 impl Default for AstGrepConfig {
+    /// Returns the default configuration for AST analysis.
+    ///
+    /// By default, AST analysis is enabled, the analysis depth is set to "medium",
+    /// and caching is enabled.
+    #[allow(dead_code)]
     fn default() -> Self {
         Self {
             enabled: true,
@@ -235,10 +247,26 @@ fn default_analysis_depth() -> String {
     "medium".to_string()
 }
 
+/// Returns the default value for cache-enabled settings, which is `true`.
+///
+/// # Examples
+///
+/// ```
+/// let enabled = default_cache_enabled();
+/// assert!(enabled);
+/// ```
 fn default_cache_enabled() -> bool {
     true
 }
 
+/// Returns the default value for the `auto_save` setting in review configuration.
+///
+/// # Examples
+///
+/// ```
+/// let auto_save = default_auto_save();
+/// assert!(auto_save);
+/// ```
 fn default_auto_save() -> bool {
     true
 }
@@ -617,6 +645,13 @@ impl AppConfig {
         Ok(PathBuf::from(dir_name).join(filename))
     }
 
+    /// Loads the application configuration and prompt files from the user's directory, initializing them from templates if necessary.
+    ///
+    /// Ensures all required configuration and prompt files exist, creating them from templates or environment variables if missing. Loads and parses the configuration and prompt files into an `AppConfig` instance.
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully loaded `AppConfig` on success, or a `ConfigError` if initialization or loading fails.
     pub fn load() -> Result<Self, ConfigError> {
         let start_time = std::time::Instant::now();
 
@@ -641,6 +676,25 @@ impl AppConfig {
         Self::load_config_from_file(&user_config_path, &user_prompt_paths)
     }
 
+    /// Loads the application configuration and prompt files from disk, merging partial config sections and applying defaults as needed.
+    ///
+    /// This function reads the main TOML configuration file and all specified prompt files, constructing a complete `AppConfig`. It merges partial configuration sections, applies default values for missing fields, and validates account and translation configurations. Prompt files that are missing or empty are skipped, and only successfully loaded prompts are included. Environment variables may override sensitive account fields. Returns an error if the configuration file cannot be read or parsed, or if required configuration fields are invalid.
+    ///
+    /// # Returns
+    /// A fully constructed `AppConfig` with all configuration sections and loaded prompts.
+    ///
+    /// # Errors
+    /// Returns `ConfigError` if the configuration file cannot be read, parsed, or if required fields are invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = AppConfig::load_config_from_file(
+    ///     std::path::Path::new("/home/user/.gitai/config.toml"),
+    ///     &prompt_paths_map,
+    /// )?;
+    /// assert_eq!(config.ai.model_name, "qwen3:32b-q8_0");
+    /// ```
     fn load_config_from_file(
         config_path: &std::path::Path,
         prompt_paths: &HashMap<String, PathBuf>,

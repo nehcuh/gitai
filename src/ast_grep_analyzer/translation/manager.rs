@@ -21,7 +21,21 @@ pub struct TranslationManager {
 }
 
 impl TranslationManager {
-    /// Create a new translation manager
+    /// Creates a new `TranslationManager` with the specified configuration.
+    ///
+    /// Resolves the target language from the configuration's default language and prepares the manager for initialization.
+    ///
+    /// # Returns
+    ///
+    /// A `TranslationManager` instance wrapped in a `TranslationResult`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = create_test_config();
+    /// let manager = TranslationManager::new(config).unwrap();
+    /// assert_eq!(manager.target_language(), &SupportedLanguage::Chinese);
+    /// ```
     pub fn new(config: TranslationConfig) -> TranslationResult<Self> {
         let target_language = Self::resolve_target_language(&config.default_language);
 
@@ -39,7 +53,10 @@ impl TranslationManager {
         Ok(manager)
     }
 
-    /// Initialize the translation manager with all components
+    /// Initializes the translation manager and its components.
+    ///
+    /// If translation is disabled in the configuration, initialization is skipped but the manager is marked as initialized. Otherwise, marks the manager as initialized. This implementation does not perform any actual setup of translation components.
+    #[allow(clippy::unused_async)]
     pub async fn initialize(&mut self) -> TranslationResult<()> {
         if !self.config.enabled {
             debug!("Translation is disabled, skipping initialization");
@@ -52,17 +69,31 @@ impl TranslationManager {
         Ok(())
     }
 
-    /// Check if translation is enabled and available
+    /// Returns true if translation is enabled in the configuration and the target language is not English.
     pub fn is_enabled(&self) -> bool {
         self.config.enabled && self.target_language != SupportedLanguage::English
     }
 
-    /// Get the current target language
+    /// Returns a reference to the current target language used for translation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = TranslationManager::new(config).unwrap();
+    /// let lang = manager.target_language();
+    /// assert_eq!(*lang, SupportedLanguage::Chinese);
+    /// ```
     pub fn target_language(&self) -> &SupportedLanguage {
         &self.target_language
     }
 
-    /// Update the target language
+    /// Sets the target language for translation operations.
+    ///
+    /// If the specified language is `Auto`, it resolves to the system default language. If the resolved language differs from the current target language, updates the manager's target language accordingly.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the target language was set successfully.
     pub fn set_target_language(&mut self, language: SupportedLanguage) -> TranslationResult<()> {
         let resolved_language = Self::resolve_target_language(&language);
 
@@ -77,7 +108,22 @@ impl TranslationManager {
         Ok(())
     }
 
-    /// Translate a list of analysis rules
+    /// Translates a list of analysis rules to the target language.
+    ///
+    /// If translation is disabled or the target language is English, returns the original rules unchanged. Otherwise, attempts to translate each rule; if translation of a rule fails, the original rule is used as a fallback.
+    ///
+    /// # Returns
+    ///
+    /// A vector of translated analysis rules, or the original rules if translation is not performed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(config).unwrap();
+    /// let rules = vec![AnalysisRule::default()];
+    /// let translated = tokio_test::block_on(manager.translate_rules(&rules)).unwrap();
+    /// assert_eq!(translated.len(), rules.len());
+    /// ```
     pub async fn translate_rules(
         &mut self,
         rules: &[AnalysisRule],
@@ -108,7 +154,23 @@ impl TranslationManager {
         Ok(translated_rules)
     }
 
-    /// Translate code issues (results from scanning)
+    /// Translates a list of code issues to the target language.
+    ///
+    /// If translation is disabled or the target language is English, returns the original issues.
+    /// Otherwise, attempts to translate each issue; on failure, the original issue is retained in the result.
+    ///
+    /// # Returns
+    ///
+    /// A vector of code issues, translated to the target language when possible.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(config).unwrap();
+    /// let issues = vec![CodeIssue::default()];
+    /// let translated = manager.translate_issues(&issues).await.unwrap();
+    /// assert_eq!(translated.len(), issues.len());
+    /// ```
     pub async fn translate_issues(
         &mut self,
         issues: &[CodeIssue],
@@ -139,7 +201,18 @@ impl TranslationManager {
         Ok(translated_issues)
     }
 
-    /// Translate a review text or analysis summary
+    /// Translates a review text or analysis summary to the target language.
+    ///
+    /// If translation is disabled or the target language is English, returns the original text.
+    /// Currently, this method does not perform actual translation and always returns the input text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(config).unwrap();
+    /// let translated = tokio_test::block_on(manager.translate_text("Hello, world!", None)).unwrap();
+    /// assert_eq!(translated, "Hello, world!");
+    /// ```
     pub async fn translate_text(
         &mut self,
         text: &str,
@@ -156,7 +229,19 @@ impl TranslationManager {
         Ok(text.to_string())
     }
 
-    /// Get translation statistics
+    /// Returns the current translation status and configuration details.
+    ///
+    /// The returned `TranslationStats` includes whether translation is enabled, the target language,
+    /// cache settings, and the availability of localizer and translator components. Some fields may be
+    /// set to default values if not implemented.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = TranslationManager::new(config).unwrap();
+    /// let stats = manager.get_stats();
+    /// assert_eq!(stats.enabled, config.enabled);
+    /// ```
     pub fn get_stats(&self) -> TranslationStats {
         TranslationStats {
             enabled: self.config.enabled,
@@ -168,7 +253,17 @@ impl TranslationManager {
         }
     }
 
-    /// Clean up expired cache entries
+    /// Removes expired entries from the translation cache.
+    ///
+    /// Returns the number of cache entries removed. The current implementation does not perform any cleanup and always returns zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(config).unwrap();
+    /// let removed = futures::executor::block_on(manager.cleanup_cache()).unwrap();
+    /// assert_eq!(removed, 0);
+    /// ```
     pub async fn cleanup_cache(&mut self) -> TranslationResult<usize> {
         // Simplified implementation
         Ok(0)
@@ -176,7 +271,9 @@ impl TranslationManager {
 
     // Private helper methods
 
-    /// Resolve the actual target language from a potentially auto-detect setting
+    /// Resolves the effective target language, converting `Auto` to the system default language.
+    ///
+    /// If the input language is `Auto`, returns the system's default language; otherwise, returns the provided language unchanged.
     fn resolve_target_language(language: &SupportedLanguage) -> SupportedLanguage {
         match language {
             SupportedLanguage::Auto => SupportedLanguage::system_default(),
@@ -184,7 +281,18 @@ impl TranslationManager {
         }
     }
 
-    /// Translate a single analysis rule
+    /// Translates a single analysis rule to the target language.
+    ///
+    /// Currently returns the original rule without modification.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(create_test_config()).unwrap();
+    /// let rule = AnalysisRule::default();
+    /// let translated = futures::executor::block_on(manager.translate_single_rule(&rule)).unwrap();
+    /// assert_eq!(translated, rule);
+    /// ```
     async fn translate_single_rule(
         &mut self,
         rule: &AnalysisRule,
@@ -194,7 +302,19 @@ impl TranslationManager {
         Ok(rule.clone())
     }
 
-    /// Translate a single code issue
+    /// Returns a translated version of a single code issue.
+    ///
+    /// Currently, this method returns a clone of the original issue without modification.
+    /// Intended for future integration with translation APIs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationManager::new(config).unwrap();
+    /// let issue = CodeIssue::default();
+    /// let translated = futures::executor::block_on(manager.translate_single_issue(&issue)).unwrap();
+    /// assert_eq!(issue, translated);
+    /// ```
     async fn translate_single_issue(&mut self, issue: &CodeIssue) -> TranslationResult<CodeIssue> {
         // Simplified implementation - just return the original issue
         // TODO: Implement actual issue translation when API is stable
@@ -220,12 +340,30 @@ pub struct TranslationStats {
 }
 
 impl TranslationStats {
-    /// Check if translation is fully operational
+    /// Returns true if translation is enabled and at least one translation component (localizer or translator) is available.
     pub fn is_operational(&self) -> bool {
         self.enabled && (self.localizer_available || self.translator_available)
     }
 
-    /// Get a human-readable status description
+    /// Returns a human-readable string describing the current translation status.
+    ///
+    /// The description reflects whether translation is enabled, the target language,
+    /// and the operational state of translation components.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = TranslationStats {
+    ///     enabled: true,
+    ///     target_language: SupportedLanguage::Chinese,
+    ///     cache_enabled: false,
+    ///     cache_stats: None,
+    ///     localizer_available: false,
+    ///     translator_available: false,
+    /// };
+    /// let desc = stats.status_description();
+    /// assert!(desc.contains("Active") || desc.contains("not operational"));
+    /// ```
     pub fn status_description(&self) -> String {
         if !self.enabled {
             "Translation disabled".to_string()
@@ -243,6 +381,18 @@ impl TranslationStats {
 mod tests {
     use super::*;
 
+    /// Creates a sample `TranslationConfig` for testing purposes.
+    ///
+    /// The returned configuration has translation enabled, Chinese as the default language,
+    /// caching enabled, a test provider, and no provider-specific settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = create_test_config();
+    /// assert!(config.enabled);
+    /// assert_eq!(config.default_language, SupportedLanguage::Chinese);
+    /// ```
     fn create_test_config() -> TranslationConfig {
         use std::collections::HashMap;
         TranslationConfig {

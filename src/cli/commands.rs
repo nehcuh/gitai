@@ -231,6 +231,9 @@ pub struct UpdateRulesArgs {
 }
 
 impl Default for CommitArgs {
+    /// Returns the default configuration for `CommitArgs` with all flags set to false and optional fields unset.
+    ///
+    /// By default, AST-Grep analysis, auto-staging, and code review are disabled, and no commit message or issue IDs are provided. The additional Git arguments list is empty.
     fn default() -> Self {
         Self {
             ast_grep: false,
@@ -244,6 +247,9 @@ impl Default for CommitArgs {
 }
 
 impl Default for ReviewArgs {
+    /// Returns the default configuration for `ReviewArgs`.
+    ///
+    /// By default, sets the output format to `"text"`, enables AST-Grep analysis, disables scan skipping and forced scanning, and leaves all optional fields unset. The list of additional Git arguments is initialized as empty.
     fn default() -> Self {
         Self {
             focus: None,
@@ -264,6 +270,9 @@ impl Default for ReviewArgs {
 }
 
 impl Default for ScanArgs {
+    /// Returns the default configuration for scan command arguments.
+    ///
+    /// The default scan target is the current directory, with all severities enabled, text output format, no language or rule filters, unlimited issues, and all optional flags set to false.
     fn default() -> Self {
         Self {
             target: ".".to_string(),
@@ -284,6 +293,9 @@ impl Default for ScanArgs {
 }
 
 impl Default for UpdateRulesArgs {
+    /// Returns the default configuration for updating AST-Grep rules.
+    ///
+    /// The default source is set to "github", the reference branch is "main", and all flags are set to false. No repository or target directory is specified.
     fn default() -> Self {
         Self {
             source: "github".to_string(),

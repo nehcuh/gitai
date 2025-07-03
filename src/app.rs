@@ -11,12 +11,45 @@ pub struct GitAIApp {
 }
 
 impl GitAIApp {
-    /// 创建新的应用程序实例
+    /// Creates a new `GitAIApp` instance with the specified configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = AppConfig::default();
+    /// let app = GitAIApp::new(config);
+    /// ```
     pub fn new(config: AppConfig) -> Self {
         Self { config }
     }
 
-    /// 运行应用程序
+    /// Runs the application with the provided parsed CLI arguments.
+    ///
+    /// Applies any language override specified in the arguments, then dispatches execution based on the selected operation:
+    /// - Shows help text if requested.
+    /// - Handles GitAI commands using the appropriate handler.
+    /// - Passes through Git commands or invokes intelligent Git handling depending on AI mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Parsed command-line arguments specifying the operation and options.
+    ///
+    /// # Returns
+    ///
+    /// Returns an application result indicating success or failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use crate::app::{GitAIApp, AppBuilder};
+    /// # use crate::cli::ParsedArgs;
+    /// # async fn example() -> crate::types::AppResult<()> {
+    /// let app = AppBuilder::build()?;
+    /// let args = ParsedArgs::default();
+    /// app.run(args).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn run(mut self, args: ParsedArgs) -> AppResult<()> {
         // 应用语言设置到配置
         if let Some(ref language) = args.language {
@@ -37,7 +70,13 @@ impl GitAIApp {
         }
     }
 
-    /// 应用语言覆盖设置
+    /// Applies a language override to the application's configuration.
+    ///
+    /// Converts the provided `SupportedLanguage` to the internal language type and updates the default language setting in the configuration.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the language override is applied successfully; otherwise, returns an error.
     fn apply_language_override(&mut self, language: SupportedLanguage) -> AppResult<()> {
         // 转换新的 SupportedLanguage 到旧的类型
         let old_language = match language {
@@ -50,7 +89,9 @@ impl GitAIApp {
         Ok(())
     }
 
-    /// 转换新的 CommitArgs 到旧的类型
+    /// Converts new `CommitArgs` from the CLI to the legacy internal `CommitArgs` type.
+    ///
+    /// Maps fields from the new CLI argument struct to the corresponding fields in the legacy internal type.
     fn convert_commit_args(&self, args: crate::cli::commands::CommitArgs) -> crate::types::git::CommitArgs {
         crate::types::git::CommitArgs {
             ast_grep: args.ast_grep,
@@ -62,7 +103,9 @@ impl GitAIApp {
         }
     }
 
-    /// 转换新的 ReviewArgs 到旧的类型
+    /// Converts a new `ReviewArgs` struct to the legacy internal `ReviewArgs` type.
+    ///
+    /// Parses optional comma-separated string fields (`stories`, `tasks`, `defects`) into lists of `u32`, defaulting to empty lists if parsing fails. Fields not present in the new struct are set to default values in the legacy type.
     fn convert_review_args(&self, args: crate::cli::commands::ReviewArgs) -> crate::types::git::ReviewArgs {
         use crate::types::git::CommaSeparatedU32List;
         
@@ -90,7 +133,9 @@ impl GitAIApp {
         }
     }
 
-    /// 转换新的 ScanArgs 到旧的类型
+    /// Converts a new `ScanArgs` struct to the legacy internal `ScanArgs` type.
+    ///
+    /// Maps all relevant fields from the new CLI argument struct to the internal type, setting `config` to `None` as it is not present in the new struct.
     fn convert_scan_args(&self, args: crate::cli::commands::ScanArgs) -> crate::types::git::ScanArgs {
         crate::types::git::ScanArgs {
             target: args.target,
@@ -110,7 +155,25 @@ impl GitAIApp {
         }
     }
 
-    /// 转换新的 UpdateRulesArgs 到旧的类型
+    /// Converts new `UpdateRulesArgs` from the CLI to the legacy internal `UpdateRulesArgs` type by mapping all fields directly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cli_args = cli::commands::UpdateRulesArgs {
+    ///     source: Some("remote".to_string()),
+    ///     repository: Some("repo.git".to_string()),
+    ///     reference: Some("main".to_string()),
+    ///     target_dir: Some("rules/".to_string()),
+    ///     force: false,
+    ///     backup: true,
+    ///     verify: true,
+    ///     list_sources: false,
+    ///     verbose: true,
+    /// };
+    /// let internal_args = app.convert_update_rules_args(cli_args);
+    /// assert_eq!(internal_args.backup, true);
+    /// ```
     fn convert_update_rules_args(&self, args: crate::cli::commands::UpdateRulesArgs) -> crate::types::git::UpdateRulesArgs {
         crate::types::git::UpdateRulesArgs {
             source: args.source,
@@ -125,14 +188,37 @@ impl GitAIApp {
         }
     }
 
-    /// 显示帮助信息
+    /// Displays the application's help text in the specified language.
+    ///
+    /// If a language is provided, the help text is generated in that language; otherwise, the default language is used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use crate::SupportedLanguage;
+    /// # let app = GitAIApp::new(Default::default());
+    /// # tokio_test::block_on(async {
+    /// app.show_help(Some(&SupportedLanguage::English)).await.unwrap();
+    /// # });
+    /// ```
     async fn show_help(&self, language: Option<&SupportedLanguage>) -> AppResult<()> {
         let help_text = crate::cli::generate_help(language);
         println!("{}", help_text);
         Ok(())
     }
 
-    /// 处理 GitAI 特殊命令
+    /// Handles GitAI-specific commands by dispatching to the appropriate legacy handler after converting arguments.
+    ///
+    /// This method processes GitAI subcommands such as commit, review, scan, and update rules. It converts the provided arguments to legacy types and invokes the corresponding asynchronous handler. Errors from the handlers are mapped to generic application errors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Example usage within an async context:
+    /// let app = GitAIApp::new(config);
+    /// let command = GitAICommand::Commit(commit_args);
+    /// app.handle_gitai_command(command, &AIMode::Enabled).await?;
+    /// ```
     async fn handle_gitai_command(&self, command: GitAICommand, _ai_mode: &AIMode) -> AppResult<()> {
         match command {
             GitAICommand::Commit(args) => {
@@ -167,7 +253,26 @@ impl GitAIApp {
         }
     }
 
-    /// 处理 Git 命令透传
+    /// Handles passthrough of Git commands, optionally invoking AI-assisted processing.
+    ///
+    /// If AI mode is disabled, the command is passed directly to Git. Otherwise, the command is processed using the legacy intelligent Git handler with AI enabled or disabled based on the mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `git_args` - The Git command-line arguments to process.
+    /// * `ai_mode` - Determines whether to use AI-assisted processing.
+    ///
+    /// # Returns
+    ///
+    /// Returns an application result indicating success or failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = vec!["status".to_string()];
+    /// let ai_mode = AIMode::Disabled;
+    /// app.handle_git_passthrough(args, &ai_mode).await?;
+    /// ```
     async fn handle_git_passthrough(&self, git_args: Vec<String>, ai_mode: &AIMode) -> AppResult<()> {
         // 检查是否需要禁用 AI
         if matches!(ai_mode, AIMode::Disabled) {
@@ -181,7 +286,14 @@ impl GitAIApp {
             .map_err(|e| AppError::generic(format!("智能 Git 处理失败: {}", e)))
     }
 
-    /// 直接透传到 Git
+    /// Forwards the provided arguments directly to Git using the legacy passthrough handler.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let args = vec!["status".to_string()];
+    /// app.passthrough_to_git(&args).await?;
+    /// ```
     async fn passthrough_to_git(&self, git_args: &[String]) -> AppResult<()> {
         // TODO: 使用新的 Git 模块实现透传
         // 目前调用原有的处理器
@@ -189,7 +301,7 @@ impl GitAIApp {
             .map_err(|e| AppError::generic(format!("Git 透传失败: {}", e)))
     }
 
-    /// 获取应用程序配置
+    /// Returns a reference to the application's configuration.
     pub fn config(&self) -> &AppConfig {
         &self.config
     }
@@ -199,7 +311,9 @@ impl GitAIApp {
 pub struct AppBuilder;
 
 impl AppBuilder {
-    /// 构建应用程序
+    /// Builds a `GitAIApp` instance by loading the application configuration from disk.
+    ///
+    /// Returns an error if the configuration cannot be loaded.
     pub fn build() -> AppResult<GitAIApp> {
         // 加载配置
         let config = AppConfig::load()
@@ -208,13 +322,36 @@ impl AppBuilder {
         Ok(GitAIApp::new(config))
     }
 
-    /// 从指定配置构建应用程序
+    /// Creates a new `GitAIApp` instance using the provided configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = AppConfig::default();
+    /// let app = AppBuilder::with_config(config);
+    /// ```
     pub fn with_config(config: AppConfig) -> GitAIApp {
         GitAIApp::new(config)
     }
 }
 
-/// 运行 GitAI 应用程序的便捷函数
+/// Runs the GitAI application with parsed command-line arguments.
+///
+/// Initializes logging, parses CLI arguments, builds the application, and executes it asynchronously.
+///
+/// # Returns
+///
+/// An `AppResult` indicating success or failure of the application run.
+///
+/// # Examples
+///
+/// ```
+/// // Typically called from main:
+/// tokio::main
+/// async fn main() -> AppResult<()> {
+///     run_app().await
+/// }
+/// ```
 pub async fn run_app() -> AppResult<()> {
     // 初始化日志系统
     tracing_subscriber::fmt::init();
@@ -251,6 +388,7 @@ mod tests {
         }
     }
 
+    /// Tests that the `show_help` method displays help in English without returning an error.
     #[tokio::test]
     async fn test_help_display() {
         let config = AppConfig::default();

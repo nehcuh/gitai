@@ -32,7 +32,9 @@ pub struct TranslationCache {
 }
 
 impl TranslationCache {
-    /// Create a new translation cache entry
+    /// Constructs a new `TranslationCache` entry with the current timestamp.
+    ///
+    /// Initializes a cache entry for a translated rule, recording metadata such as rule ID, source hash, target language, translation result, source version, and provider. The creation time is set to the current UNIX timestamp.
     pub fn new(
         rule_id: String,
         source_hash: String,
@@ -57,7 +59,23 @@ impl TranslationCache {
         }
     }
 
-    /// Check if the cache entry is expired
+    /// Returns `true` if the cache entry is older than the specified maximum age in hours.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_age_hours`: The maximum allowed age for the cache entry, in hours.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the entry is expired; otherwise, `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cache = TranslationCache::new(...);
+    /// let expired = cache.is_expired(24);
+    /// assert!(expired == false || expired == true);
+    /// ```
     pub fn is_expired(&self, max_age_hours: u32) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -68,7 +86,22 @@ impl TranslationCache {
         now.saturating_sub(self.created_at) > max_age_seconds
     }
 
-    /// Get cache key for this entry
+    /// Returns a unique cache key string for this entry, combining the rule ID, source hash, and target language.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cache = TranslationCache::new(
+    ///     "rule1".to_string(),
+    ///     "abc123".to_string(),
+    ///     "python".to_string(),
+    ///     some_analysis_rule,
+    ///     "1.0.0".to_string(),
+    ///     "providerX".to_string(),
+    /// );
+    /// let key = cache.cache_key();
+    /// assert_eq!(key, "rule1:abc123:python");
+    /// ```
     pub fn cache_key(&self) -> String {
         format!(
             "{}:{}:{}",
@@ -91,7 +124,22 @@ pub struct TranslationCacheManager {
 }
 
 impl TranslationCacheManager {
-    /// Create a new cache manager
+    /// Creates a new `TranslationCacheManager`, initializing the cache directory and loading existing cache entries from disk.
+    ///
+    /// If `cache_dir` is not provided, a default user cache directory is used. The cache directory is created if it does not exist. Existing cache entries are loaded into memory from disk. Returns an error if the cache directory cannot be created or if loading cache entries fails.
+    ///
+    /// # Returns
+    /// A `TranslationCacheManager` instance with in-memory and disk cache initialized.
+    ///
+    /// # Errors
+    /// Returns a `TranslationError::CacheError` if the cache directory cannot be created or if cache entries cannot be loaded from disk.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let manager = TranslationCacheManager::new(None).unwrap();
+    /// assert!(manager.get_cache_dir().exists());
+    /// ```
     pub fn new(cache_dir: Option<PathBuf>) -> TranslationResult<Self> {
         let cache_dir = cache_dir.unwrap_or_else(|| {
             dirs::cache_dir()
@@ -120,7 +168,9 @@ impl TranslationCacheManager {
         Ok(manager)
     }
 
-    /// Get cached translation for a rule
+    /// Retrieves a valid cached translation for the specified rule, source hash, and target language if available.
+    ///
+    /// Returns the cached `AnalysisRule` if a non-expired entry exists in memory; otherwise, returns `None`.
     pub fn get_cached_translation(
         &self,
         rule_id: &str,
@@ -149,7 +199,33 @@ impl TranslationCacheManager {
         None
     }
 
-    /// Store a translation in cache
+    /// Stores a translated rule in both the in-memory and disk cache.
+    ///
+    /// If the in-memory cache exceeds its maximum size, the oldest entries are evicted to make room for the new entry. The translation is also persisted to disk for durability.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the translation was successfully cached, or a `TranslationError` if disk storage fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationCacheManager::new(None).unwrap();
+    /// let rule_id = "example_rule".to_string();
+    /// let source_hash = "abc123".to_string();
+    /// let target_language = SupportedLanguage::Rust;
+    /// let translated_rule = AnalysisRule::default();
+    /// let source_version = "1.0.0".to_string();
+    /// let provider = "test_provider".to_string();
+    /// manager.store_translation(
+    ///     rule_id,
+    ///     source_hash,
+    ///     &target_language,
+    ///     translated_rule,
+    ///     source_version,
+    ///     provider,
+    /// ).unwrap();
+    /// ```
     pub fn store_translation(
         &mut self,
         rule_id: String,
@@ -190,7 +266,14 @@ impl TranslationCacheManager {
         Ok(())
     }
 
-    /// Check if a translation is cached and valid
+    /// Returns `true` if a valid, non-expired cached translation exists for the specified rule ID, source hash, and target language; otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let is_valid = cache_manager.is_cached_and_valid("rule1", "abc123", &SupportedLanguage::Rust);
+    /// assert!(!is_valid); // No cache entry yet
+    /// ```
     pub fn is_cached_and_valid(
         &self,
         rule_id: &str,
@@ -201,7 +284,22 @@ impl TranslationCacheManager {
             .is_some()
     }
 
-    /// Get cache statistics
+    /// Returns statistics about the current state of the in-memory translation cache.
+    ///
+    /// The statistics include the total number of entries, the number of expired and valid entries,
+    /// and the cache directory path.
+    ///
+    /// # Returns
+    /// A `CacheStats` struct containing cache entry counts and the cache directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = cache_manager.get_cache_stats();
+    /// println!("Total entries: {}", stats.total_entries);
+    /// println!("Expired entries: {}", stats.expired_entries);
+    /// println!("Valid entries: {}", stats.valid_entries);
+    /// ```
     pub fn get_cache_stats(&self) -> CacheStats {
         let total_entries = self.memory_cache.len();
         let expired_entries = self
@@ -218,7 +316,21 @@ impl TranslationCacheManager {
         }
     }
 
-    /// Clean up expired cache entries
+    /// Removes expired translation cache entries from both memory and disk.
+    ///
+    /// Returns the total number of expired entries removed.
+    ///
+    /// # Returns
+    ///
+    /// The number of expired cache entries deleted from memory and disk.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut manager = TranslationCacheManager::new(None).unwrap();
+    /// let removed = manager.cleanup_expired_cache().unwrap();
+    /// assert!(removed >= 0);
+    /// ```
     pub fn cleanup_expired_cache(&mut self) -> TranslationResult<usize> {
         let mut removed_count = 0;
 
@@ -248,12 +360,19 @@ impl TranslationCacheManager {
         Ok(removed_count)
     }
 
-    /// Get cache directory path
+    /// Returns the path to the cache directory used for storing translation cache files.
     pub fn get_cache_dir(&self) -> &Path {
         &self.cache_dir
     }
 
-    /// Load cache from disk into memory
+    /// Loads translation cache entries from disk into the in-memory cache.
+    ///
+    /// Scans the cache directory for JSON files, deserializes valid cache entries, and inserts them into memory.
+    /// Corrupted or unreadable cache files are removed from disk. If the cache directory does not exist, no action is taken.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the operation completes successfully, or a `TranslationError` if the cache directory cannot be read.
     fn load_disk_cache(&mut self) -> TranslationResult<()> {
         if !self.cache_dir.exists() {
             return Ok(());
@@ -296,7 +415,14 @@ impl TranslationCacheManager {
         Ok(())
     }
 
-    /// Save a cache entry to disk
+    /// Serializes and writes a translation cache entry to a JSON file on disk.
+    ///
+    /// The cache file is named using the cache key and stored in the cache directory.
+    /// Overwrites any existing file with the same name.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TranslationError::CacheError` if serialization or file writing fails.
     fn save_cache_entry_to_disk(&self, cache_entry: &TranslationCache) -> TranslationResult<()> {
         let filename = format!("{}.json", cache_entry.cache_key().replace(':', "_"));
         let file_path = self.cache_dir.join(filename);
@@ -309,7 +435,13 @@ impl TranslationCacheManager {
         Ok(())
     }
 
-    /// Load a cache entry from disk
+    /// Loads a translation cache entry from a JSON file on disk.
+    ///
+    /// Returns a `TranslationCache` if the file is successfully read and deserialized.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TranslationError::CacheError` if the file cannot be read or if deserialization fails.
     fn load_cache_entry_from_disk(&self, file_path: &Path) -> TranslationResult<TranslationCache> {
         let content = fs::read_to_string(file_path).map_err(|e| {
             TranslationError::CacheError(format!("Failed to read cache file: {}", e))
@@ -319,7 +451,9 @@ impl TranslationCacheManager {
         Ok(cache_entry)
     }
 
-    /// Clean up expired entries from disk
+    /// Removes expired or corrupted cache entries from the disk cache directory.
+    ///
+    /// Returns the number of cache files that were deleted due to expiration or corruption.
     fn cleanup_disk_cache(&self) -> TranslationResult<usize> {
         if !self.cache_dir.exists() {
             return Ok(0);
@@ -357,7 +491,17 @@ impl TranslationCacheManager {
         Ok(removed_count)
     }
 
-    /// Evict oldest entries from memory cache
+    /// Removes the specified number of oldest entries from the in-memory cache based on creation time.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: The number of oldest entries to evict from the memory cache.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// cache_manager.evict_oldest_entries(10); // Removes 10 oldest cache entries from memory.
+    /// ```
     fn evict_oldest_entries(&mut self, count: usize) {
         let mut entries: Vec<(String, u64)> = self
             .memory_cache
@@ -383,7 +527,19 @@ pub struct CacheStats {
 }
 
 impl CacheStats {
-    /// Get cache hit ratio as percentage
+    /// Returns the percentage of valid cache entries relative to the total number of entries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let stats = CacheStats {
+    ///     total_entries: 10,
+    ///     expired_entries: 2,
+    ///     valid_entries: 8,
+    ///     cache_dir: std::path::PathBuf::from("/tmp/cache"),
+    /// };
+    /// assert_eq!(stats.hit_ratio(), 80.0);
+    /// ```
     pub fn hit_ratio(&self) -> f64 {
         if self.total_entries == 0 {
             0.0
@@ -398,6 +554,14 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    /// Creates a sample `AnalysisRule` instance for testing purposes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let rule = create_test_rule();
+    /// assert_eq!(rule.id, "test-rule");
+    /// ```
     fn create_test_rule() -> AnalysisRule {
         AnalysisRule {
             id: "test-rule".to_string(),

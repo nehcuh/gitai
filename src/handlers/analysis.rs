@@ -26,7 +26,13 @@ impl AIAnalysisEngine {
         Self { config }
     }
 
-    /// Performs comprehensive analysis combining work items and code changes
+    /// Performs an AI-driven analysis of code changes against specified work items.
+    ///
+    /// Builds a detailed prompt from the provided work items and git diff, sends it to the AI backend for evaluation, and parses the AI's structured response into an `AnalysisResult`. Returns the analysis result or an error if the process fails.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the structured analysis outcome or an `AppError` if the analysis could not be completed.
     pub async fn analyze_with_requirements(
         &self,
         request: AnalysisRequest,
@@ -61,7 +67,15 @@ impl AIAnalysisEngine {
         Ok(analysis_result)
     }
 
-    /// Builds a comprehensive prompt for requirement analysis
+    /// Constructs a detailed prompt in Chinese for AI-driven requirement analysis, combining work item descriptions, git diff, analysis depth, and optional focus areas.
+    ///
+    /// The generated prompt instructs the AI to evaluate code changes against business requirements across multiple dimensions, and requests a structured JSON analysis result.
+    ///
+    /// # Returns
+    /// A formatted prompt string ready for submission to the AI analysis backend.
+    ///
+    /// # Errors
+    /// Returns an error if formatting work items fails.
     fn build_requirement_analysis_prompt(
         &self,
         request: &AnalysisRequest,
@@ -167,7 +181,30 @@ impl AIAnalysisEngine {
         Ok(prompt)
     }
 
-    /// Formats work items for inclusion in the analysis prompt
+    /// Formats a list of work items into a markdown-like string for AI analysis prompts.
+    ///
+    /// Each work item is represented with its index, type, and available fields such as ID, code, project, title, and description.
+    /// If the list is empty, returns a default message indicating no associated work items.
+    ///
+    /// # Returns
+    ///
+    /// A formatted string suitable for inclusion in an AI analysis prompt.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let work_items = vec![AnalysisWorkItem {
+    ///     id: Some(1),
+    ///     code: Some("ABC-123".to_string()),
+    ///     project_name: Some("ProjectX".to_string()),
+    ///     title: Some("Implement feature".to_string()),
+    ///     description: Some("Add new feature to module.".to_string()),
+    ///     item_type_name: Some("Feature".to_string()),
+    /// }];
+    /// let formatted = engine.format_work_items_for_analysis(&work_items).unwrap();
+    /// assert!(formatted.contains("工作项 1 - Feature"));
+    /// assert!(formatted.contains("**ID**: 1"));
+    /// ```
     fn format_work_items_for_analysis(
         &self,
         work_items: &[AnalysisWorkItem],
@@ -233,7 +270,17 @@ impl AIAnalysisEngine {
         }
     }
 
-    /// Executes the AI analysis request
+    /// Sends the constructed analysis prompt to the AI backend and returns the AI's response.
+    ///
+    /// If the AI request fails or the response cannot be parsed, returns an appropriate `AppError`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let prompt = "Analyze the following code diff..."; // Constructed prompt string
+    /// let response = engine.execute_ai_analysis(prompt).await?;
+    /// assert!(response.contains("analysis"));
+    /// ```
     async fn execute_ai_analysis(&self, prompt: &str) -> Result<String, AppError> {
         tracing::debug!("Executing AI analysis request");
 
@@ -272,7 +319,9 @@ impl AIAnalysisEngine {
         }
     }
 
-    /// Parses AI response into structured analysis result
+    /// Parses the AI response string and attempts to convert it into a structured `AnalysisResult`.
+    ///
+    /// If JSON extraction or deserialization fails, returns a fallback analysis result with default values and warnings.
     fn parse_analysis_response(
         &self,
         response: &str,
@@ -298,7 +347,11 @@ impl AIAnalysisEngine {
         }
     }
 
-    /// Extracts JSON content from AI response
+    /// Attempts to extract a JSON object from an AI response string.
+    ///
+    /// Searches for a fenced code block labeled as JSON (```json ... ```) and returns its contents.
+    /// If not found, attempts to extract the first valid JSON object by locating the first '{' and last '}'.
+    /// Returns an error if no JSON content can be extracted.
     fn extract_json_from_response(&self, response: &str) -> Result<String, AppError> {
         // Look for JSON block in the response
         if let Some(start) = response.find("```json") {
@@ -323,7 +376,17 @@ impl AIAnalysisEngine {
         ))
     }
 
-    /// Creates a fallback analysis result when AI response cannot be parsed
+    /// Generates a fallback `AnalysisResult` when the AI response cannot be parsed as structured data.
+    ///
+    /// Estimates scores based on the raw AI response text and populates the result with default values, warnings, and recommendations for manual review. This ensures that an analysis result is always returned, even if the AI output is malformed or incomplete.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let engine = AIAnalysisEngine::new(config);
+    /// let fallback = engine.create_fallback_analysis_result("AI response text", &request);
+    /// assert!(fallback.deviations.len() > 0);
+    /// ```
     fn create_fallback_analysis_result(
         &self,
         response: &str,
@@ -372,7 +435,18 @@ impl AIAnalysisEngine {
         }
     }
 
-    /// Estimates a score from text content analysis
+    /// Estimates an overall score from the provided text by counting positive and negative keywords.
+    ///
+    /// The score is calculated based on the frequency of predefined positive and negative keywords in both English and Chinese.
+    /// The result is a value between 0 and 100, with positive keywords increasing and negative keywords decreasing the score.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let engine = AIAnalysisEngine::new(config);
+    /// let score = engine.estimate_score_from_text("The implementation is correct and 完成.");
+    /// assert!(score >= 70);
+    /// ```
     fn estimate_score_from_text(&self, text: &str) -> u8 {
         let positive_keywords = [
             "good",
@@ -418,6 +492,16 @@ mod tests {
     use super::*;
     use crate::config::{AIConfig, AppConfig};
 
+    /// Creates a test application configuration with mock AI settings.
+    ///
+    /// Returns an `Arc<AppConfig>` pre-populated with test values suitable for unit tests or local development.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let config = create_test_config();
+    /// assert_eq!(config.ai.model_name, "test-model");
+    /// ```
     fn create_test_config() -> Arc<AppConfig> {
         use std::collections::HashMap;
 
@@ -594,6 +678,9 @@ mod tests {
         assert!(result.is_empty());
     }
 
+    /// Tests that `extract_json_from_response` correctly extracts a JSON code block from a complex AI response containing additional non-JSON text.
+    ///
+    /// The test verifies that the extracted JSON includes expected keys such as "overall_score" and "requirement_consistency".
     #[test]
     fn test_extract_json_complex_response() {
         let engine = AIAnalysisEngine::new(create_test_config());

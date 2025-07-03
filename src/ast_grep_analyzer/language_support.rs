@@ -44,7 +44,16 @@ pub struct LanguageSpecificConfig {
 }
 
 impl LanguageSupport {
-    /// Create a new LanguageSupport instance with default configurations
+    /// Constructs a new `LanguageSupport` instance with default language configurations.
+    ///
+    /// Initializes built-in language definitions, extension mappings, and the list of supported languages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// assert!(support.is_language_supported("rust"));
+    /// ```
     pub fn new() -> Self {
         let mut support = Self {
             languages: HashMap::new(),
@@ -57,7 +66,11 @@ impl LanguageSupport {
         support
     }
 
-    /// Initialize default language configurations
+    /// Adds default language configurations for a wide range of programming languages.
+    ///
+    /// Populates the language registry with detailed configurations for major languages such as Rust, Python, JavaScript, TypeScript, Java, C, C++, Go, and C#, including their file extensions and syntax patterns. Also registers additional languages with minimal configuration to ensure broad language support.
+    ///
+    /// This method is intended to be called during initialization to set up the default set of supported languages.
     fn initialize_default_languages(&mut self) {
         // Rust
         self.add_language(LanguageConfig {
@@ -322,7 +335,20 @@ impl LanguageSupport {
         self.add_basic_language("haskell", "Haskell", vec!["hs"]);
     }
 
-    /// Add a basic language configuration with minimal setup
+    /// Adds a language with minimal configuration and enables it by default.
+    ///
+    /// The language is registered with the provided name, display name, and file extensions,
+    /// but without any language-specific syntax patterns. This is useful for quickly supporting
+    /// new languages with basic detection capabilities. Existing language entries with the same
+    /// name will be overwritten.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut support = LanguageSupport::new();
+    /// support.add_basic_language("kotlin", "Kotlin", vec!["kt", "kts"]);
+    /// assert!(support.is_language_supported("kotlin"));
+    /// ```
     fn add_basic_language(&mut self, name: &str, display_name: &str, extensions: Vec<&str>) {
         let config = LanguageConfig {
             name: name.to_string(),
@@ -340,7 +366,10 @@ impl LanguageSupport {
         self.add_language(config);
     }
 
-    /// Add a language configuration
+    /// Adds or updates a language configuration and updates the extension-to-language mapping.
+    ///
+    /// This registers the language's file extensions for detection and stores the configuration.
+    /// If a language with the same name already exists, it will be replaced.
     pub fn add_language(&mut self, config: LanguageConfig) {
         // Update extension mapping
         for ext in &config.extensions {
@@ -350,7 +379,11 @@ impl LanguageSupport {
         self.languages.insert(config.name.clone(), config);
     }
 
-    /// Detect languages supported by ast-grep (placeholder for dynamic detection)
+    /// Populates the list of supported languages based on the currently configured languages.
+    ///
+    /// This method updates the `supported_languages` field with the names of all languages present
+    /// in the configuration. In the current implementation, it does not perform dynamic detection,
+    /// but simply collects and sorts the configured language names.
     fn detect_ast_grep_languages(&mut self) {
         // For now, we'll use the languages we've configured
         // In a real implementation, this could query ast-grep's capabilities
@@ -358,7 +391,17 @@ impl LanguageSupport {
         self.supported_languages.sort();
     }
 
-    /// Detect language from file path
+    /// Determines the programming language of a file based on its extension.
+    ///
+    /// Returns the language name if the file extension matches a known language; otherwise, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// let lang = support.detect_language_from_path(std::path::Path::new("main.rs"));
+    /// assert_eq!(lang, Some("rust".to_string()));
+    /// ```
     pub fn detect_language_from_path(&self, path: &Path) -> Option<String> {
         path.extension()
             .and_then(|ext| ext.to_str())
@@ -366,22 +409,67 @@ impl LanguageSupport {
             .cloned()
     }
 
-    /// Get language configuration
+    /// Returns the configuration for the specified language, if it exists.
+    ///
+    /// # Arguments
+    ///
+    /// * `language` - The name of the language to retrieve the configuration for.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a reference to the `LanguageConfig` if the language is found, or `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// if let Some(config) = support.get_language_config("rust") {
+    ///     assert_eq!(config.display_name, "Rust");
+    /// }
+    /// ```
     pub fn get_language_config(&self, language: &str) -> Option<&LanguageConfig> {
         self.languages.get(language)
     }
 
-    /// Check if a language is supported
+    /// Returns `true` if the specified language is in the list of supported languages.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// assert!(support.is_language_supported("rust"));
+    /// assert!(!support.is_language_supported("unknownlang"));
+    /// ```
     pub fn is_language_supported(&self, language: &str) -> bool {
         self.supported_languages.contains(&language.to_string())
     }
 
-    /// Get all supported languages
+    /// Returns a slice of all supported language names.
+    ///
+    /// The returned slice contains the names of all languages currently recognized as supported by this instance of `LanguageSupport`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let lang_support = LanguageSupport::new();
+    /// let supported = lang_support.get_supported_languages();
+    /// assert!(supported.contains(&"rust".to_string()));
+    /// ```
     pub fn get_supported_languages(&self) -> &[String] {
         &self.supported_languages
     }
 
-    /// Get all enabled languages
+    /// Returns a list of all enabled language names.
+    ///
+    /// The returned vector contains the names of languages that are currently enabled in the configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// let enabled = support.get_enabled_languages();
+    /// assert!(enabled.contains(&"rust".to_string()));
+    /// ```
     pub fn get_enabled_languages(&self) -> Vec<String> {
         self.languages
             .values()
@@ -390,7 +478,17 @@ impl LanguageSupport {
             .collect()
     }
 
-    /// Enable or disable a language
+    /// Enables or disables a language by name.
+    ///
+    /// Returns `true` if the language was found and its status updated, or `false` if the language does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut support = LanguageSupport::new();
+    /// assert!(support.set_language_enabled("rust", false));
+    /// assert!(!support.set_language_enabled("unknown", true));
+    /// ```
     pub fn set_language_enabled(&mut self, language: &str, enabled: bool) -> bool {
         if let Some(config) = self.languages.get_mut(language) {
             config.enabled = enabled;
@@ -400,7 +498,24 @@ impl LanguageSupport {
         }
     }
 
-    /// Get languages by file extensions
+    /// Returns a list of language names corresponding to the given file extensions.
+    ///
+    /// Each language appears only once in the result, even if multiple extensions map to the same language.
+    ///
+    /// # Parameters
+    /// - `extensions`: A slice of file extension strings (without leading dots).
+    ///
+    /// # Returns
+    /// A vector of language names detected from the provided extensions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::default();
+    /// let langs = support.get_languages_for_extensions(&vec!["rs".to_string(), "py".to_string()]);
+    /// assert!(langs.contains(&"rust".to_string()));
+    /// assert!(langs.contains(&"python".to_string()));
+    /// ```
     pub fn get_languages_for_extensions(&self, extensions: &[String]) -> Vec<String> {
         let mut languages = Vec::new();
         for ext in extensions {
@@ -413,7 +528,18 @@ impl LanguageSupport {
         languages
     }
 
-    /// Filter files by supported languages
+    /// Returns a list of file paths paired with their detected language for files with supported languages.
+    ///
+    /// Each returned tuple contains a file path and the corresponding language name, determined by file extension.
+    /// Only files with extensions mapped to supported languages are included in the result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let files = vec![Path::new("main.rs"), Path::new("script.py"), Path::new("README.md")];
+    /// let filtered = language_support.filter_supported_files(files.iter().map(|p| *p).collect());
+    /// // filtered contains ("main.rs", "rust") and ("script.py", "python"), but not "README.md"
+    /// ```
     pub fn filter_supported_files<'a>(&self, files: Vec<&'a Path>) -> Vec<(&'a Path, String)> {
         files
             .into_iter()
@@ -425,7 +551,16 @@ impl LanguageSupport {
             .collect()
     }
 
-    /// Get file pattern for a language
+    /// Returns file glob patterns for the given language's file extensions.
+    ///
+    /// Each pattern matches files with one of the language's associated extensions (e.g., `*.rs` for Rust).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let patterns = language_support.get_file_patterns("rust");
+    /// assert!(patterns.contains(&"*.rs".to_string()));
+    /// ```
     pub fn get_file_patterns(&self, language: &str) -> Vec<String> {
         if let Some(config) = self.get_language_config(language) {
             config
@@ -438,7 +573,18 @@ impl LanguageSupport {
         }
     }
 
-    /// Get all file patterns for enabled languages
+    /// Returns sorted, deduplicated file glob patterns for all enabled languages.
+    ///
+    /// The returned patterns correspond to the file extensions associated with each enabled language,
+    /// formatted as glob patterns (e.g., `*.rs`, `*.py`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::default();
+    /// let patterns = support.get_all_file_patterns();
+    /// assert!(patterns.contains(&"*.rs".to_string()));
+    /// ```
     pub fn get_all_file_patterns(&self) -> Vec<String> {
         let mut patterns = Vec::new();
         for lang in self.get_enabled_languages() {
@@ -449,7 +595,11 @@ impl LanguageSupport {
         patterns
     }
 
-    /// Update language configuration from external source
+    /// Updates the configuration for an existing language.
+    ///
+    /// Replaces the configuration of the specified language with the provided `LanguageConfig`.
+    ///
+    /// Returns `true` if the language was found and updated, or `false` if the language does not exist.
     pub fn update_language_config(&mut self, language: &str, config: LanguageConfig) -> bool {
         if self.languages.contains_key(language) {
             self.add_language(config);
@@ -459,7 +609,11 @@ impl LanguageSupport {
         }
     }
 
-    /// Get language statistics
+    /// Returns statistics about the configured languages, including counts and category groupings.
+    ///
+    /// The returned `LanguageStats` struct contains the total number of configured languages,
+    /// the number of enabled languages, the number of supported languages, and a mapping of
+    /// languages grouped by category. This provides an overview of language support and organization.
     pub fn get_language_stats(&self) -> LanguageStats {
         let total_languages = self.languages.len();
         let enabled_languages = self.get_enabled_languages().len();
@@ -473,7 +627,20 @@ impl LanguageSupport {
         }
     }
 
-    /// Group languages by category (based on common characteristics)
+    /// Returns a mapping of language categories to lists of language names.
+    ///
+    /// The categories are based on common programming paradigms or usage domains, such as "System", "Web", "OOP", "Scripting", "Functional", and "Markup".
+    ///
+    /// # Returns
+    /// A `HashMap` where each key is a category name and the value is a vector of language identifiers belonging to that category.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::new();
+    /// let categories = support.get_languages_by_category();
+    /// assert!(categories.get("System").unwrap().contains(&"rust".to_string()));
+    /// ```
     fn get_languages_by_category(&self) -> HashMap<String, Vec<String>> {
         let mut categories = HashMap::new();
 
@@ -557,6 +724,16 @@ pub struct LanguageStats {
 }
 
 impl Default for LanguageSupport {
+    /// Creates a new `LanguageSupport` instance with default language configurations.
+    ///
+    /// This method is used to implement the `Default` trait for `LanguageSupport`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let support = LanguageSupport::default();
+    /// assert!(!support.get_supported_languages().is_empty());
+    /// ```
     fn default() -> Self {
         Self::new()
     }

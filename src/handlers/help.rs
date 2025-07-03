@@ -1,6 +1,16 @@
 use crate::{config::AppConfig, errors::AppError};
 
 // Placeholder implementation for generate_gitai_help
+/// Returns a static help message describing GitAI usage and available commands.
+///
+/// The help text includes basic usage instructions and lists primary commands such as `commit` and `review`.
+///
+/// # Examples
+///
+/// ```
+/// let help = generate_gitai_help(&config);
+/// assert!(help.contains("Usage: gitai"));
+/// ```
 fn generate_gitai_help(_config: &AppConfig) -> String {
     "GitAI Help (placeholder)\n\
     Usage: gitai <command> [options]\n\
@@ -15,6 +25,28 @@ fn generate_gitai_help(_config: &AppConfig) -> String {
 use super::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling};
 
 // Filter out gitai-specific args before querying git help
+/// Handles help commands for the CLI, displaying either custom GitAI help or forwarding to git help output.
+///
+/// Depending on the provided arguments, prints GitAI-specific help for commands like `review` or `commit` with special flags, or passes the help request to the underlying git command. Optionally, uses AI to explain the git help output if enabled.
+///
+/// # Arguments
+///
+/// * `args` - Command-line arguments to determine which help text to display.
+/// * `use_ai` - If true, uses AI to explain the git help output; otherwise, prints the raw help.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or an `AppError` if invoking git help fails.
+///
+/// # Examples
+///
+/// ```
+/// // Display help for the 'review' command
+/// handle_help(&config, vec!["review".to_string()], false).await?;
+///
+/// // Forward help to git and use AI explanation
+/// handle_help(&config, vec!["commit".to_string()], true).await?;
+/// ```
 pub async fn handle_help(
     config: &AppConfig,
     mut args: Vec<String>,

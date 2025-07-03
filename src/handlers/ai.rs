@@ -156,8 +156,25 @@ lazy_static! {
     static ref RE_THINK_TAGS: Regex = Regex::new(r"(?s)<think>.*?</think>").unwrap();
 }
 
-/// Dedicated function for code review requests
-/// Returns the raw AI response without cleaning <think> tags as they might be useful for review context
+/// Sends a code review request to the AI service and returns the raw response.
+///
+/// The response may include `<think>` tags, which are preserved for potential review context.
+///
+/// # Arguments
+///
+/// - `system_prompt`: The system-level instructions for the AI.
+/// - `user_prompt`: The user-specific code review request.
+///
+/// # Returns
+///
+/// The raw AI-generated response as a string, or an `AIError` if the request fails.
+///
+/// # Examples
+///
+/// ```
+/// let response = execute_review_request(&config, "You are a code reviewer.", "Please review the following code.").await?;
+/// println!("{}", response);
+/// ```
 pub async fn execute_review_request(
     config: &AppConfig,
     system_prompt: &str,
