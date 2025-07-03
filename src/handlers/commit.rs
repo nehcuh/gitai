@@ -9,8 +9,7 @@ use std::io::{self, Write};
 use crate::{
     ast_grep_analyzer::{
         analyzer::AstGrepAnalyzer,
-        core::{AstAnalysisEngine, DiffAnalysis, FileAnalysis},
-        rule_manager::RuleManager,
+        core::DiffAnalysis,
     },
     config::{AppConfig, AstGrepConfig},
     errors::{AppError, GitError},
@@ -295,7 +294,7 @@ async fn generate_enhanced_commit_message(
 /// Analyze diff using AstGrep
 async fn analyze_diff_with_ast_grep(
     diff: &str,
-    args: &CommitArgs,
+    _args: &CommitArgs,
 ) -> Result<(String, Option<DiffAnalysis>), AppError> {
     // Initialize AstGrep analyzer with default configuration
     let ts_config = AstGrepConfig::default();

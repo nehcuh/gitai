@@ -1,6 +1,4 @@
 use clap::{Args, Parser, Subcommand};
-use std::str::FromStr;
-use crate::common::{SupportedLanguage, AppResult, AppError};
 
 /// GitAI 主命令行参数
 #[derive(Parser, Debug)]

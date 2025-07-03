@@ -490,7 +490,6 @@ pub fn detect_language_from_extension(path: &Path) -> Option<String> {
 pub struct GitDiffParser {
     file_header_re: Regex,
     file_status_re: Regex,
-    hunk_header_re: Regex,
 }
 
 impl GitDiffParser {
@@ -498,8 +497,6 @@ impl GitDiffParser {
         Self {
             file_header_re: Regex::new(r"^diff --git a/(.*) b/(.*)$").unwrap(),
             file_status_re: Regex::new(r"^(new file mode|deleted file mode|index)").unwrap(),
-            hunk_header_re: Regex::new(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
-                .unwrap(),
         }
     }
 

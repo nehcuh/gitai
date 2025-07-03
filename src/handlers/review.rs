@@ -506,7 +506,7 @@ async fn perform_code_scan(
 
     // 检查缓存（如果启用且不强制扫描）
     if use_cache && !force_scan {
-        if let Ok(cache_manager) = ScanCacheManager::new(None) {
+        if let Ok(_cache_manager) = ScanCacheManager::new(None) {
             tracing::debug!("检查扫描缓存");
             // 这里可以添加缓存检查逻辑
             // 暂时跳过缓存实现，直接执行扫描

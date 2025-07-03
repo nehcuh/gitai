@@ -5,7 +5,7 @@ edition = "2024"
 
 
 [dependencies]
-async-trait = "0.1.75"
+async-trait = "0.1.77"
 ast-grep-config = "0.21.2"
 ast-grep-core = "0.21.2"
 chrono = { version = "0.4.31", features = ["serde"] }

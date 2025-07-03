@@ -6,8 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Rule manager for handling ast-grep rules updates and management
 #[derive(Debug)]

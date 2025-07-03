@@ -795,7 +795,7 @@ fn format_text_output(
                 output.push_str(no_issues_msg);
             } else {
                 for issue in &file_result.issues {
-                    let severity_color = match issue.severity {
+                    let _severity_color = match issue.severity {
                         IssueSeverity::Error => "red",
                         IssueSeverity::Warning => "yellow",
                         IssueSeverity::Info => "blue",

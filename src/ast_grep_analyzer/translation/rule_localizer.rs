@@ -8,7 +8,7 @@ use crate::ast_grep_analyzer::core::{AnalysisRule, IssueCategory, IssueSeverity}
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// A localized version of an analysis rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,19 +78,16 @@ pub struct RuleLocalizer {
     localized_rules: HashMap<String, LocalizedRule>,
     /// Current active language
     current_language: SupportedLanguage,
-    /// Cache directory for localized rules
-    cache_dir: Option<PathBuf>,
     /// Statistics
     stats: LocalizationStats,
 }
 
 impl RuleLocalizer {
     /// Create a new rule localizer
-    pub fn new(language: SupportedLanguage, cache_dir: Option<PathBuf>) -> Self {
+    pub fn new(language: SupportedLanguage, _cache_dir: Option<PathBuf>) -> Self {
         Self {
             localized_rules: HashMap::new(),
             current_language: language,
-            cache_dir,
             stats: LocalizationStats::default(),
         }
     }

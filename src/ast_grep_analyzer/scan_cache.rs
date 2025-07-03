@@ -4,13 +4,13 @@
 //! redundant scanning and improve performance when integrating with review.
 
 use crate::errors::AppError;
-use crate::handlers::scan::{FileResult, ScanResults};
+use crate::handlers::scan::ScanResults;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Cache entry for scan results
 #[derive(Debug, Clone, Serialize, Deserialize)]

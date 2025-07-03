@@ -156,15 +156,6 @@ lazy_static! {
     static ref RE_THINK_TAGS: Regex = Regex::new(r"(?s)<think>.*?</think>").unwrap();
 }
 
-/// Helper function to execute the AI request and process the response
-/// This is a wrapper around execute_ai_request_generic with default options for backward compatibility
-async fn execute_ai_request(
-    config: &AppConfig,
-    messages: Vec<ChatMessage>,
-) -> Result<String, AIError> {
-    execute_ai_request_generic(config, messages, "解释", true).await
-}
-
 /// Dedicated function for code review requests
 /// Returns the raw AI response without cleaning <think> tags as they might be useful for review context
 pub async fn execute_review_request(

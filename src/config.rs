@@ -7,7 +7,6 @@ use crate::errors::ConfigError;
 // Configuration location
 const USER_CONFIG_PATH: &str = "~/.config/gitai";
 const USER_PROMPT_PATH: &str = "~/.config/gitai/prompts";
-const USER_RULES_PATH: &str = "~/.config/gitai/rules";
 
 // Fully configuration files
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -970,12 +969,7 @@ impl AppConfig {
     }
 }
 
-// Helper to create HashMap for environment variables
-fn make_env_map(vars: &[(&str, &str)]) -> HashMap<String, String> {
-    vars.iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect()
-}
+
 
 #[cfg(test)]
 mod tests {

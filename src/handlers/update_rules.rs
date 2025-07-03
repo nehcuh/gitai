@@ -1,5 +1,5 @@
 use crate::{
-    ast_grep_analyzer::rule_manager::{RuleManager, UpdateInfo},
+    ast_grep_analyzer::rule_manager::RuleManager,
     config::AppConfig,
     errors::AppError,
     types::git::UpdateRulesArgs,

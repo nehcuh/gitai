@@ -1,7 +1,7 @@
 use crate::cli::commands::{GitAIArgs, GitAICommand};
 use crate::common::{SupportedLanguage, AppResult, AppError};
 use clap::{Parser, error::ErrorKind};
-use std::str::FromStr;
+
 
 /// CLI 解析器
 pub struct CLIParser;

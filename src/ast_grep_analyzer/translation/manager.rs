@@ -184,13 +184,6 @@ impl TranslationManager {
         }
     }
 
-    /// Check if AI-based translation should be used
-    fn should_use_ai_translation(&self) -> bool {
-        self.config.enabled
-            && self.target_language != SupportedLanguage::English
-            && !self.config.provider.is_empty()
-    }
-
     /// Translate a single analysis rule
     async fn translate_single_rule(
         &mut self,

@@ -1,8 +1,7 @@
 // Git diff 分析模块
 // TODO: 将从现有代码迁移 diff 分析功能
 
-use crate::common::{AppResult, AppError};
-use std::path::Path;
+use crate::common::AppResult;
 
 /// Git diff 分析结果
 #[derive(Debug, Clone)]
@@ -18,7 +17,7 @@ pub struct DiffParser;
 
 impl DiffParser {
     /// 解析 git diff 输出
-    pub fn parse_diff(diff_output: &str) -> AppResult<DiffAnalysis> {
+    pub fn parse_diff(_diff_output: &str) -> AppResult<DiffAnalysis> {
         // TODO: 实现实际的 diff 解析逻辑
         Ok(DiffAnalysis {
             files_changed: Vec::new(),

@@ -1,8 +1,10 @@
 use crate::common::{AppResult, AppError, CommandOutput};
+use async_trait::async_trait;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 /// Git 基础操作接口
+#[async_trait]
 pub trait GitOperations {
     /// 执行 Git 命令
     async fn execute_git_command(&self, args: &[&str]) -> AppResult<CommandOutput>;
@@ -60,6 +62,7 @@ impl GitOps {
     }
 }
 
+#[async_trait]
 impl GitOperations for GitOps {
     async fn execute_git_command(&self, args: &[&str]) -> AppResult<CommandOutput> {
         let mut cmd = Command::new("git");

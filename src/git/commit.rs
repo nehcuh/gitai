@@ -1,7 +1,7 @@
 // Git commit 操作模块
 // TODO: 将从现有代码迁移 commit 相关功能
 
-use crate::common::{AppResult, AppError};
+use crate::common::AppResult;
 use crate::git::GitOperations;
 
 /// Git 提交操作
