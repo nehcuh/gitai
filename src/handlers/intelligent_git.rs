@@ -79,16 +79,19 @@ async fn handle_smart_mode(
     args: &[String],
     command_output: &CommandOutput,
 ) -> Result<(), AppError> {
-    let has_error = !command_output.status.success() || !command_output.stderr.is_empty();
+    // Only consider it an error if the exit status is non-zero
+    // Git often outputs informational messages to stderr that are not errors
+    let has_error = !command_output.status.success();
 
     if has_error {
         tracing::info!("🤖 检测到错误，正在提供AI解释...");
 
         let error_context = if !command_output.stderr.is_empty() {
             format!(
-                "命令: git {}\n错误输出:\n{}",
+                "命令: git {}\n输出信息:\n{}\n退出码: {:?}",
                 args.join(" "),
-                command_output.stderr
+                command_output.stderr,
+                command_output.status.code()
             )
         } else {
             format!(
