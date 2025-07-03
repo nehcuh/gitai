@@ -28,7 +28,7 @@ pub struct GitAIArgs {
     pub command: Option<GitAICommand>,
 
     /// Git command and arguments to pass through
-    #[clap(allow_hyphen_values = true, last = true)]
+    #[clap(allow_hyphen_values = true, trailing_var_arg = true)]
     pub git_args: Vec<String>,
 }
 

@@ -207,10 +207,15 @@ impl GitStatus {
             let filepath = &line[3..];
 
             match (index_status, worktree_status) {
+                // Staged changes (index status)
                 (Some('M'), _) => status.staged.push(filepath.to_string()),
-                (Some('A'), _) => status.added.push(filepath.to_string()),
-                (Some('D'), _) => status.deleted.push(filepath.to_string()),
+                (Some('A'), _) => status.staged.push(filepath.to_string()),
+                (Some('D'), _) => status.staged.push(filepath.to_string()),
+                // Working tree changes
                 (_, Some('M')) => status.modified.push(filepath.to_string()),
+                (_, Some('A')) => status.added.push(filepath.to_string()),
+                (_, Some('D')) => status.deleted.push(filepath.to_string()),
+                // Untracked files
                 (Some('?'), Some('?')) => status.untracked.push(filepath.to_string()),
                 _ => {}
             }

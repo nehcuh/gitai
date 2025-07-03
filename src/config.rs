@@ -322,7 +322,7 @@ pub struct PartialTranslationConfig {
 
 /// Application overall configuration
 #[allow(unused)]
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, Default)]
 pub struct AppConfig {
     #[serde(default)]
     pub ai: AIConfig,
@@ -900,7 +900,8 @@ impl AppConfig {
         // --- End Account Configuration Loading ---
 
         // --- Translation Configuration Loading ---
-        use crate::ast_grep_analyzer::translation::{SupportedLanguage, TranslationConfig};
+        use crate::ast_grep_analyzer::translation::TranslationConfig;
+        use crate::common::types::SupportedLanguage;
 
         let translation_config = if let Some(partial_translation) = partial_config.translation {
             TranslationConfig {

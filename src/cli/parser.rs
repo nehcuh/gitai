@@ -37,7 +37,7 @@ impl CLIParser {
         // 解析语言参数
         let language = if let Some(lang_str) = &args.lang {
             Some(SupportedLanguage::from_str(lang_str)
-                .map_err(|e| AppError::cli(e))?)
+                .ok_or_else(|| AppError::cli(format!("不支持的语言: {}", lang_str)))?)
         } else {
             None
         };

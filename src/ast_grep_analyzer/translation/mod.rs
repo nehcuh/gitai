@@ -14,51 +14,10 @@ pub use manager::{TranslationManager, TranslationStats};
 pub use rule_localizer::{LocalizedRule, RuleLocalizer};
 pub use translator::{RuleTranslator, TranslationProvider};
 
+pub use crate::common::types::SupportedLanguage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Supported languages for rule translation
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum SupportedLanguage {
-    /// English (original language)
-    English,
-    /// Simplified Chinese
-    Chinese,
-    /// Auto-detect based on system locale
-    Auto,
-}
-
-impl SupportedLanguage {
-    /// Get the language code string
-    pub fn code(&self) -> &'static str {
-        match self {
-            SupportedLanguage::English => "en",
-            SupportedLanguage::Chinese => "zh",
-            SupportedLanguage::Auto => "auto",
-        }
-    }
-
-    /// Parse language from string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "en" | "english" => Some(SupportedLanguage::English),
-            "zh" | "chinese" | "zh-cn" | "zh_cn" => Some(SupportedLanguage::Chinese),
-            "auto" => Some(SupportedLanguage::Auto),
-            _ => None,
-        }
-    }
-
-    /// Get system default language
-    pub fn system_default() -> Self {
-        // Try to detect system language, fallback to English
-        if let Ok(lang) = std::env::var("LANG") {
-            if lang.starts_with("zh") {
-                return SupportedLanguage::Chinese;
-            }
-        }
-        SupportedLanguage::English
-    }
-}
 
 /// Translation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

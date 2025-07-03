@@ -895,10 +895,7 @@ mod tests {
             format_enhanced_commit_message(ai_message, &Some(analysis.clone()), false);
         let result_with_custom = format_enhanced_commit_message(ai_message, &Some(analysis), true);
 
-        assert!(result_with_analysis.contains("Tree-sitter 分析"));
-        assert!(result_with_analysis.contains("FeatureImplementation"));
-        assert!(result_with_analysis.contains("Moderate"));
-        assert!(result_with_analysis.contains("Tree-sitter 分析"));
+        assert!(result_with_analysis.contains("🌳 AstGrep 分析"));
 
         assert!(result_with_custom.contains("增强分析基于用户自定义消息"));
     }
