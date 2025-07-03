@@ -1,0 +1,71 @@
+# GitAI 重构后的配置文件示例
+
+[ai]
+# AI服务配置
+api_url = "http://localhost:1234/v1/chat/completions"
+model_name = "deepseek-r1-0528-qwen3-8b-awq"
+temperature = 0.7
+api_key = "YOUR_API_KEY_IF_NEEDED"
+# 请求超时时间(秒)
+timeout = 30
+# 重试次数
+retry_count = 3
+
+[translation]
+# 翻译功能配置
+enabled = true
+# 使用AI进行翻译(复用ai配置)
+use_ai = true
+# 默认语言: "auto", "zh", "en"
+default_language = "auto"
+# 翻译缓存设置
+cache_enabled = true
+cache_ttl = 3600  # 缓存过期时间(秒)
+# 翻译提示词文件路径
+prompt_file = "assets/translator.md"
+
+[ast_grep]
+# AST-Grep分析功能配置
+enabled = true
+# 分析深度: "shallow", "medium", "deep"
+analysis_depth = "medium"
+# 缓存设置
+cache_enabled = true
+cache_ttl = 1800
+# 支持的语言列表
+languages = ["rust", "javascript", "python", "go", "java", "c", "cpp"]
+# 规则文件路径
+rules_path = "rules/"
+
+[devops]
+# DevOps平台集成配置
+platform = "coding"                    # Supported: "coding", "jira", "azure-devops"
+base_url = "https://your-devops-instance.com"
+token = "YOUR_DEVOPS_API_TOKEN"
+timeout = 30000                        # API请求超时时间(毫秒)
+retry_count = 3                        # API请求重试次数
+
+[review]
+# 代码审查配置
+auto_save = true
+storage_path = "~/.gitai/review_results"
+format = "markdown"
+max_age_hours = 168
+include_in_commit = true
+# 使用AI进行审查增强
+use_ai = true
+
+[git]
+# Git操作配置
+auto_stage = false                     # 自动暂存文件
+commit_template = ""                   # 提交消息模板
+# 智能提交配置
+smart_commit = true
+use_ast_grep = true                    # 在提交分析中使用AST-Grep
+
+[logging]
+# 日志配置
+level = "info"                         # debug, info, warn, error
+file_path = "~/.gitai/logs/gitai.log"
+rotation = "daily"                     # daily, weekly, monthly
+max_files = 7                          # 保留的日志文件数量
