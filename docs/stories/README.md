@@ -17,7 +17,7 @@ stories/
 │   └── 05-end-to-end-integration.md
 └── intelligent-commit/                 # 智能提交功能相关的用户故事
     ├── 01-basic-commit-generation.md
-    ├── 02-tree-sitter-enhanced-analysis.md
+    ├── 02-ast-grep-enhanced-analysis.md (已删除)
     ├── 03-review-integration.md
     ├── 04-custom-message-support.md
     └── 05-smart-staging-support.md

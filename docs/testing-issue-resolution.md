@@ -39,7 +39,7 @@ use gitai::{
 fn create_test_config() -> AppConfig {
     AppConfig {
         ai: AIConfig { /* ... */ },
-        tree_sitter: TreeSitterConfig::default(),
+        ast_grep: AstGrepConfig::default(),
         review: Default::default(), // 新增这一行
         account: None,
         prompts,

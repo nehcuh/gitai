@@ -234,13 +234,13 @@ gitai cm
 #### Tree-sitter 增强提交
 ```bash
 # 启用 Tree-sitter 分析
-gitai commit --tree-sitter
+gitai commit --ast-grep
 
 # 指定分析级别
 gitai commit -t -l 2
 
 # 完整参数形式
-gitai commit --tree-sitter --level 3
+gitai commit --ast-grep --level 3
 ```
 
 #### 自定义提交信息
@@ -400,7 +400,7 @@ gitai --noai commit -m "正常提交"
     "performance": 90,
     "security": 75
   },
-  "tree_sitter_analysis": {
+  "ast_grep_analysis": {
     "new_functions": ["authenticate_user", "validate_token"],
     "modified_functions": ["login_handler"],
     "new_types": ["UserSession", "AuthError"],
@@ -448,7 +448,7 @@ token = "your_devops_token"
 timeout = 30000
 retry_count = 3
 
-[tree_sitter]
+[ast_grep]
 enabled = true
 analysis_depth = "medium"
 cache_enabled = true
@@ -512,7 +512,7 @@ model = "gpt-3.5-turbo"
 ### 个人开发者
 ```bash
 # 每日开发流程
-gitai review --tree-sitter          # 代码质量检查
+gitai review --ast-grep          # 代码质量检查
 gitai commit -a -t --issue-id="#123" # 关联 issue 的智能提交
 gitai --ai push origin main         # 推送时的智能提示
 
@@ -578,11 +578,11 @@ gitai --lang=en scan src/ --format=json --output=quality-report.json
 ```
 
 # 安全审计
-gitai review --focus="安全性" --tree-sitter --format=markdown \
+gitai review --focus="安全性" --ast-grep --format=markdown \
   --output=security-audit-$(date +%Y%m%d).md
 
 # 性能分析
-gitai review --focus="性能,优化" --tree-sitter
+gitai review --focus="性能,优化" --ast-grep
 ```
 
 ## 🧪 高级功能
@@ -605,7 +605,7 @@ git rebase -i HEAD~10 --exec "gitai commit --amend"
 gitai review --focus="内存安全,并发安全,API 设计"
 
 # 特定文件类型分析
-gitai review --tree-sitter --files="*.rs,*.py"
+gitai review --ast-grep --files="*.rs,*.py"
 
 # 排除特定目录
 gitai review --exclude="tests/*,examples/*"
@@ -748,13 +748,13 @@ curl http://localhost:11434/api/tags
 **Q: Tree-sitter 分析失败**
 ```bash
 # 启用详细日志
-RUST_LOG=debug gitai review --tree-sitter
+RUST_LOG=debug gitai review --ast-grep
 
 # 检查语言支持
-gitai review --tree-sitter --languages=rust,python
+gitai review --ast-grep --languages=rust,python
 
 # 回退到基础分析
-gitai review  # 不使用 --tree-sitter
+gitai review  # 不使用 --ast-grep
 ```
 
 **Q: 提交信息生成质量不佳**
@@ -804,7 +804,7 @@ RUST_LOG=debug gitai review
 RUST_LOG=gitai::handlers::ai=trace gitai commit
 
 # 性能分析
-time gitai review --tree-sitter --depth=deep
+time gitai review --ast-grep --depth=deep
 ```
 
 ## 🏗️ 项目架构
@@ -822,7 +822,7 @@ gitai/
 │   │   └── help.rs                # 帮助系统
 │   ├── clients/
 │   │   └── devops_client.rs       # DevOps API 客户端
-│   ├── tree_sitter_analyzer/      # 语法分析器
+│   ├── ast_grep_analyzer/         # 语法分析器
 │   │   ├── analyzer.rs            # 主分析器
 │   │   └── core.rs                # 核心分析逻辑
 │   ├── types/
@@ -883,7 +883,7 @@ Closes #123"
 1. **Fork 项目**
 2. **创建特性分支** (`git checkout -b feature/amazing-feature`)
 3. **开发和测试** (`cargo test`)
-4. **使用 GitAI 评审** (`gitai review --tree-sitter`)
+4. **使用 GitAI 评审** (`gitai review --ast-grep`)
 5. **智能提交** (`gitai commit -t --review`)
 6. **创建 Pull Request**
 
@@ -949,7 +949,7 @@ Closes #123"
 
 感谢以下开源项目和社区的支持：
 
-- [Tree-sitter](https://tree-sitter.github.io/) - 强大的语法分析框架
+- [AST-Grep](https://ast-grep.github.io/) - 强大的语法分析框架
 - [Tokio](https://tokio.rs/) - 异步运行时
 - [Clap](https://docs.rs/clap/) - 命令行参数解析
 - [Serde](https://serde.rs/) - 序列化框架

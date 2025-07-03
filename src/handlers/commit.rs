@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn test_commit_args_with_tree_sitter() {
+    fn test_commit_args_with_ast_grep() {
         let args = CommitArgs {
             ast_grep: true,
             auto_stage: false,
@@ -775,7 +775,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_analyze_diff_with_tree_sitter_basic() {
+    async fn test_analyze_diff_with_ast_grep_basic() {
         let diff = "diff --git a/src/test.rs b/src/test.rs\nindex 1234567..abcdefg 100644\n--- a/src/test.rs\n+++ b/src/test.rs\n@@ -1,3 +1,4 @@\n fn test_function() {\n     println!(\"Hello, world!\");\n+    println!(\"New line added\");\n }";
 
         let args = CommitArgs {
@@ -787,7 +787,7 @@ mod tests {
             passthrough_args: vec![],
         };
 
-        // This test may fail in environments without proper tree-sitter setup
+        // This test may fail in environments without proper ast-grep setup
         match analyze_diff_with_ast_grep(diff, &args).await {
             Ok((analysis_text, analysis_data)) => {
                 assert!(!analysis_text.is_empty());
@@ -795,7 +795,7 @@ mod tests {
                 assert!(analysis_text.contains("代码分析摘要"));
             }
             Err(e) => {
-                // Expected in test environments without tree-sitter support
+                // Expected in test environments without ast-grep support
                 match e {
                     AppError::Analysis(_) => assert!(true),
                     _ => assert!(true),
@@ -805,7 +805,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_analyze_diff_with_tree_sitter_depth_levels() {
+    async fn test_analyze_diff_with_ast_grep_depth_levels() {
         let diff = "diff --git a/src/lib.rs b/src/lib.rs\n+pub fn new_function() {}";
 
         let shallow_args = CommitArgs {
@@ -962,10 +962,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_commit_with_tree_sitter() {
+    async fn test_handle_commit_with_ast_grep() {
         let config = create_test_config();
 
-        let args_tree_sitter = CommitArgs {
+        let args_ast_grep = CommitArgs {
             ast_grep: true,
             auto_stage: false,
             message: None,
@@ -974,17 +974,17 @@ mod tests {
             passthrough_args: vec![],
         };
 
-        let args_tree_sitter_with_message = CommitArgs {
+        let args_ast_grep_with_message = CommitArgs {
             ast_grep: true,
             auto_stage: false,
-            message: Some("feat: enhanced with tree-sitter".to_string()),
+            message: Some("feat: enhanced with ast-grep".to_string()),
             issue_id: None,
             review: false,
             passthrough_args: vec![],
         };
 
-        // Test tree-sitter mode without custom message
-        match handle_commit(&config, args_tree_sitter).await {
+        // Test ast-grep mode without custom message
+        match handle_commit(&config, args_ast_grep).await {
             Ok(_) => {
                 // Success only if in proper git environment
                 assert!(true);
@@ -1001,8 +1001,8 @@ mod tests {
             }
         }
 
-        // Test tree-sitter mode with custom message
-        match handle_commit(&config, args_tree_sitter_with_message).await {
+        // Test ast-grep mode with custom message
+        match handle_commit(&config, args_ast_grep_with_message).await {
             Ok(_) => {
                 assert!(true);
             }
@@ -1017,8 +1017,8 @@ mod tests {
     }
 
     #[test]
-    fn test_commit_args_tree_sitter_combinations() {
-        // Test various combinations of tree-sitter related arguments
+    fn test_commit_args_ast_grep_combinations() {
+        // Test various combinations of ast-grep related arguments
         let args1 = CommitArgs {
             ast_grep: true,
             auto_stage: false,

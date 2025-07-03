@@ -1,5 +1,6 @@
 use crate::{
-    errors::{AppError, GitError},
+    common::AppError,
+    errors::GitError,
     handlers::git::*,
     types::{git::ReviewArgs, general::CommandOutput},
 };
@@ -93,11 +94,9 @@ mod tests {
             Err(e) => {
                 // Expected in most test scenarios
                 match e {
-                    AppError::Git(GitError::CommandFailed { .. }) => {
+                    AppError::Git { message, .. } => {
                         // Expected - no staged changes or not in git repo
-                    }
-                    AppError::Git(GitError::NotARepository) => {
-                        // Expected if not in git repo
+                        assert!(message.contains("not a git repository") || message.contains("nothing to commit"));
                     }
                     _ => {
                         // Other errors are also acceptable in test environment
@@ -115,7 +114,7 @@ mod tests {
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: true,
             commit1: None,
             commit2: None,
             stories: None,
@@ -133,8 +132,8 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Generic(msg) => {
-                        assert!(msg.contains("没有检测到变更") || msg.contains("无法执行代码评审"));
+                    AppError::Generic { message, .. } => {
+                        assert!(message.contains("没有检测到变更") || message.contains("无法执行代码评审"));
                     }
                     _ => {
                         // Other errors are also acceptable
@@ -152,7 +151,7 @@ mod tests {
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: true,
             commit1: Some("HEAD~1".to_string()),
             commit2: Some("HEAD".to_string()),
             stories: None,
@@ -181,7 +180,7 @@ mod tests {
             lang: None,
             format: "text".to_string(),
             output: None,
-            tree_sitter: false,
+            ast_grep: true,
             commit1: Some("HEAD".to_string()),
             commit2: None,
             stories: None,
@@ -212,10 +211,11 @@ mod tests {
             Err(e) => {
                 // Acceptable if git is not available in test environment
                 match e {
-                    AppError::IO(_, _) => {
+                    AppError::IO { message, .. } => {
                         // Expected if git command not found
+                        assert!(message.contains("git") || message.contains("command"));
                     }
-                    AppError::Git(GitError::PassthroughFailed { .. }) => {
+                    AppError::Git { .. } => {
                         // Also acceptable
                     }
                     _ => {

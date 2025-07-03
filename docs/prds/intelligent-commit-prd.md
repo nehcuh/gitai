@@ -17,11 +17,11 @@ GitAI 智能提交功能旨在为开发者提供智能化的 Git 提交体验，
 - **默认行为**: 基于 git diff 信息使用 AI 生成提交信息
 - **AI 提示模板**: 使用 `commit-generator.md` 中定义的 prompt 模板
 
-### 2.2 Tree-sitter 增强分析
-- **启用参数**: `-t` 或 `--tree-sitter`
+### 2.2 AST-Grep 增强分析
+- **启用参数**: `-t` 或 `--ast-grep`
 - **分析级别**: `-l` 或 `--level` 参数控制分析深度
 - **分析流程**:
-  1. 对项目进行 Tree-sitter 静态分析
+  1. 对项目进行 AST-Grep 静态分析
   2. 结合 git diff 信息
   3. 生成更精准的 AI 提交信息
 
