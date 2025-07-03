@@ -1,10 +1,9 @@
 use crate::{
     config::AppConfig,
-    errors::{AppError, map_command_output_error},
+    errors::AppError,
     handlers::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling},
     types::general::CommandOutput,
 };
-use tokio;
 
 /// Handle intelligent git command processing with conditional AI explanation
 ///
@@ -27,12 +26,10 @@ pub async fn handle_intelligent_git_command(
         handle_smart_mode(config, args, &command_output).await?;
     }
 
-    // Maintain same exit status as original git command
+    // Exit with the same status as the original git command
+    // But don't return an error - just let the exit code propagate naturally
     if !command_output.status.success() {
-        return Err(AppError::Git(map_command_output_error(
-            &format!("git {}", args.join(" ")),
-            command_output,
-        )));
+        std::process::exit(command_output.status.code().unwrap_or(1));
     }
 
     Ok(())
