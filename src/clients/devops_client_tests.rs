@@ -1,6 +1,6 @@
 #![cfg(test)]
 use super::DevOpsClient; // Assuming devops_client_tests.rs is in the same directory as devops_client.rs, or mod.rs makes it available
-use crate::common::AppError;
+use crate::errors::DevOpsError;
 use crate::types::devops::{DevOpsResponse, IssueTypeDetail, WorkItem};
 use httpmock::prelude::*;
 
@@ -106,10 +106,11 @@ async fn test_get_work_item_api_logical_error() {
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("API Error Occurred"));
+        DevOpsError::ApiLogicalError { code, message } => {
+            assert_eq!(code, 1);
+            assert_eq!(message, "API Error Occurred");
         }
-        _ => panic!("Expected DevOps error"),
+        _ => panic!("Expected ApiLogicalError"),
     }
 }
 
@@ -133,10 +134,10 @@ async fn test_get_work_item_not_found_404() {
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("not found"));
+        DevOpsError::WorkItemNotFound { item_id: returned_id } => {
+            assert_eq!(returned_id, item_id);
         }
-        _ => panic!("Expected DevOps error"),
+        _ => panic!("Expected WorkItemNotFound"),
     }
 }
 
@@ -153,7 +154,7 @@ async fn test_get_work_item_authentication_error_401() {
         .await;
 
     let result = client.get_work_item(1, 1).await;
-    assert!(matches!(result, Err(AppError::DevOps { .. })));
+    assert!(matches!(result, Err(DevOpsError::AuthenticationError)));
 }
 
 #[tokio::test]
@@ -169,7 +170,7 @@ async fn test_get_work_item_rate_limit_error_429() {
         .await;
 
     let result = client.get_work_item(1, 1).await;
-    assert!(matches!(result, Err(AppError::DevOps { .. })));
+    assert!(matches!(result, Err(DevOpsError::RateLimitExceeded)));
 }
 
 #[tokio::test]
@@ -186,10 +187,10 @@ async fn test_get_work_item_server_error_500() {
 
     let result = client.get_work_item(1, 1).await;
     match result.unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("500"));
+        DevOpsError::ServerError { status_code } => {
+            assert_eq!(status_code, 500);
         }
-        _ => panic!("Expected DevOps error"),
+        _ => panic!("Expected ServerError"),
     }
 }
 
@@ -206,7 +207,7 @@ async fn test_get_work_item_parse_error() {
         .await;
 
     let result = client.get_work_item(1, 1).await;
-    assert!(matches!(result, Err(AppError::DevOps { .. })));
+    assert!(matches!(result, Err(DevOpsError::ParseError(_))));
 }
 
 #[tokio::test]
@@ -228,10 +229,10 @@ async fn test_get_work_item_unexpected_structure_data_null() {
 
     let result = client.get_work_item(1, 1).await;
     match result.unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("WorkItem data is missing"));
+        DevOpsError::UnexpectedResponseStructure(msg) => {
+            assert!(msg.contains("WorkItem data is missing"));
         }
-        _ => panic!("Expected DevOps error"),
+        _ => panic!("Expected UnexpectedResponseStructure"),
     }
 }
 
@@ -378,10 +379,10 @@ async fn test_get_work_items_partial_failure() {
     assert_eq!(results[0].as_ref().unwrap(), &mock_item_101);
     assert!(results[1].is_err());
     match results[1].as_ref().unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("not found"));
+        DevOpsError::WorkItemNotFound { item_id } => {
+            assert_eq!(*item_id, 404);
         }
-        _ => panic!("Expected DevOps error for the second item"),
+        _ => panic!("Expected WorkItemNotFound for the second item"),
     }
 }
 
@@ -415,11 +416,11 @@ async fn test_get_work_items_all_fail() {
     assert_eq!(results.len(), 2);
     assert!(matches!(
         results[0].as_ref().unwrap_err(),
-        AppError::DevOps { .. }
+        DevOpsError::ServerError { status_code: 500 }
     ));
     assert!(matches!(
         results[1].as_ref().unwrap_err(),
-        AppError::DevOps { .. }
+        DevOpsError::AuthenticationError
     ));
 }
 
@@ -442,8 +443,8 @@ async fn test_get_work_item_network_error() {
     let result = client.get_work_item(1, 1).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        AppError::DevOps { .. } => {} // Expected
-        e => panic!("Expected DevOps error, got {:?}", e),
+        DevOpsError::NetworkError(_) => {} // Expected
+        e => panic!("Expected NetworkError, got {:?}", e),
     }
 }
 
@@ -470,10 +471,10 @@ async fn test_get_work_item_retry_persistent_failure() {
     let result = client.get_work_item(space_id, item_id).await;
     assert!(result.is_err());
     match result.unwrap_err() {
-        AppError::DevOps { message, .. } => {
-            assert!(message.contains("500"));
+        DevOpsError::ServerError { status_code } => {
+            assert_eq!(status_code, 500);
         }
-        _ => panic!("Expected DevOps error after retries"),
+        _ => panic!("Expected ServerError after retries"),
     }
     // Assert that mock was called as expected
     mock_500.assert_hits_async(3).await; // Changed to assert_hits_async(3)
