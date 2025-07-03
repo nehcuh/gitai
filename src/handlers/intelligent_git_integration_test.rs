@@ -1,5 +1,5 @@
 use crate::{
-    common::{ConfigManager, GitAIConfig, AIConfig},
+    config::{AppConfig, AIConfig, AstGrepConfig, ReviewConfig},
     handlers::intelligent_git::handle_intelligent_git_command,
     types::general::CommandOutput,
 };
@@ -11,14 +11,14 @@ use tokio;
 /// Integration tests for intelligent git command handling
 /// These tests verify the end-to-end functionality of the intelligent git proxy
 
-fn create_test_config_for_integration() -> GitAIConfig {
+fn create_test_config_for_integration() -> AppConfig {
     let mut prompts = HashMap::new();
     prompts.insert(
         "general-helper".to_string(),
         "你是一个Git专家助手，请简洁地解释Git命令的输出和错误信息。".to_string(),
     );
 
-    GitAIConfig {
+    AppConfig {
         ai: AIConfig {
             api_url: "https://api.openai.com/v1/chat/completions".to_string(),
             api_key: Some("test-key-for-integration".to_string()),
@@ -26,10 +26,16 @@ fn create_test_config_for_integration() -> GitAIConfig {
             temperature: 0.3,
         },
         prompts,
-        git: Default::default(),
+        ast_grep: AstGrepConfig::default(),
         translation: Default::default(),
-        devops: Default::default(),
-        general: Default::default(),
+        account: None,
+        review: ReviewConfig {
+            auto_save: true,
+            storage_path: "~/.gitai/review_results".to_string(),
+            format: "markdown".to_string(),
+            max_age_hours: 168,
+            include_in_commit: true,
+        },
     }
 }
 
