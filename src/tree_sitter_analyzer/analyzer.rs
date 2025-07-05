@@ -16,6 +16,7 @@ use super::core::{
     parse_git_diff,
 };
 use super::utils::calculate_hash;
+use super::query_manager::{QueryManager, QueryManagerConfig};
 
 
 
@@ -25,6 +26,7 @@ pub struct TreeSitterAnalyzer {
     language_registry: LanguageRegistry,
     file_asts: HashMap<PathBuf, FileAst>,
     queries: HashMap<String, Query>,
+    query_manager: QueryManager,
 }
 
 // 节点分析配置
@@ -404,12 +406,31 @@ impl SummaryGenerator {
 
 impl TreeSitterAnalyzer {
     pub fn new(config: TreeSitterConfig) -> Result<Self, TreeSitterError> {
+        let query_manager = QueryManager::new(config.query_manager_config.clone())?;
+        
         let mut analyzer = Self {
             config,
             project_root: PathBuf::new(),
             language_registry: create_language_registry(),
             file_asts: HashMap::new(),
             queries: HashMap::new(),
+            query_manager,
+        };
+
+        analyzer.initialize_queries()?;
+        Ok(analyzer)
+    }
+
+    pub fn new_with_query_config(config: TreeSitterConfig, query_config: QueryManagerConfig) -> Result<Self, TreeSitterError> {
+        let query_manager = QueryManager::new(query_config)?;
+        
+        let mut analyzer = Self {
+            config,
+            project_root: PathBuf::new(),
+            language_registry: create_language_registry(),
+            file_asts: HashMap::new(),
+            queries: HashMap::new(),
+            query_manager,
         };
 
         analyzer.initialize_queries()?;
@@ -425,10 +446,39 @@ impl TreeSitterAnalyzer {
         self.config.analysis_depth = depth;
     }
 
+    /// 强制更新所有查询
+    pub fn update_queries(&mut self) -> Result<(), TreeSitterError> {
+        self.query_manager.force_update_all()?;
+        self.queries.clear();
+        self.initialize_queries()
+    }
+
+    /// 清理查询缓存
+    pub fn cleanup_query_cache(&mut self) -> Result<(), TreeSitterError> {
+        self.query_manager.cleanup_cache()
+    }
+
+    /// 获取查询管理器支持的语言
+    pub fn get_query_supported_languages(&self) -> Vec<String> {
+        self.query_manager.get_supported_languages()
+    }
+
     fn initialize_queries(&mut self) -> Result<(), TreeSitterError> {
         for language in self.language_registry.get_all_languages() {
             if let Some(config) = self.language_registry.get_config(language) {
-                let query = Query::new(&config.get_language(), config.highlights_query)
+                // 尝试从QueryManager获取查询，如果失败则使用内置查询
+                let query_content = match self.query_manager.get_query(language, "highlights") {
+                    Ok(content) => {
+                        tracing::info!("Using downloaded query for {}", language);
+                        content
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to get downloaded query for {}, using built-in: {}", language, e);
+                        config.highlights_query.to_string()
+                    }
+                };
+
+                let query = Query::new(&config.get_language(), &query_content)
                     .map_err(|e| TreeSitterError::QueryError(format!("{}: {}", language, e)))?;
                 self.queries.insert(language.to_string(), query);
             }

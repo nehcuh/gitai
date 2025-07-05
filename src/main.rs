@@ -9,6 +9,7 @@ mod utils;
 use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
+use handlers::query_update::{handle_query_update, handle_query_cleanup, handle_query_status};
 use handlers::review::handle_review;
 use utils::{construct_commit_args, construct_review_args};
 
@@ -84,6 +85,28 @@ async fn main() -> Result<(), AppError> {
         let commit_args = construct_commit_args(&args);
         handle_commit(&config, commit_args).await?;
         return Ok(());
+    }
+
+    // 查询管理命令处理
+    if args.len() > 0 {
+        match args[0].as_str() {
+            "update-queries" => {
+                tracing::info!("检测到update-queries命令");
+                handle_query_update()?;
+                return Ok(());
+            }
+            "cleanup-queries" => {
+                tracing::info!("检测到cleanup-queries命令");
+                handle_query_cleanup()?;
+                return Ok(());
+            }
+            "query-status" => {
+                tracing::info!("检测到query-status命令");
+                handle_query_status()?;
+                return Ok(());
+            }
+            _ => {}
+        }
     }
 
     // 标准 git 指令处理

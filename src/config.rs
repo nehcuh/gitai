@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, io::ErrorKind, path::PathBuf};
+use crate::tree_sitter_analyzer::query_manager::QueryManagerConfig;
 
 use crate::errors::ConfigError;
 
@@ -187,6 +188,10 @@ pub struct TreeSitterConfig {
     /// List of supported languages
     #[serde(default = "default_languages")]
     pub languages: Vec<String>,
+
+    /// Query manager configuration
+    #[serde(skip)]
+    pub query_manager_config: QueryManagerConfig,
 }
 
 impl Default for TreeSitterConfig {
@@ -196,6 +201,7 @@ impl Default for TreeSitterConfig {
             analysis_depth: default_analysis_depth(),
             cache_enabled: default_cache_enabled(),
             languages: default_languages(),
+            query_manager_config: QueryManagerConfig::default(),
         }
     }
 }
@@ -843,6 +849,7 @@ impl AppConfig {
             analysis_depth: analysis_depth.clone(),
             cache_enabled,
             languages: languages.clone(),
+            query_manager_config: QueryManagerConfig::default(),
         };
 
         tracing::debug!(
