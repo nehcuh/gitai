@@ -4,7 +4,21 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo check:*)",
+      "Bash(rg:*)",
+      "Bash(cargo:*)",
+      "Bash(./target/debug/gitai:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(touch:*)",
+      "Bash(rm:*)",
+      "Bash(./target/release/gitai scan:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:ast-grep.github.io)"
     ],
     "deny": []
   }

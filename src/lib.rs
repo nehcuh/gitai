@@ -3,6 +3,7 @@ pub mod errors;
 pub mod handlers;
 pub mod rule_manager;
 pub mod scanner;
+pub mod ast_grep_integration;
 pub mod types;
 pub mod utils;
 pub mod tree_sitter_analyzer;

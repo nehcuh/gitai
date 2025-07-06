@@ -22,7 +22,7 @@ pub async fn handle_scan(
     println!("Found {} rule files.", rule_paths.len());
     
     // Initialize scanner
-    let scanner = LocalScanner::new(config.clone())?;
+    let mut scanner = LocalScanner::new(config.clone())?;
     
     // Perform scan
     println!("Scanning {} files...", if args.full { "all" } else { "changed" });

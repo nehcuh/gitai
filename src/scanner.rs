@@ -1,6 +1,7 @@
 use crate::config::AppConfig;
 use crate::errors::AppError;
 use crate::types::git::ScanArgs;
+use crate::ast_grep_integration::{AstGrepEngine, SupportedLanguage};
 use serde_yaml::Value;
 use regex::Regex;
 use git2::{Repository, DiffOptions};
@@ -8,10 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-// TODO: Re-enable ast-grep integration after API research
-// use ast_grep_core::language::Language;
-// use ast_grep_config::{SerializableRuleCore};
-// use ast_grep_core::language::TSLanguage;
 
 #[derive(Debug, Clone)]
 pub struct AstGrepRule {
@@ -90,15 +87,17 @@ pub struct ScanSummary {
 pub struct LocalScanner {
     config: AppConfig,
     repo: Option<Repository>,
+    ast_engine: AstGrepEngine,
 }
 
 impl LocalScanner {
     pub fn new(config: AppConfig) -> Result<Self, AppError> {
         let repo = Repository::open_from_env().ok();
-        Ok(Self { config, repo })
+        let ast_engine = AstGrepEngine::new();
+        Ok(Self { config, repo, ast_engine })
     }
 
-    pub async fn scan(&self, args: &ScanArgs, rule_paths: &[PathBuf]) -> Result<ScanResult, AppError> {
+    pub async fn scan(&mut self, args: &ScanArgs, rule_paths: &[PathBuf]) -> Result<ScanResult, AppError> {
         let files_to_scan = if args.full {
             self.get_all_files(&args.path)?
         } else {
@@ -232,23 +231,37 @@ impl LocalScanner {
         Ok(filtered)
     }
 
-    fn load_rules(&self, rule_paths: &[PathBuf]) -> Result<Vec<AstGrepRule>, AppError> {
+    fn load_rules(&mut self, rule_paths: &[PathBuf]) -> Result<Vec<AstGrepRule>, AppError> {
         let mut rules = Vec::new();
+        
+        // Clear existing rules in AST engine
+        self.ast_engine.clear_rules();
         
         for rule_path in rule_paths {
             let content = fs::read_to_string(rule_path)
                 .map_err(|e| AppError::FileRead(rule_path.to_string_lossy().to_string(), e))?;
             
+            // Try to add rule to AST engine
+            match self.ast_engine.add_rule(&content) {
+                Ok(rule_id) => {
+                    println!("Successfully loaded rule: {}", rule_id);
+                }
+                Err(e) => {
+                    println!("Warning: Failed to load rule from {}: {}", rule_path.display(), e);
+                }
+            }
+            
             let yaml_value: Value = serde_yaml::from_str(&content)
                 .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(format!("Failed to parse rule file {}: {}", 
                                                     rule_path.display(), e))))?;
             
-            // Parse ast-grep rule format
+            // Parse ast-grep rule format for compatibility
             if let Some(rule) = self.parse_ast_grep_rule(&yaml_value, rule_path)? {
                 rules.push(rule);
             }
         }
         
+        println!("Loaded {} rules into AST engine", self.ast_engine.get_rules().len());
         Ok(rules)
     }
 
@@ -341,9 +354,10 @@ impl LocalScanner {
                     continue;
                 }
                 
-                // For now, use improved rule parsing but fallback to regex matching
-                // TODO: Implement true ast-grep integration in next step
-                let rule_matches = if self.supports_ast_grep(lang) {
+                // Use enhanced AST-based matching when possible
+                let rule_matches = if let Some(supported_lang) = self.get_supported_language(lang) {
+                    self.apply_ast_grep_matching(content, file_path, &supported_lang)?
+                } else if self.supports_ast_grep(lang) {
                     self.apply_enhanced_rule_matching(content, file_path, rule)?
                 } else {
                     self.apply_regex_fallback(content, file_path, rule)?
@@ -390,6 +404,10 @@ impl LocalScanner {
             .map(|s| s.to_string())
     }
 
+    fn get_supported_language(&self, language: &str) -> Option<SupportedLanguage> {
+        SupportedLanguage::from_str(language)
+    }
+
     fn get_context(&self, content: &str, line_number: usize, context_lines: usize) -> String {
         let lines: Vec<&str> = content.lines().collect();
         let start = line_number.saturating_sub(context_lines);
@@ -400,6 +418,50 @@ impl LocalScanner {
 
     fn supports_ast_grep(&self, language: &str) -> bool {
         matches!(language, "rust" | "javascript" | "typescript" | "python" | "java" | "c" | "cpp" | "go" | "html" | "css" | "json" | "yaml")
+    }
+
+    fn apply_ast_grep_matching(
+        &self,
+        content: &str,
+        file_path: &Path,
+        language: &SupportedLanguage,
+    ) -> Result<Vec<ScanMatch>, AppError> {
+        let mut matches = Vec::new();
+        
+        // Use the AST engine for pattern matching
+        let ast_matches = self.ast_engine.find_matches_simple(
+            content,
+            language.clone(),
+            &file_path.to_string_lossy(),
+        )?;
+        
+        // Convert AstMatch to ScanMatch
+        for ast_match in ast_matches {
+            // Create a more informative message if pattern variables were captured
+            let message = if !ast_match.pattern_variables.is_empty() {
+                let var_info: Vec<String> = ast_match.pattern_variables.iter()
+                    .map(|(k, v)| format!("{}={}", k, v))
+                    .collect();
+                format!("Pattern found by AST analysis (variables: {})", var_info.join(", "))
+            } else {
+                "Pattern found by AST analysis".to_string()
+            };
+            
+            let scan_match = ScanMatch {
+                file_path: ast_match.file_path,
+                line_number: ast_match.line,
+                column_number: ast_match.column,
+                rule_id: ast_match.rule_id,
+                rule_name: "ast-grep-pattern".to_string(),
+                message,
+                severity: "info".to_string(),
+                matched_text: ast_match.text,
+                context: Some(self.get_context(content, ast_match.line.saturating_sub(1), 2)),
+            };
+            matches.push(scan_match);
+        }
+        
+        Ok(matches)
     }
 
     fn apply_enhanced_rule_matching(

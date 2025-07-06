@@ -4,6 +4,7 @@ mod errors;
 mod handlers;
 mod rule_manager;
 mod scanner;
+mod ast_grep_integration;
 mod tree_sitter_analyzer;
 mod types;
 mod utils;
