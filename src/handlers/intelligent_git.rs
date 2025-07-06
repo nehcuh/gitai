@@ -4,7 +4,6 @@ use crate::{
     handlers::{ai::explain_git_command_output, git::passthrough_to_git_with_error_handling},
     types::general::CommandOutput,
 };
-use tokio;
 
 /// Handle intelligent git command processing with conditional AI explanation
 /// 
@@ -143,6 +142,7 @@ mod tests {
                 max_age_hours: 168,
                 include_in_commit: false,
             },
+            scan: Default::default(),
         }
     }
     

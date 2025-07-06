@@ -35,6 +35,7 @@ fn create_test_config_for_integration() -> AppConfig {
             max_age_hours: 168,
             include_in_commit: false,
         },
+        scan: Default::default(),
     }
 }
 

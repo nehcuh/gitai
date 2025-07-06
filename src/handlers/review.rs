@@ -498,6 +498,7 @@ mod tests {
             tree_sitter: TreeSitterConfig::default(),
             review: Default::default(),
             account: None,
+            scan: Default::default(),
             prompts: HashMap::new(),
         }
     }
@@ -894,6 +895,7 @@ mod review_save_tests {
                 include_in_commit: true,
             },
             account: None,
+            scan: Default::default(),
             prompts,
         }
     }

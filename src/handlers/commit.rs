@@ -499,6 +499,7 @@ mod tests {
             tree_sitter: TreeSitterConfig::default(),
             review: crate::config::ReviewConfig::default(),
             account: None,
+            scan: Default::default(),
             prompts,
         }
     }

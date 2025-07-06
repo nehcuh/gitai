@@ -385,6 +385,7 @@ mod tests {
             tree_sitter: Default::default(),
             review: Default::default(),
             account: None,
+            scan: Default::default(),
             prompts: HashMap::new(),
         })
     }

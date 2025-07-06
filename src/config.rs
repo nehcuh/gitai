@@ -1088,12 +1088,6 @@ impl AppConfig {
     }
 }
 
-// Helper to create HashMap for environment variables
-fn make_env_map(vars: &[(&str, &str)]) -> HashMap<String, String> {
-    vars.iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect()
-}
 
 #[cfg(test)]
 mod tests {

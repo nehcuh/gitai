@@ -784,9 +784,3 @@ impl RemoteScanner for DefaultRemoteScanner {
     }
 }
 
-#[derive(Debug, Clone)]
-struct SimpleAstMatch {
-    line: usize,
-    column: usize,
-    text: String,
-}

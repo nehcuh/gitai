@@ -24,6 +24,7 @@ fn create_test_config() -> AppConfig {
         tree_sitter: TreeSitterConfig::default(),
         review: Default::default(),
         account: None,
+        scan: Default::default(),
         prompts,
     }
 }

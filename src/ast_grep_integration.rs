@@ -241,60 +241,6 @@ impl AstGrepEngine {
         Ok(matches)
     }
 
-    /// Apply simple pattern matching as fallback
-    fn apply_simple_pattern_matching(
-        &self,
-        source_code: &str,
-        rule: &AstGrepRule,
-        file_path: &str,
-        rule_id: &str,
-    ) -> Result<Vec<AstMatch>, AppError> {
-        let mut matches = Vec::new();
-        
-        // Extract pattern from rule configuration if possible
-        let pattern = self.extract_pattern_from_rule(rule)?;
-        
-        if let Some(pattern_str) = pattern {
-            // Convert ast-grep pattern to simplified regex for pattern variables support
-            let converted_pattern = self.convert_ast_grep_pattern_to_regex(&pattern_str)?;
-            
-            if let Ok(regex) = regex::Regex::new(&converted_pattern) {
-                let lines: Vec<&str> = source_code.lines().collect();
-                for (line_num, line) in lines.iter().enumerate() {
-                    if regex.is_match(line) {
-                        // Extract matched variables if present
-                        let matched_variables = self.extract_pattern_variables(&regex, line);
-                        
-                        matches.push(AstMatch {
-                            line: line_num + 1,
-                            column: 1,
-                            text: line.to_string(),
-                            file_path: file_path.to_string(),
-                            rule_id: rule_id.to_string(),
-                            pattern_variables: matched_variables,
-                        });
-                    }
-                }
-            } else {
-                // Fallback to simple text search for common patterns
-                let lines: Vec<&str> = source_code.lines().collect();
-                for (line_num, line) in lines.iter().enumerate() {
-                    if line.contains("println!") || line.contains("console.log") || line.contains("print(") {
-                        matches.push(AstMatch {
-                            line: line_num + 1,
-                            column: 1,
-                            text: line.to_string(),
-                            file_path: file_path.to_string(),
-                            rule_id: rule_id.to_string(),
-                            pattern_variables: HashMap::new(), // No variables for fallback matching
-                        });
-                    }
-                }
-            }
-        }
-        
-        Ok(matches)
-    }
 
     /// Extract pattern string from rule configuration
     fn extract_pattern_from_rule(&self, rule: &AstGrepRule) -> Result<Option<String>, AppError> {
