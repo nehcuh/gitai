@@ -351,6 +351,36 @@ pub struct AppConfig {
 
     #[serde(skip)]
     pub prompts: HashMap<String, String>,
+    #[serde(default)]
+    pub scan: ScanConfig,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct ScanConfig {
+    #[serde(default)]
+    pub rule_manager: RuleManagerConfig,
+    #[serde(default)]
+    pub remote_scan: RemoteScanConfig,
+    #[serde(default = "default_scan_results_path")]
+    pub results_path: String,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct RuleManagerConfig {
+    #[serde(default = "default_scan_rules_path")]
+    pub cache_path: String,
+    #[serde(default = "default_rules_url")]
+    pub url: String,
+    #[serde(default = "default_rules_ttl")]
+    pub ttl_hours: u32,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct RemoteScanConfig {
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -359,6 +389,43 @@ pub struct PartialAppConfig {
     tree_sitter: Option<PartialTreeSitterConfig>,
     review: Option<PartialReviewConfig>,
     account: Option<PartialAccountConfig>,
+    scan: Option<PartialScanConfig>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialScanConfig {
+    rule_manager: Option<PartialRuleManagerConfig>,
+    remote_scan: Option<PartialRemoteScanConfig>,
+    results_path: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialRuleManagerConfig {
+    cache_path: Option<String>,
+    url: Option<String>,
+    ttl_hours: Option<u32>,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct PartialRemoteScanConfig {
+    url: Option<String>,
+    token: Option<String>,
+}
+
+fn default_scan_results_path() -> String {
+    "~/.gitai/scan-results".to_string()
+}
+
+fn default_scan_rules_path() -> String {
+    "~/.config/gitai/scan-rules".to_string()
+}
+
+fn default_rules_url() -> String {
+    "https://api.github.com/repos/coderabbitai/ast-grep-essentials/contents/rules".to_string()
+}
+
+fn default_rules_ttl() -> u32 {
+    168 // 7 days
 }
 
 impl AppConfig {
@@ -985,12 +1052,35 @@ impl AppConfig {
             tracing::info!("成功加载全部 {} 个提示文件", prompts.len());
         }
 
+        let scan_config = partial_config
+            .scan
+            .map(|p_scan| {
+                let rm_config = p_scan.rule_manager.map(|p_rm| RuleManagerConfig {
+                    cache_path: p_rm.cache_path.unwrap_or_else(default_scan_rules_path),
+                    url: p_rm.url.unwrap_or_else(default_rules_url),
+                    ttl_hours: p_rm.ttl_hours.unwrap_or_else(default_rules_ttl),
+                }).unwrap_or_default();
+
+                let remote_config = p_scan.remote_scan.map(|p_remote| RemoteScanConfig {
+                    url: p_remote.url,
+                    token: p_remote.token,
+                }).unwrap_or_default();
+
+                ScanConfig {
+                    rule_manager: rm_config,
+                    remote_scan: remote_config,
+                    results_path: p_scan.results_path.unwrap_or_else(default_scan_results_path),
+                }
+            })
+            .unwrap_or_default();
+
         let config = Self {
             ai: ai_config,
             tree_sitter: tree_sitter_config,
             review: review_config,
             account: final_account_config,
             prompts,
+            scan: scan_config,
         };
 
         tracing::info!("配置加载完成，Gitai 准备就绪");

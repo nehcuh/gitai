@@ -2,8 +2,30 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs};
+use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs};
 use crate::errors::AppError;
+
+pub fn construct_scan_args(args: &[String]) -> ScanArgs {
+    let mut scan_args_vec = vec!["gitai".to_string(), "scan".to_string()];
+    let scan_index = args.iter().position(|a| a == "scan").unwrap_or(0);
+    if scan_index + 1 < args.len() {
+        scan_args_vec.extend_from_slice(&args[scan_index + 1..]);
+    }
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&scan_args_vec) {
+        if let GitaiSubCommand::Scan(scan_args) = parsed_args.command {
+            return scan_args;
+        }
+    }
+    // Return default if parsing fails
+    ScanArgs {
+        path: None,
+        full: false,
+        remote: false,
+        update_rules: false,
+        output: None,
+        format: "json".to_string(),
+    }
+}
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
     // 重构review命令参数以便使用clap解析

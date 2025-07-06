@@ -56,6 +56,8 @@ pub enum GitaiSubCommand {
     /// Perform code review with AI assistance.
     #[clap(alias = "rv")]
     Review(ReviewArgs),
+    /// Perform local code scan with ast-grep.
+    Scan(ScanArgs),
     // Future: Add(AddArgs)
     // Future: Config(ConfigArgs)
 }
@@ -147,6 +149,34 @@ pub struct ReviewArgs {
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,
+}
+
+/// Arguments for the `scan` subcommand
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct ScanArgs {
+    /// Path to scan
+    #[clap(long, value_name = "PATH")]
+    pub path: Option<String>,
+
+    /// Perform a full scan instead of an incremental one
+    #[clap(long)]
+    pub full: bool,
+
+    /// Use remote scanning service
+    #[clap(long)]
+    pub remote: bool,
+
+    /// Force update of local scan rules
+    #[clap(long)]
+    pub update_rules: bool,
+
+    /// Output file
+    #[clap(long, value_name = "FILE")]
+    pub output: Option<String>,
+
+    /// Output format
+    #[clap(long, value_name = "FORMAT", default_value = "json")]
+    pub format: String,
 }
 
 // Represents the entire Git diff

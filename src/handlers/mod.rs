@@ -8,3 +8,4 @@ pub mod intelligent_git;
 pub mod intelligent_git_integration_test;
 pub mod query_update;
 pub mod review;
+pub mod scan;

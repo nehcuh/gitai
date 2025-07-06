@@ -18,6 +18,7 @@ regex = "1.11.1"
 reqwest = { version = "0.12.15", features = ["json", "blocking"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+serde_yaml = "0.9.34"
 streaming-iterator = "0.1.9"
 tokio = { version = "1.45.0", features = ["full"] }
 toml = "0.8.22"
@@ -34,6 +35,11 @@ tree-sitter-javascript = "0.23.1"
 tree-sitter-python = "0.23.6"
 tree-sitter-rust = "0.24.0"
 thiserror = "2.0.12"
+ast-grep-config = "0.38.6"
+ast-grep-core = "0.38.6"
+git2 = "0.20.2"
+base64 = "0.22.1"
+shellexpand = "3.1.1"
 
 [dev-dependencies]
 tempfile = "3.20.0"
