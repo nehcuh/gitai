@@ -25,7 +25,7 @@ pub struct TreeSitterAnalyzer {
     pub project_root: PathBuf,
     language_registry: LanguageRegistry,
     file_asts: HashMap<PathBuf, FileAst>,
-    queries: HashMap<String, Query>,
+    structure_queries: HashMap<String, Query>,
     query_manager: QueryManager,
 }
 
@@ -413,7 +413,7 @@ impl TreeSitterAnalyzer {
             project_root: PathBuf::new(),
             language_registry: create_language_registry(),
             file_asts: HashMap::new(),
-            queries: HashMap::new(),
+            structure_queries: HashMap::new(),
             query_manager,
         };
 
@@ -429,7 +429,7 @@ impl TreeSitterAnalyzer {
             project_root: PathBuf::new(),
             language_registry: create_language_registry(),
             file_asts: HashMap::new(),
-            queries: HashMap::new(),
+            structure_queries: HashMap::new(),
             query_manager,
         };
 
@@ -449,7 +449,7 @@ impl TreeSitterAnalyzer {
     /// 强制更新所有查询
     pub fn update_queries(&mut self) -> Result<(), TreeSitterError> {
         self.query_manager.force_update_all()?;
-        self.queries.clear();
+        self.structure_queries.clear();
         self.initialize_queries()
     }
 
@@ -466,21 +466,11 @@ impl TreeSitterAnalyzer {
     fn initialize_queries(&mut self) -> Result<(), TreeSitterError> {
         for language in self.language_registry.get_all_languages() {
             if let Some(config) = self.language_registry.get_config(language) {
-                // 尝试从QueryManager获取查询，如果失败则使用内置查询
-                let query_content = match self.query_manager.get_query(language, "highlights") {
-                    Ok(content) => {
-                        tracing::info!("Using downloaded query for {}", language);
-                        content
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to get downloaded query for {}, using built-in: {}", language, e);
-                        config.highlights_query.to_string()
-                    }
-                };
-
-                let query = Query::new(&config.get_language(), &query_content)
-                    .map_err(|e| TreeSitterError::QueryError(format!("{}: {}", language, e)))?;
-                self.queries.insert(language.to_string(), query);
+                if !config.structure_query.is_empty() {
+                    let query = Query::new(&config.get_language(), &config.structure_query)
+                        .map_err(|e| TreeSitterError::QueryError(format!("{}: {}", language, e)))?;
+                    self.structure_queries.insert(language.to_string(), query);
+                }
             }
         }
         Ok(())
@@ -574,7 +564,7 @@ impl TreeSitterAnalyzer {
         let mut affected_nodes = Vec::new();
 
         let query = self
-            .queries
+            .structure_queries
             .get(&file_ast.language_id)
             .ok_or_else(|| TreeSitterError::UnsupportedLanguage(file_ast.language_id.clone()))?;
 

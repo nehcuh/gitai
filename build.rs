@@ -1,11 +1,13 @@
-// build.rs
 use reqwest::StatusCode;
-use reqwest::blocking::get;
 use std::{env, fs, path::Path};
 
 /// 创建备用查询文件，当网络不可用时使用
 fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
     let fallback_content = match (lang, file) {
+        (_, "injections.scm") | (_, "locals.scm") => {
+            // 对于 injections 和 locals，如果下载失败，创建一个空文件
+            ""
+        }
         ("rust", "highlights.scm") => {
             // 提供基础的 Rust 高亮查询
             r#"
@@ -78,7 +80,8 @@ fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // OUT_DIR 是 Cargo 在编译期提供的环境变量
     // Use project root for queries directory
     // `CARGO_MANIFEST_DIR` points to the crate root where Cargo.toml lives
@@ -118,10 +121,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             
             // 尝试网络请求，失败时给出警告但不中断构建
-            match get(&url) {
+            match reqwest::get(&url).await {
                 Ok(resp) => {
                     if resp.status() == StatusCode::OK {
-                        match resp.text() {
+                        match resp.text().await {
                             Ok(text) => {
                                 if let Err(e) = fs::write(&dest, text) {
                                     println!("cargo:warning=写入文件失败 {}: {}", dest.display(), e);
@@ -136,6 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else {
                         println!("cargo:warning=HTTP请求失败 {} (状态码: {})", url, resp.status());
+                        create_fallback_query(&dest, lang, file);
                     }
                 }
                 Err(e) => {

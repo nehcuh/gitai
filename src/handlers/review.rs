@@ -242,31 +242,38 @@ async fn analyze_diff_with_tree_sitter(
     ),
     AppError,
 > {
-    // Initialize TreeSitter analyzer with analysis depth
-    let mut config = TreeSitterConfig::default();
-    config.analysis_depth = depth.to_string();
-    let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
-        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
+    let diff_text = diff_text.to_string();
+    let depth = depth.to_string();
 
-    // Parse the diff to get structured representation
-    let git_diff = parse_git_diff(diff_text).map_err(|e| {
-        tracing::error!("解析Git差异失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
+    tokio::task::spawn_blocking(move || {
+        // Initialize TreeSitter analyzer with analysis depth
+        let mut config = TreeSitterConfig::default();
+        config.analysis_depth = depth.to_string();
+        let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
+            tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
 
-    // Generate analysis using TreeSitter
-    let analysis = analyzer.analyze_diff(diff_text).map_err(|e| {
-        tracing::error!("执行差异分析失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
-    tracing::debug!("差异分析结果: {:?}", analysis);
+        // Parse the diff to get structured representation
+        let git_diff = parse_git_diff(&diff_text).map_err(|e| {
+            tracing::error!("解析Git差异失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
 
-    // Create detailed analysis text
-    let analysis_text = format_tree_sitter_analysis(&analysis, &git_diff);
+        // Generate analysis using TreeSitter
+        let analysis = analyzer.analyze_diff(&diff_text).map_err(|e| {
+            tracing::error!("执行差异分析失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
+        tracing::debug!("差异分析结果: {:?}", analysis);
 
-    Ok((git_diff, analysis_text, Some(analysis)))
+        // Create detailed analysis text
+        let analysis_text = format_tree_sitter_analysis(&analysis, &git_diff);
+
+        Ok((git_diff, analysis_text, Some(analysis)))
+    })
+    .await
+    .map_err(|e| AppError::Generic(format!("spawn_blocking a task failed: {}", e)))?
 }
 
 /// Simple diff analysis without TreeSitter

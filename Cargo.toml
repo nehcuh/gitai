@@ -5,7 +5,8 @@ edition = "2024"
 build = "build.rs"
 
 [build-dependencies]
-reqwest = { version = "0.12.15", features = ["blocking"] }
+reqwest = { version = "0.12.15", features = ["json"] }
+tokio = { version = "1.45.0", features = ["full"] }
 
 [dependencies]
 chrono = { version = "0.4.31", features = ["serde"] }

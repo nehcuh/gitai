@@ -32,9 +32,9 @@
 (this) @variable.builtin
 (null "nullptr" @constant)
 
-; Modules - commented out due to compatibility issues
-; (module_name
-;   (identifier) @module)
+; Modules
+(module_name
+  (identifier) @module)
 
 ; Keywords
 
@@ -67,9 +67,9 @@
  "concept"
  "requires"
  "virtual"
-; "import"
-; "export"
-; "module"
+ "import"
+ "export"
+ "module"
 ] @keyword
 
 ; Strings

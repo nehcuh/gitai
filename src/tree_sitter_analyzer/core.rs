@@ -149,6 +149,7 @@ pub struct LanguageConfig {
     pub highlights_query: &'static str,
     pub injections_query: &'static str,
     pub locals_query: &'static str,
+    pub structure_query: &'static str,
 }
 
 impl LanguageConfig {
@@ -223,6 +224,10 @@ const RUST_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/rust/locals.scm"
 ));
+const RUST_STRUCTURE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/queries/rust/structure.scm"
+));
 
 const JAVA_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -236,6 +241,7 @@ const JAVA_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/java/locals.scm"
 ));
+const JAVA_STRUCTURE: &str = "";
 
 const PYTHON_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -249,6 +255,7 @@ const PYTHON_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/python/locals.scm"
 ));
+const PYTHON_STRUCTURE: &str = "";
 
 const GO_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -262,6 +269,7 @@ const GO_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/go/locals.scm"
 ));
+const GO_STRUCTURE: &str = "";
 
 const JAVASCRIPT_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -275,6 +283,7 @@ const JAVASCRIPT_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/javascript/locals.scm"
 ));
+const JAVASCRIPT_STRUCTURE: &str = "";
 
 const C_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -285,6 +294,7 @@ const C_INJECTIONS: &str = include_str!(concat!(
     "/queries/c/injections.scm"
 ));
 const C_LOCALS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/queries/c/locals.scm"));
+const C_STRUCTURE: &str = "";
 
 const CPP_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -298,6 +308,7 @@ const CPP_LOCALS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/cpp/locals.scm"
 ));
+const CPP_STRUCTURE: &str = "";
 
 macro_rules! define_ts_langs {
     ($( $fn_name:ident => $module:ident => $doc:expr ),* $(,)?) => {
@@ -472,6 +483,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: RUST_HIGHLIGHTS,
         injections_query: RUST_INJECTIONS,
         locals_query: RUST_LOCALS,
+        structure_query: RUST_STRUCTURE,
     });
 
     // Java 配置
@@ -483,6 +495,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: JAVA_HIGHLIGHTS,
         injections_query: JAVA_INJECTIONS,
         locals_query: JAVA_LOCALS,
+        structure_query: JAVA_STRUCTURE,
     });
 
     // Python 配置
@@ -494,6 +507,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: PYTHON_HIGHLIGHTS,
         injections_query: PYTHON_INJECTIONS,
         locals_query: PYTHON_LOCALS,
+        structure_query: PYTHON_STRUCTURE,
     });
 
     // Go 配置
@@ -505,6 +519,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: GO_HIGHLIGHTS,
         injections_query: GO_INJECTIONS,
         locals_query: GO_LOCALS,
+        structure_query: GO_STRUCTURE,
     });
 
     // JavaScript 配置
@@ -516,6 +531,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: JAVASCRIPT_HIGHLIGHTS,
         injections_query: JAVASCRIPT_INJECTIONS,
         locals_query: JAVASCRIPT_LOCALS,
+        structure_query: JAVASCRIPT_STRUCTURE,
     });
 
     // C 配置
@@ -527,6 +543,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: C_HIGHLIGHTS,
         injections_query: C_INJECTIONS,
         locals_query: C_LOCALS,
+        structure_query: C_STRUCTURE,
     });
 
     // C++ 配置
@@ -538,6 +555,7 @@ pub fn create_language_registry() -> LanguageRegistry {
         highlights_query: CPP_HIGHLIGHTS,
         injections_query: CPP_INJECTIONS,
         locals_query: CPP_LOCALS,
+        structure_query: CPP_STRUCTURE,
     });
 
     registry

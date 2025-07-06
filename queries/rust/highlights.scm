@@ -1,72 +1,161 @@
-; Function definitions
-(function_item
-  name: (identifier) @function.name) @function
+; Identifiers
 
-; Struct definitions
-(struct_item
-  name: (type_identifier) @struct.name) @struct
+(type_identifier) @type
+(primitive_type) @type.builtin
+(field_identifier) @property
 
-; Enum definitions
-(enum_item
-  name: (type_identifier) @enum.name) @enum
+; Identifier conventions
 
-; Trait definitions
-(trait_item
-  name: (type_identifier) @trait.name) @trait
+; Assume all-caps names are constants
+((identifier) @constant
+ (#match? @constant "^[A-Z][A-Z\\d_]+$'"))
 
-; Impl blocks
-(impl_item
-  type: (type_identifier) @impl.name) @impl
+; Assume uppercase names are enum constructors
+((identifier) @constructor
+ (#match? @constructor "^[A-Z]"))
 
-; Module definitions
-(mod_item
-  name: (identifier) @module.name) @module
+; Assume that uppercase names in paths are types
+((scoped_identifier
+  path: (identifier) @type)
+ (#match? @type "^[A-Z]"))
+((scoped_identifier
+  path: (scoped_identifier
+    name: (identifier) @type))
+ (#match? @type "^[A-Z]"))
+((scoped_type_identifier
+  path: (identifier) @type)
+ (#match? @type "^[A-Z]"))
+((scoped_type_identifier
+  path: (scoped_identifier
+    name: (identifier) @type))
+ (#match? @type "^[A-Z]"))
 
-; Use declarations
-(use_declaration) @use
-
-; Constants
-(const_item
-  name: (identifier) @constant.name) @constant
-
-; Static variables
-(static_item
-  name: (identifier) @static.name) @static
-
-; Let bindings
-(let_declaration
-  pattern: (identifier) @variable.name) @variable
-
-; Parameters
-(parameter
-  pattern: (identifier) @parameter.name) @parameter
-
-; Field declarations
-(field_declaration
-  name: (field_identifier) @field.name) @field
-
-; Macro calls
-(macro_invocation
-  macro: (identifier) @macro.name) @macro
-
-; Type aliases
-(type_item
-  name: (type_identifier) @type_alias.name) @type_alias
+; Assume all qualified names in struct patterns are enum constructors. (They're
+; either that, or struct names; highlighting both as constructors seems to be
+; the less glaring choice of error, visually.)
+(struct_pattern
+  type: (scoped_type_identifier
+    name: (type_identifier) @constructor))
 
 ; Function calls
-(call_expression
-  function: (identifier) @function_call.name) @function_call
 
-; Method calls
+(call_expression
+  function: (identifier) @function)
 (call_expression
   function: (field_expression
-    field: (field_identifier) @method_call.name)) @method_call
+    field: (field_identifier) @function.method))
+(call_expression
+  function: (scoped_identifier
+    "::"
+    name: (identifier) @function))
 
-; Identifiers
-(identifier) @identifier
+(generic_function
+  function: (identifier) @function)
+(generic_function
+  function: (scoped_identifier
+    name: (identifier) @function))
+(generic_function
+  function: (field_expression
+    field: (field_identifier) @function.method))
 
-; Type identifiers
-(type_identifier) @type_identifier
+(macro_invocation
+  macro: (identifier) @function.macro
+  "!" @function.macro)
 
-; Field identifiers
-(field_identifier) @field_identifier
+; Function definitions
+
+(function_item (identifier) @function)
+(function_signature_item (identifier) @function)
+
+(line_comment) @comment
+(block_comment) @comment
+
+(line_comment (doc_comment)) @comment.documentation
+(block_comment (doc_comment)) @comment.documentation
+
+"(" @punctuation.bracket
+")" @punctuation.bracket
+"[" @punctuation.bracket
+"]" @punctuation.bracket
+"{" @punctuation.bracket
+"}" @punctuation.bracket
+
+(type_arguments
+  "<" @punctuation.bracket
+  ">" @punctuation.bracket)
+(type_parameters
+  "<" @punctuation.bracket
+  ">" @punctuation.bracket)
+
+"::" @punctuation.delimiter
+":" @punctuation.delimiter
+"." @punctuation.delimiter
+"," @punctuation.delimiter
+";" @punctuation.delimiter
+
+(parameter (identifier) @variable.parameter)
+
+(lifetime (identifier) @label)
+
+"as" @keyword
+"async" @keyword
+"await" @keyword
+"break" @keyword
+"const" @keyword
+"continue" @keyword
+"default" @keyword
+"dyn" @keyword
+"else" @keyword
+"enum" @keyword
+"extern" @keyword
+"fn" @keyword
+"for" @keyword
+"gen" @keyword
+"if" @keyword
+"impl" @keyword
+"in" @keyword
+"let" @keyword
+"loop" @keyword
+"macro_rules!" @keyword
+"match" @keyword
+"mod" @keyword
+"move" @keyword
+"pub" @keyword
+"raw" @keyword
+"ref" @keyword
+"return" @keyword
+"static" @keyword
+"struct" @keyword
+"trait" @keyword
+"type" @keyword
+"union" @keyword
+"unsafe" @keyword
+"use" @keyword
+"where" @keyword
+"while" @keyword
+"yield" @keyword
+(crate) @keyword
+(mutable_specifier) @keyword
+(use_list (self) @keyword)
+(scoped_use_list (self) @keyword)
+(scoped_identifier (self) @keyword)
+(super) @keyword
+
+(self) @variable.builtin
+
+(char_literal) @string
+(string_literal) @string
+(raw_string_literal) @string
+
+(boolean_literal) @constant.builtin
+(integer_literal) @constant.builtin
+(float_literal) @constant.builtin
+
+(escape_sequence) @escape
+
+(attribute_item) @attribute
+(inner_attribute_item) @attribute
+
+"*" @operator
+"&" @operator
+"'" @operator
