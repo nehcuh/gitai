@@ -58,6 +58,8 @@ pub enum GitaiSubCommand {
     Review(ReviewArgs),
     /// Perform local code scan with ast-grep.
     Scan(ScanArgs),
+    /// Translate various resources using AI
+    Translate(TranslateArgs),
     // Future: Add(AddArgs)
     // Future: Config(ConfigArgs)
 }
@@ -177,6 +179,22 @@ pub struct ScanArgs {
     /// Output format
     #[clap(long, value_name = "FORMAT", default_value = "json")]
     pub format: String,
+}
+
+/// Arguments for the `translate` subcommand
+#[derive(Args, Debug, Clone, PartialEq, Eq)]
+pub struct TranslateArgs {
+    /// Target to translate (rules)
+    #[clap(value_name = "TARGET")]
+    pub target: String,
+
+    /// Force re-translation of existing files
+    #[clap(short, long)]
+    pub force: bool,
+
+    /// Output directory for translated files
+    #[clap(short, long, value_name = "DIR")]
+    pub output: Option<PathBuf>,
 }
 
 // Represents the entire Git diff

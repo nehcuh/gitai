@@ -1086,6 +1086,25 @@ impl AppConfig {
         tracing::info!("配置加载完成，Gitai 准备就绪");
         Ok(config)
     }
+
+    /// Get the path to a specific prompt file
+    pub fn get_prompt_path(&self, prompt_name: &str) -> Result<PathBuf, ConfigError> {
+        let prompt_filename = match prompt_name {
+            "translator" => TRANSLATOR_PROMPT,
+            "commit-generator" => COMMIT_GENERATOR_PROMPT,
+            "commit-deviation" => COMMIT_DIVIATION_PROMPT,
+            "general-helper" => HELPER_PROMPT,
+            "review" => REVIEW_PROMPT,
+            _ => {
+                return Err(ConfigError::Other(format!(
+                    "Unknown prompt type: {}",
+                    prompt_name
+                )));
+            }
+        };
+        
+        Self::extract_file_path(USER_PROMPT_PATH, prompt_filename)
+    }
 }
 
 

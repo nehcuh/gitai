@@ -15,7 +15,8 @@ use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::query_update::{handle_query_update, handle_query_cleanup, handle_query_status};
 use handlers::review::handle_review;
 use handlers::scan::handle_scan;
-use utils::{construct_commit_args, construct_review_args, construct_scan_args};
+use handlers::translate::handle_translate;
+use utils::{construct_commit_args, construct_review_args, construct_scan_args, construct_translate_args};
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -113,6 +114,13 @@ async fn main() -> Result<(), AppError> {
         tracing::info!("🛡️ 执行代码安全扫描");
         let scan_args = construct_scan_args(&args);
         handle_scan(&config, scan_args).await?;
+        return Ok(());
+    }
+
+    if args.iter().any(|arg| arg == "translate") {
+        tracing::info!("🌐 执行 AI 翻译");
+        let translate_args = construct_translate_args(&args);
+        handle_translate(&config, translate_args).await?;
         return Ok(());
     }
 

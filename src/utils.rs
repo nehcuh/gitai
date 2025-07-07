@@ -2,7 +2,7 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs};
+use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs, TranslateArgs};
 use crate::errors::AppError;
 
 pub fn construct_scan_args(args: &[String]) -> ScanArgs {
@@ -109,6 +109,40 @@ pub fn construct_commit_args(args: &[String]) -> CommitArgs {
     }
 }
 
+pub fn construct_translate_args(args: &[String]) -> TranslateArgs {
+    // 重构translate命令参数以便使用clap解析
+    let mut translate_args_vec = vec!["gitai".to_string(), "translate".to_string()];
+
+    // 获取translate之后的所有其他参数
+    let translate_index = args
+        .iter()
+        .position(|a| a == "translate")
+        .unwrap_or(0);
+    if translate_index + 1 < args.len() {
+        translate_args_vec.extend_from_slice(&args[translate_index + 1..]);
+    }
+
+    tracing::debug!("重构的translate命令: {:?}", translate_args_vec);
+
+    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&translate_args_vec) {
+        match parsed_args.command {
+            GitaiSubCommand::Translate(translate_args) => {
+                tracing::debug!("解析出来的 translate 结构为: {:?}", translate_args);
+                return translate_args;
+            }
+            _ => panic!("无法解析 translate 命令,命令为: {:?}", args),
+        }
+    } else {
+        tracing::warn!("解析translate命令失败");
+        // 创建默认的TranslateArgs
+        TranslateArgs {
+            target: "rules".to_string(),
+            force: false,
+            output: None,
+        }
+    }
+}
+
 /// Generates custom help information for gitai, including gitai-specific
 /// commands and options not included in standard git help.
 pub fn generate_gitai_help() -> String {
@@ -164,6 +198,12 @@ pub fn generate_gitai_help() -> String {
     help.push_str("    \x1b[36m--update-rules\x1b[0m        强制更新扫描规则\n");
     help.push_str("    \x1b[36m--output FILE\x1b[0m         保存扫描结果\n");
     help.push_str("    \x1b[36m--remote\x1b[0m              使用远程扫描服务\n\n");
+    
+    // Translate command
+    help.push_str("  \x1b[1mtranslate\x1b[0m              AI 翻译各种资源\n");
+    help.push_str("    \x1b[36mTARGET\x1b[0m                翻译目标 (目前支持: rules)\n");
+    help.push_str("    \x1b[36m-f, --force\x1b[0m           强制重新翻译已存在的文件\n");
+    help.push_str("    \x1b[36m-o, --output DIR\x1b[0m      指定翻译结果输出目录\n\n");
 
     // Standard Git Commands Section  
     help.push_str("📦 \x1b[1;35m标准 Git 命令\x1b[0m (完全兼容)\n");
