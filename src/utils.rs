@@ -115,106 +115,107 @@ pub fn generate_gitai_help() -> String {
     let mut help = String::new();
 
     // Add header and introduction
-    help.push_str("gitai: Git with AI assistance\n");
-    help.push_str("============================\n\n");
-    help.push_str("gitai 是一个增强型 git 工具，提供 AI 辅助功能来简化 git 使用。\n");
-    help.push_str("它可以像标准 git 一样使用，同时提供额外的 AI 功能。\n\n");
+    help.push_str("\x1b[1;36mgitai: Git with AI assistance\x1b[0m\n");
+    help.push_str("===============================\n\n");
+    help.push_str("\x1b[1mgitai\x1b[0m 是一个完全兼容的 Git 替代品，在保持 100% Git 兼容性的同时，\n");
+    help.push_str("为常见的 Git 操作添加了智能 AI 辅助功能。\n\n");
+    help.push_str("\x1b[33m💡 使用提示：\x1b[0m 你可以将 \x1b[1mgitai\x1b[0m 作为 \x1b[1mgit\x1b[0m 的直接替代品使用！\n");
+    help.push_str("   例如：\x1b[1mgitai status\x1b[0m, \x1b[1mgitai add .\x1b[0m, \x1b[1mgitai push\x1b[0m 等等\n\n");
 
-    // Global options
-    help.push_str("全局选项:\n");
-    help.push_str("  --ai                启用 AI 功能\n");
-    help.push_str("                     （可选，启用该选项会使用 AI 捕获标准输出与错误输出，即使运行成功也会启用 AI 解释，默认仅捕捉错误信息）\n");
-    help.push_str("  --noai              禁用 AI 功能\n");
-    help.push_str("                     （可选，启用该选项会使得 gitai 退化为标准 git）\n");
-    // Subcommands
-    help.push_str("Gitai 特有命令:\n");
-    help.push_str("  commit (cm)         增强的 git commit 命令，提供 AI 生成提交信息\n");
-    help.push_str("    选项:\n");
-    help.push_str("      -t, --tree-sitter\n");
-    help.push_str("                      启用 Tree-sitter 语法分析以改进提交信息\n");
-    help.push_str("      -l, --level=TREESITTER_LEVEL\n");
-    help.push_str("                  Tree-sitter 语法分析程度，\n");
-    help.push_str("                      可选值: shallow, medium (默认), deep\n\n");
-    help.push_str("      -a, --all       自动暂存所有已跟踪的修改文件（类似 git commit -a）\n");
-    help.push_str("      -m, --message   直接传递消息给提交\n");
-    help.push_str("      --issue-id=ISSUE_IDS\n");
-    help.push_str("                      在提交信息前添加issue ID前缀 (例如: \"#123,#354\")\n");
-    help.push_str("      -r, --review        在提交前执行代码评审\n\n");
+    // AI Intelligence Modes Section
+    help.push_str("🤖 \x1b[1;32mAI 智能模式\x1b[0m\n");
+    help.push_str("─────────────────\n");
+    help.push_str("  \x1b[1m--ai\x1b[0m                   强制启用 AI 解释所有命令输出\n");
+    help.push_str("                         (成功执行的命令也会显示 AI 分析)\n");
+    help.push_str("  \x1b[1m--noai\x1b[0m                 完全禁用 AI，使用纯 Git 行为\n");
+    help.push_str("  \x1b[33m默认模式\x1b[0m                只在命令失败时提供 AI 错误解释\n\n");
 
-    help.push_str("  review (rv)          执行 AI 辅助的代码评审\n");
-    help.push_str("    选项:\n");
-    help.push_str("      --depth=LEVEL    分析深度级别 (默认: medium)\n");
-    help.push_str("      --focus=AREA     评审重点区域\n");
-    help.push_str("      --lang=LANGUAGE  限制分析到特定语言\n");
-    help.push_str("      --format=FORMAT  输出格式 (默认: text)\n");
-    help.push_str("      --output=FILE    输出文件\n");
-    help.push_str("      --tree-sitter    使用 Tree-sitter 进行增强代码分析（默认）\n");
-    help.push_str("      --commit1=COMMIT 第一个提交引用\n");
-    help.push_str("      --commit2=COMMIT 第二个提交引用（如果比较两个提交）\n");
-    help.push_str("      --stories=IDs    用户故事 ID 列表 (例如: 123,456)\n");
-    help.push_str("      --tasks=IDs      任务 ID 列表 (例如: 789,101)\n");
-    help.push_str("      --defects=IDs    缺陷 ID 列表 (例如: 202,303)\n");
-    help.push_str("      --space-id=ID    DevOps 空间/项目 ID (当指定工作项 ID 时必须提供)\n\n");
+    // AI-Enhanced Commands Section
+    help.push_str("🚀 \x1b[1;34mAI 增强命令\x1b[0m (gitai 特有功能)\n");
+    help.push_str("─────────────────────────────────\n");
+    
+    // Commit command
+    help.push_str("  \x1b[1mcommit\x1b[0m (别名: \x1b[1mcm\x1b[0m)      AI 智能提交信息生成\n");
+    help.push_str("    \x1b[36m-t, --tree-sitter\x1b[0m     启用语法分析增强提交信息质量\n");
+    help.push_str("    \x1b[36m-l, --level LEVEL\x1b[0m     分析深度: shallow | medium | deep\n");
+    help.push_str("    \x1b[36m-a, --all\x1b[0m             自动暂存已跟踪文件 (同 git commit -a)\n");
+    help.push_str("    \x1b[36m-m, --message MSG\x1b[0m     指定提交信息 (禁用 AI 生成)\n");
+    help.push_str("    \x1b[36m--issue-id IDS\x1b[0m        添加 issue 前缀 (如: \"#123,#456\")\n");
+    help.push_str("    \x1b[36m-r, --review\x1b[0m          提交前自动执行代码评审\n\n");
+    
+    // Review command
+    help.push_str("  \x1b[1mreview\x1b[0m (别名: \x1b[1mrv\x1b[0m)      AI 代码评审和质量分析\n");
+    help.push_str("    \x1b[36m--depth LEVEL\x1b[0m         分析深度: shallow | medium | deep\n");
+    help.push_str("    \x1b[36m--focus AREA\x1b[0m          重点关注领域 (如: \"性能\", \"安全\")\n");
+    help.push_str("    \x1b[36m--lang LANGUAGE\x1b[0m       限制分析的编程语言\n");
+    help.push_str("    \x1b[36m--format FORMAT\x1b[0m       输出格式: text | json | markdown\n");
+    help.push_str("    \x1b[36m--output FILE\x1b[0m         保存结果到文件\n");
+    help.push_str("    \x1b[36m--commit1 HASH\x1b[0m        指定第一个提交 (比较模式)\n");
+    help.push_str("    \x1b[36m--commit2 HASH\x1b[0m        指定第二个提交 (比较模式)\n");
+    help.push_str("    \x1b[36m--stories IDS\x1b[0m         关联用户故事 ID\n");
+    help.push_str("    \x1b[36m--tasks IDS\x1b[0m           关联任务 ID\n");
+    help.push_str("    \x1b[36m--defects IDS\x1b[0m         关联缺陷 ID\n");
+    help.push_str("    \x1b[36m--space-id ID\x1b[0m         DevOps 空间/项目 ID\n\n");
+    
+    // Scan command
+    help.push_str("  \x1b[1mscan\x1b[0m                   代码安全和质量扫描\n");
+    help.push_str("    \x1b[36m--path PATH\x1b[0m           指定扫描路径 (默认: 当前目录)\n");
+    help.push_str("    \x1b[36m--full\x1b[0m                全量扫描 (默认: 增量扫描)\n");
+    help.push_str("    \x1b[36m--update-rules\x1b[0m        强制更新扫描规则\n");
+    help.push_str("    \x1b[36m--output FILE\x1b[0m         保存扫描结果\n");
+    help.push_str("    \x1b[36m--remote\x1b[0m              使用远程扫描服务\n\n");
 
-    help.push_str("标准 git 命令:\n");
-    help.push_str("  所有标准 git 命令都可以正常使用，例如:\n");
-    help.push_str("  gitai status, gitai add, gitai push, 等等\n\n");
-    help.push_str("示例:\n");
-    help.push_str("  gitai commit        使用 AI 辅助生成提交信息\n");
-    help.push_str("  gitai commit --noai 禁用 AI，使用标准 git commit\n");
-    help.push_str("  gitai review        对当前更改执行 AI 辅助代码评审\n");
-    help.push_str("  gitai review --depth=deep --focus=\"性能问题\"\n");
-    help.push_str("                      执行深度代码评审，重点关注性能问题\n");
+    // Standard Git Commands Section  
+    help.push_str("📦 \x1b[1;35m标准 Git 命令\x1b[0m (完全兼容)\n");
+    help.push_str("─────────────────────────────\n");
+    help.push_str("  所有标准 Git 命令都可以直接使用，并自动获得智能错误解释：\n");
+    help.push_str("  \x1b[1mgitai status\x1b[0m, \x1b[1mgitai add\x1b[0m, \x1b[1mgitai push\x1b[0m, \x1b[1mgitai pull\x1b[0m, \x1b[1mgitai merge\x1b[0m, \x1b[1mgitai rebase\x1b[0m...\n\n");
 
-    help.push_str("参考：原始 git 命令:\n");
-    help.push_str(
-        "
-        用法: git [-v | --version] [-h | --help] [-C <路径>] [-c <名称>=<值>]
-                   [--exec-path[=<路径>]] [--html-path] [--man-path] [--info-path]
-                   [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--bare]
-                   [--git-dir=<路径>] [--work-tree=<路径>] [--namespace=<名称>]
-                   [--super-prefix=<路径>] [--config-env=<名称>=<环境变量>]
-                   <命令> [<参数>]
+    // Management Commands Section
+    help.push_str("🔧 \x1b[1;33m管理命令\x1b[0m\n");
+    help.push_str("─────────────\n");
+    help.push_str("  \x1b[1mupdate-queries\x1b[0m         更新 Tree-sitter 查询文件\n");
+    help.push_str("  \x1b[1mcleanup-queries\x1b[0m        清理无用的查询文件\n");
+    help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n\n");
 
-        以下是不同场景中常用的Git命令：
+    // Usage Examples Section
+    help.push_str("📚 \x1b[1;37m使用示例\x1b[0m\n");
+    help.push_str("─────────────\n");
+    help.push_str("  \x1b[32m# AI 增强的提交流程\x1b[0m\n");
+    help.push_str("  gitai add .                    # 添加文件\n");
+    help.push_str("  gitai commit                   # AI 生成提交信息\n");
+    help.push_str("  gitai commit -r                # 提交前自动代码评审\n\n");
+    
+    help.push_str("  \x1b[32m# 代码质量分析\x1b[0m\n");
+    help.push_str("  gitai review                   # 评审当前更改\n");
+    help.push_str("  gitai review --depth=deep --focus=\"性能优化\"\n");
+    help.push_str("  gitai scan                     # 代码安全扫描\n");
+    help.push_str("  gitai scan --full --update-rules\n\n");
+    
+    help.push_str("  \x1b[32m# 标准 Git 操作 (带智能错误提示)\x1b[0m\n");
+    help.push_str("  gitai status                   # 查看状态\n");
+    help.push_str("  gitai push origin main         # 推送到远程\n");
+    help.push_str("  gitai merge feature-branch     # 合并分支\n");
+    help.push_str("  gitai rebase main              # 变基操作\n\n");
+    
+    help.push_str("  \x1b[32m# AI 模式控制\x1b[0m\n");
+    help.push_str("  gitai --ai status              # 强制 AI 解释成功输出\n");
+    help.push_str("  gitai --noai commit            # 禁用 AI，纯 Git 行为\n\n");
 
-        开始工作区域（另见：git help tutorial）
-           clone     将仓库克隆到新目录
-           init      创建空Git仓库或重新初始化现有仓库
-
-        处理当前变更（另见：git help everyday）
-           add       将文件内容添加到索引
-           mv        移动或重命名文件、目录或符号链接
-           restore   恢复工作树文件
-           rm        从工作树和索引中移除文件
-
-        查看历史与状态（另见：git help revisions）
-           bisect    使用二分查找定位引入缺陷的提交
-           diff      显示提交间差异、提交与工作树差异等
-           grep      打印匹配指定模式的行
-           log       显示提交日志
-           show      显示各类对象
-           status    显示工作树状态
-
-        扩展、标记和调整公共历史
-           branch    列出、创建或删除分支
-           commit    记录仓库变更
-           merge     合并两个或多个开发历史
-           rebase    在另一基底上重新应用提交
-           reset     将当前HEAD重置到指定状态
-           switch    切换分支
-           tag       创建、列出、删除或验证GPG签名的标签对象
-
-        协作（另见：git help workflows）
-           fetch     从另一仓库下载对象和引用
-           pull      从另一仓库或本地分支获取并整合变更
-           push      更新远程引用及其关联对象
-
-        'git help -a' 和 'git help -g' 会列出可用子命令和部分
-        概念指南。查看特定子命令或概念请使用 'git help <命令>' 或 'git help <概念>'。
-        系统概述请查看 'git help git'。\n\n
-        ",
-    );
+    // Quick Reference Section
+    help.push_str("📖 \x1b[1;36m快速参考\x1b[0m\n");
+    help.push_str("─────────────\n");
+    help.push_str("  \x1b[33m获取更多帮助：\x1b[0m\n");
+    help.push_str("  gitai help                     # 显示此帮助信息\n");
+    help.push_str("  gitai <command> --help         # 获取具体命令帮助\n");
+    help.push_str("  git help <git-command>         # 查看标准 Git 命令帮助\n\n");
+    
+    help.push_str("  \x1b[33m版本信息：\x1b[0m\n");
+    help.push_str("  gitai --version                # 显示 gitai 版本\n");
+    help.push_str("  git --version                  # 显示底层 Git 版本\n\n");
+    
+    help.push_str("\x1b[90m💡 提示：gitai 是 Git 的完全兼容替代品，所有 Git 命令都能正常工作！\x1b[0m\n");
+    help.push_str("\x1b[90m🔗 更多信息：https://github.com/your-repo/gitai\x1b[0m\n");
     help
 }
 

@@ -1098,6 +1098,11 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
+    // Helper function for creating test environment maps
+    fn make_env_map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
     // Helper to create a temporary directory and set it as HOME
     fn setup_test_environment() -> Result<(TempDir, PathBuf, PathBuf), Box<dyn std::error::Error>> {
         let temp_dir = TempDir::new()?;

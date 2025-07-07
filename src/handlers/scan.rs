@@ -11,7 +11,7 @@ pub async fn handle_scan(
     println!("Starting scan...");
     
     // Initialize rule manager and get rules
-    let rule_manager = RuleManager::new(config.scan.rule_manager.clone())?;
+    let mut rule_manager = RuleManager::new(config.scan.rule_manager.clone())?;
     let rule_paths = rule_manager.get_rule_paths(args.update_rules).await?;
     
     if rule_paths.is_empty() {

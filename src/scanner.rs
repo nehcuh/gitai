@@ -118,22 +118,49 @@ impl LocalScanner {
         Ok(scan_result)
     }
 
+    /// Get all files for scanning based on the specified path or current directory
+    /// If no path is specified, scan current directory and all subdirectories
+    /// If path is specified, recursively scan that directory and all subdirectories
     fn get_all_files(&self, path: &Option<String>) -> Result<Vec<PathBuf>, AppError> {
-        let scan_path = if let Some(path) = path {
-            PathBuf::from(path)
+        let scan_path = if let Some(path_str) = path {
+            let path = PathBuf::from(path_str);
+            
+            // Validate that the path exists
+            if !path.exists() {
+                return Err(AppError::FileRead(
+                    path.to_string_lossy().to_string(),
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "Path does not exist")
+                ));
+            }
+            
+            // Convert to absolute path for consistency
+            if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir()
+                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .join(path)
+            }
         } else {
+            // No path specified - scan current directory
             std::env::current_dir()
                 .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
         };
 
+        println!("Scanning directory: {}", scan_path.display());
+        
         let mut files = Vec::new();
-        self.collect_files(&scan_path, &mut files)?;
+        self.collect_files_recursive(&scan_path, &mut files)?;
         
         // Filter out files that should be ignored
         let filtered_files = self.filter_ignored_files(files)?;
+        
+        println!("Found {} files to scan after filtering", filtered_files.len());
         Ok(filtered_files)
     }
 
+    /// Get incremental files (changed files) for scanning
+    /// Respects the path parameter to filter files within the specified directory
     fn get_incremental_files(&self, path: &Option<String>) -> Result<Vec<PathBuf>, AppError> {
         let repo = self.repo.as_ref().ok_or_else(|| {
             AppError::Git(crate::errors::GitError::NotARepository)
@@ -158,77 +185,200 @@ impl LocalScanner {
             None,
         ).map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
 
+        // Get repository root directory
+        let repo_workdir = repo.workdir()
+            .ok_or_else(|| AppError::Git(crate::errors::GitError::Other("Repository has no working directory".to_string())))?;
+
         // Filter by scan path if specified
-        if let Some(scan_path) = path {
-            let scan_path_buf = PathBuf::from(scan_path);
-            files.retain(|f| f.starts_with(&scan_path_buf));
-        }
+        let filtered_files: Vec<PathBuf> = if let Some(scan_path_str) = path {
+            let scan_path = PathBuf::from(scan_path_str);
+            
+            // Validate that the scan path exists
+            if !scan_path.exists() {
+                return Err(AppError::FileRead(
+                    scan_path.to_string_lossy().to_string(),
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "Scan path does not exist")
+                ));
+            }
+            
+            // Convert scan path to absolute if it's relative
+            let absolute_scan_path = if scan_path.is_absolute() {
+                scan_path
+            } else {
+                std::env::current_dir()
+                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .join(scan_path)
+            };
+            
+            println!("Filtering incremental scan files for directory: {}", absolute_scan_path.display());
+            
+            // Filter files that are within the specified scan path
+            files.into_iter()
+                .filter_map(|relative_file| {
+                    let absolute_file = repo_workdir.join(&relative_file);
+                    if absolute_file.starts_with(&absolute_scan_path) {
+                        Some(absolute_file)
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            // No path filter - convert all relative paths to absolute
+            files.into_iter()
+                .map(|relative_file| repo_workdir.join(relative_file))
+                .collect()
+        };
 
-        // Convert to absolute paths
-        let current_dir = std::env::current_dir()
-            .map_err(|e| AppError::FileRead("current directory".to_string(), e))?;
-        let absolute_files: Vec<PathBuf> = files.into_iter()
-            .map(|f| current_dir.join(f))
+        // Filter out ignored files and validate they still exist
+        let valid_files: Vec<PathBuf> = filtered_files.into_iter()
+            .filter(|file| file.exists())
             .collect();
-
-        Ok(absolute_files)
+        
+        let final_files = self.filter_ignored_files(valid_files)?;
+        
+        println!("Found {} changed files to scan after filtering", final_files.len());
+        Ok(final_files)
     }
 
-    fn collect_files(&self, path: &Path, files: &mut Vec<PathBuf>) -> Result<(), AppError> {
+    /// Recursively collect all files from a given path
+    /// If path is a file, add it to the list
+    /// If path is a directory, recursively scan all subdirectories
+    fn collect_files_recursive(&self, path: &Path, files: &mut Vec<PathBuf>) -> Result<(), AppError> {
         if path.is_file() {
             files.push(path.to_path_buf());
         } else if path.is_dir() {
-            let entries = fs::read_dir(path)
-                .map_err(|e| AppError::FileRead(path.to_string_lossy().to_string(), e))?;
+            self.scan_directory_recursive(path, files)?;
+        }
+        Ok(())
+    }
+    
+    /// Recursively scan a directory and all its subdirectories
+    fn scan_directory_recursive(&self, dir_path: &Path, files: &mut Vec<PathBuf>) -> Result<(), AppError> {
+        let entries = fs::read_dir(dir_path)
+            .map_err(|e| AppError::FileRead(dir_path.to_string_lossy().to_string(), e))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|e| AppError::FileRead("directory entry".to_string(), e))?;
+            let entry_path = entry.path();
             
-            for entry in entries {
-                let entry = entry.map_err(|e| AppError::FileRead("directory entry".to_string(), e))?;
-                let entry_path = entry.path();
-                
-                // Skip hidden directories and common ignore patterns
-                if let Some(file_name) = entry_path.file_name() {
-                    let file_name_str = file_name.to_string_lossy();
-                    if file_name_str.starts_with('.') || 
-                       file_name_str == "node_modules" || 
-                       file_name_str == "target" ||
-                       file_name_str == "__pycache__" {
-                        continue;
-                    }
-                }
-                
-                self.collect_files(&entry_path, files)?;
+            // Skip entries that should be ignored
+            if self.should_ignore_path(&entry_path) {
+                continue;
+            }
+            
+            if entry_path.is_file() {
+                files.push(entry_path);
+            } else if entry_path.is_dir() {
+                // Recursively scan subdirectory
+                self.scan_directory_recursive(&entry_path, files)?;
             }
         }
         Ok(())
     }
+    
+    /// Check if a path should be ignored during scanning
+    fn should_ignore_path(&self, path: &Path) -> bool {
+        if let Some(file_name) = path.file_name() {
+            let file_name_str = file_name.to_string_lossy();
+            
+            // Skip hidden files and directories (starting with .)
+            if file_name_str.starts_with('.') {
+                return true;
+            }
+            
+            // Skip common build and dependency directories
+            match file_name_str.as_ref() {
+                "node_modules" | "target" | "__pycache__" | "build" | "dist" |
+                "vendor" | "deps" | ".git" | ".svn" | ".hg" | ".bzr" |
+                "coverage" | ".nyc_output" | "htmlcov" | ".pytest_cache" |
+                ".mypy_cache" | ".tox" | ".venv" | "venv" | "env" |
+                "Pods" | "DerivedData" | ".gradle" | ".idea" | ".vscode" => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
 
+    /// Filter files to only include those that should be scanned
+    /// Includes programming language files and common configuration files
     fn filter_ignored_files(&self, files: Vec<PathBuf>) -> Result<Vec<PathBuf>, AppError> {
-        // For now, implement basic filtering
-        // In a more complete implementation, we would parse .gitignore files
         let filtered: Vec<PathBuf> = files.into_iter()
-            .filter(|path| {
-                // Only scan text files that are likely to contain code
-                if let Some(extension) = path.extension() {
-                    matches!(extension.to_str(), Some("rs") | Some("py") | Some("js") | Some("ts") | 
-                            Some("java") | Some("c") | Some("cpp") | Some("go") | Some("rb") | 
-                            Some("php") | Some("cs") | Some("swift") | Some("kt") | Some("scala") |
-                            Some("html") | Some("css") | Some("scss") | Some("less") | Some("vue") |
-                            Some("jsx") | Some("tsx") | Some("json") | Some("yaml") | Some("yml") |
-                            Some("xml") | Some("sql") | Some("sh") | Some("bash") | Some("zsh") |
-                            Some("fish") | Some("ps1") | Some("dockerfile") | Some("tf") | Some("hcl"))
-                } else {
-                    // Check if it's a common file without extension
-                    path.file_name()
-                        .and_then(|n| n.to_str())
-                        .map(|name| matches!(name.to_lowercase().as_str(), 
-                                           "dockerfile" | "makefile" | "rakefile" | "gemfile" | 
-                                           "pipfile" | "requirements" | "setup" | "configure"))
-                        .unwrap_or(false)
-                }
-            })
+            .filter(|path| self.should_scan_file(path))
             .collect();
             
         Ok(filtered)
+    }
+    
+    /// Check if a file should be scanned based on its extension and name
+    fn should_scan_file(&self, path: &Path) -> bool {
+        // Skip if the file doesn't exist (could have been deleted)
+        if !path.exists() {
+            return false;
+        }
+        
+        // Skip if it's a directory (should have been handled earlier)
+        if path.is_dir() {
+            return false;
+        }
+        
+        // Check by file extension
+        if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
+            match extension.to_lowercase().as_str() {
+                // Programming languages
+                "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "cc" | "cxx" |
+                "go" | "rb" | "php" | "cs" | "swift" | "kt" | "scala" | "m" | "mm" |
+                "dart" | "lua" | "perl" | "pl" | "r" | "jl" | "f90" | "f95" | "f03" |
+                
+                // Web technologies
+                "html" | "htm" | "css" | "scss" | "sass" | "less" | "vue" | "svelte" |
+                "jsx" | "tsx" | "astro" | "handlebars" | "hbs" | "mustache" |
+                
+                // Configuration and data files
+                "json" | "yaml" | "yml" | "toml" | "ini" | "cfg" | "conf" | "config" |
+                "xml" | "plist" | "properties" | "env" | "envrc" |
+                
+                // Database and query files
+                "sql" | "mysql" | "pgsql" | "sqlite" | "nosql" |
+                
+                // Scripts and automation
+                "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" |
+                "makefile" | "mk" | "cmake" | "gradle" | "ant" |
+                
+                // Infrastructure as Code
+                "tf" | "hcl" | "terraform" | "bicep" | "arm" | "cloudformation" |
+                "k8s" | "kubernetes" | "helm" | "kustomization" |
+                
+                // Documentation that might contain code
+                "md" | "rst" | "asciidoc" | "adoc" | "tex" | "org" |
+                
+                // Other formats
+                "dockerfile" | "containerfile" | "proto" | "thrift" | "avro" |
+                "graphql" | "gql" | "prisma" | "schema" => true,
+                
+                _ => false,
+            }
+        } else {
+            // Check files without extensions by name
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                match file_name.to_lowercase().as_str() {
+                    // Common files without extensions
+                    "dockerfile" | "containerfile" | "makefile" | "rakefile" |
+                    "gemfile" | "pipfile" | "requirements" | "setup" | "configure" |
+                    "vagrantfile" | "jenkinsfile" | "gruntfile" | "gulpfile" |
+                    "webpack" | "rollup" | "vite" | "tsconfig" | "jsconfig" |
+                    "eslintrc" | "prettier" | "babel" | "jest" |
+                    "gitignore" | "gitattributes" | "editorconfig" |
+                    "license" | "copyright" | "authors" | "contributors" |
+                    "changelog" | "history" | "news" | "readme" => true,
+                    
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        }
     }
 
     fn load_rules(&mut self, rule_paths: &[PathBuf]) -> Result<Vec<AstGrepRule>, AppError> {
@@ -464,6 +614,7 @@ impl LocalScanner {
         Ok(matches)
     }
 
+    /// Apply enhanced rule matching using the updated collect_files method
     fn apply_enhanced_rule_matching(
         &self,
         content: &str,

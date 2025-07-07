@@ -50,7 +50,7 @@ pub struct GitaiArgs {
 /// Represents the specific subcommands, that `gitai` itself understands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum GitaiSubCommand {
-    /// Handle git command operation, potentially with AI assistance for message generation
+    /// Handle git commit operation, potentially with AI assistance for message generation
     #[clap(alias = "cm")]
     Commit(CommitArgs),
     /// Perform code review with AI assistance.
