@@ -1,4 +1,3 @@
-use std::fs;
 use tempfile::TempDir;
 use gitai::tree_sitter_analyzer::query_manager::{QueryManager, QueryManagerConfig, QuerySource};
 use gitai::tree_sitter_analyzer::analyzer::TreeSitterAnalyzer;

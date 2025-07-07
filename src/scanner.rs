@@ -886,6 +886,7 @@ impl LocalScanner {
 
 // Remote Scanner Framework
 // This provides an extensible framework for remote scanning services
+#[allow(async_fn_in_trait)]
 pub trait RemoteScanner {
     /// Perform a remote scan
     async fn scan_remote(&self, args: &ScanArgs, rules: &[AstGrepRule]) -> Result<ScanResult, AppError>;
@@ -902,6 +903,7 @@ pub trait RemoteScanner {
 
 // Default placeholder implementation for future extension
 pub struct DefaultRemoteScanner {
+    #[allow(dead_code)]
     config: AppConfig,
 }
 

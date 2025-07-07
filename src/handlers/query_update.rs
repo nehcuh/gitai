@@ -136,9 +136,7 @@ pub fn handle_query_status() -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::config::TreeSitterConfig;
-    use tempfile::TempDir;
+    // Unused imports removed - these can be re-added when more comprehensive tests are implemented
 
     #[test]
     fn test_query_handlers() {

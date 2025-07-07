@@ -18,7 +18,9 @@
       "Bash(git add:*)",
       "Bash(git push:*)",
       "WebFetch(domain:docs.rs)",
-      "WebFetch(domain:ast-grep.github.io)"
+      "WebFetch(domain:ast-grep.github.io)",
+      "Bash(timeout 60s cargo test --lib 2 >& 1)",
+      "Bash(RUST_BACKTRACE=1 cargo test config::tests::test_load_successful_custom_config -- --nocapture)"
     ],
     "deny": []
   }

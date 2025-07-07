@@ -222,39 +222,47 @@ async fn analyze_diff_with_tree_sitter(
     diff: &str,
     args: &CommitArgs,
 ) -> Result<(String, Option<DiffAnalysis>), AppError> {
-    // Initialize TreeSitter analyzer with analysis depth
-    let mut ts_config = TreeSitterConfig::default();
+    let diff_owned = diff.to_string();
+    let args_depth = args.depth.clone();
     
-    // Set analysis depth based on args
-    if let Some(depth) = &args.depth {
-        ts_config.analysis_depth = depth.clone();
-    } else {
-        ts_config.analysis_depth = "medium".to_string(); // Default for commit
-    }
+    // Wrap CPU-intensive operations in spawn_blocking to avoid blocking the tokio runtime
+    let result = tokio::task::spawn_blocking(move || {
+        // Initialize TreeSitter analyzer with analysis depth
+        let mut ts_config = TreeSitterConfig::default();
+        
+        // Set analysis depth based on args
+        if let Some(depth) = args_depth {
+            ts_config.analysis_depth = depth;
+        } else {
+            ts_config.analysis_depth = "medium".to_string(); // Default for commit
+        }
+        
+        let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
+            tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
+
+        // Parse the diff to get structured representation
+        let git_diff = parse_git_diff(&diff_owned).map_err(|e| {
+            tracing::error!("解析Git差异失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
+
+        // Generate analysis using TreeSitter
+        let analysis = analyzer.analyze_diff(&diff_owned).map_err(|e| {
+            tracing::error!("执行差异分析失败: {:?}", e);
+            AppError::TreeSitter(e)
+        })?;
+        
+        tracing::debug!("差异分析结果: {:?}", analysis);
+
+        // Create detailed analysis text
+        let analysis_text = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
+
+        Ok((analysis_text, Some(analysis)))
+    }).await.map_err(|e| AppError::Generic(format!("Task join error: {}", e)))?;
     
-    let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
-        tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
-
-    // Parse the diff to get structured representation
-    let git_diff = parse_git_diff(diff).map_err(|e| {
-        tracing::error!("解析Git差异失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
-
-    // Generate analysis using TreeSitter
-    let analysis = analyzer.analyze_diff(diff).map_err(|e| {
-        tracing::error!("执行差异分析失败: {:?}", e);
-        AppError::TreeSitter(e)
-    })?;
-    
-    tracing::debug!("差异分析结果: {:?}", analysis);
-
-    // Create detailed analysis text
-    let analysis_text = format_tree_sitter_analysis_for_commit(&analysis, &git_diff);
-
-    Ok((analysis_text, Some(analysis)))
+    result
 }
 
 /// Generate commit message with Tree-sitter analysis results
