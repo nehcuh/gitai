@@ -1,5 +1,5 @@
 use crate::{
-    config::{AppConfig, AIConfig, ReviewConfig, TreeSitterConfig},
+    config::{AppConfig, AIConfig, ReviewConfig, TreeSitterConfig, LanguageConfig},
     handlers::intelligent_git::handle_intelligent_git_command,
     types::general::CommandOutput,
 };
@@ -28,6 +28,7 @@ fn create_test_config_for_integration() -> AppConfig {
         prompts,
         tree_sitter: TreeSitterConfig::default(),
         account: None,
+        language: LanguageConfig::default(),
         review: ReviewConfig {
             auto_save: true,
             storage_path: "~/test_review_results".to_string(),

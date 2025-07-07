@@ -39,9 +39,9 @@ pub struct GitaiArgs {
     #[clap(long, global = true)]
     pub noai: bool,
 
-    /// Specify output language
-    // #[clap(long, global = true)]
-    // pub language: Option<String>,
+    /// Specify output language (cn|us|default)
+    #[clap(long, global = true, value_name = "LANG")]
+    pub lang: Option<String>,
 
     #[command(subcommand)]
     pub command: GitaiSubCommand,
@@ -108,9 +108,9 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "AREA")]
     pub focus: Option<String>,
 
-    /// Limit analysis to specific language
-    #[clap(long, value_name = "LANGUAGE")]
-    pub lang: Option<String>,
+    /// Limit analysis to specific programming language
+    #[clap(long, value_name = "PROGRAMMING_LANGUAGE")]
+    pub language: Option<String>,
 
     /// Output format
     #[clap(long, value_name = "FORMAT", default_value = "text")]

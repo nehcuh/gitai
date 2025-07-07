@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    ai::{create_review_prompt, execute_review_request},
+    ai::{create_review_prompt, execute_review_request_with_language},
     git::extract_diff_for_review,
 };
 use std::sync::Arc;
@@ -28,6 +28,7 @@ use std::{collections::HashMap, env, fs, io::Write, time::Instant}; // env was a
 pub async fn handle_review(
     config: &mut AppConfig,
     review_args: ReviewArgs,
+    language: Option<&str>,
 ) -> Result<(), AppError> {
     // Validate arguments
     if (review_args.stories.is_some()
@@ -188,13 +189,13 @@ pub async fn handle_review(
             Err(e) => {
                 tracing::warn!("增强型 AI 分析失败: {}，回退到标准评审", e);
                 // Fallback to standard review
-                perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
+                perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results, language).await?
             }
         }
     } else {
         // Standard AI review without work items
         tracing::info!("执行标准 AI 代码评审");
-        perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results).await?
+        perform_standard_ai_review(config, &diff_text, &analysis_text, &review_args, &git_diff, &language_info, &fetched_work_items, &analysis_results, language).await?
     };
 
     // Format and output the review
@@ -469,7 +470,7 @@ fn extract_language_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AIConfig, AppConfig, TreeSitterConfig}; // Removed AccountConfig
+    use crate::config::{AIConfig, AppConfig, TreeSitterConfig, LanguageConfig}; // Removed AccountConfig
     use crate::errors::AppError;
     use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
     use std::collections::HashMap;
@@ -478,7 +479,7 @@ mod tests {
         ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -498,6 +499,7 @@ mod tests {
             tree_sitter: TreeSitterConfig::default(),
             review: Default::default(),
             account: None,
+            language: LanguageConfig::default(),
             scan: Default::default(),
             prompts: HashMap::new(),
         }
@@ -511,7 +513,7 @@ mod tests {
             ..default_review_args()
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         assert!(
             matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
         );
@@ -525,7 +527,7 @@ mod tests {
             ..default_review_args()
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         assert!(
             matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
         );
@@ -539,7 +541,7 @@ mod tests {
             ..default_review_args()
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         assert!(
             matches!(result, Err(AppError::Generic(msg)) if msg == "When specifying stories, tasks, or defects, --space-id is required.")
         );
@@ -554,7 +556,7 @@ mod tests {
             ..default_review_args()
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         // Expecting a different error because validation should pass, and git diff will fail.
         // Or Ok(()) if somehow the diff doesn't run or returns empty.
         match result {
@@ -579,7 +581,7 @@ mod tests {
             ..default_review_args()
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         match result {
             Err(AppError::Generic(msg))
                 if msg == "When specifying stories, tasks, or defects, --space-id is required." =>
@@ -599,7 +601,7 @@ mod tests {
             ..default_review_args() // All work items and space_id are None by default
         };
 
-        let result = handle_review(&mut config, review_args).await;
+        let result = handle_review(&mut config, review_args, None).await;
         match result {
             Err(AppError::Generic(msg))
                 if msg == "When specifying stories, tasks, or defects, --space-id is required." =>
@@ -873,6 +875,7 @@ async fn perform_enhanced_ai_analysis(
 #[cfg(test)]
 mod review_save_tests {
     use super::*;
+    use crate::config::LanguageConfig;
 
 
     fn create_test_config_for_save() -> AppConfig {
@@ -895,6 +898,7 @@ mod review_save_tests {
                 include_in_commit: true,
             },
             account: None,
+            language: LanguageConfig::default(),
             scan: Default::default(),
             prompts,
         }
@@ -988,6 +992,7 @@ async fn perform_standard_ai_review(
     language_info: &str,
     work_items: &[WorkItem],
     analysis_results: &Option<crate::tree_sitter_analyzer::core::DiffAnalysis>,
+    output_language: Option<&str>,
 ) -> Result<String, AppError> {
     // Generate AI prompt with enhanced context
     let prompt_result: Result<String, AppError> = generate_ai_review_prompt(
@@ -1005,7 +1010,7 @@ async fn perform_standard_ai_review(
     // Try to send to AI
     let ai_start = Instant::now();
     tracing::info!("发送至 AI 进行代码评审");
-    match send_review_to_ai(config, &prompt).await {
+    match send_review_to_ai(config, &prompt, output_language).await {
         Ok(response) => {
             tracing::info!("AI评审完成，耗时: {:?}", ai_start.elapsed());
             tracing::debug!("AI响应长度: {} 字符", response.len());
@@ -1161,17 +1166,32 @@ async fn generate_ai_review_prompt(
 }
 
 /// Send review request to AI
-async fn send_review_to_ai(config: &AppConfig, prompt: &str) -> Result<String, AIError> {
-    // Load system prompt from review.md
-    let system_prompt = match config.prompts.get("review") {
-        Some(prompt) => prompt.clone(),
-        None => {
-            // Fallback to embedded assets/review.md if not configured
-            include_str!("../../assets/review.md").to_string()
+async fn send_review_to_ai(config: &AppConfig, prompt: &str, language: Option<&str>) -> Result<String, AIError> {
+    // Get effective language
+    let effective_language_string = match language {
+        Some(lang) => {
+            let lang_str = lang.to_string();
+            config.get_output_language(Some(&lang_str))
         }
+        None => config.get_output_language(None)
     };
+    let effective_language = effective_language_string.as_str();
+    
+    // Load language-specific system prompt
+    let system_prompt = config
+        .get_language_prompt_content("review", &effective_language)
+        .unwrap_or_else(|e| {
+            tracing::warn!("获取{}语言的review prompt失败: {}，尝试使用默认prompt", effective_language, e);
+            config.prompts
+                .get("review")
+                .cloned()
+                .unwrap_or_else(|| {
+                    // Fallback to embedded assets/review.md if not configured
+                    include_str!("../../assets/review.md").to_string()
+                })
+        });
 
-    execute_review_request(config, &system_prompt, prompt).await
+    execute_review_request_with_language(config, &system_prompt, prompt, Some(effective_language)).await
 }
 
 /// Generate fallback review when AI is unavailable
@@ -1245,7 +1265,7 @@ async fn format_and_output_review(review_text: &str, args: &ReviewArgs) -> Resul
                 "generator": "gitai",
                 "analysis_depth": args.depth,
                 "focus": args.focus,
-                "language": args.lang
+                "language": args.language
             })
             .to_string()
         }

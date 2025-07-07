@@ -49,6 +49,21 @@ async fn main() -> Result<(), AppError> {
     // ========================================
     let mut use_ai = false;
     let mut disable_ai = false;
+    let mut language_param: Option<String> = None;
+    
+    // Check for language parameter
+    for i in 0..args.len() {
+        if args[i] == "--lang" && i + 1 < args.len() {
+            language_param = Some(args[i + 1].clone());
+            tracing::info!("🌐 指定输出语言: {}", args[i + 1]);
+            break;
+        } else if args[i].starts_with("--lang=") {
+            let lang = args[i].strip_prefix("--lang=").unwrap();
+            language_param = Some(lang.to_string());
+            tracing::info!("🌐 指定输出语言: {}", lang);
+            break;
+        }
+    }
     
     // Check for AI mode flags
     if args.iter().any(|arg| arg == "--ai") {
@@ -74,8 +89,26 @@ async fn main() -> Result<(), AppError> {
         return Ok(());
     }
     
-    // Remove AI flags from arguments before further processing
-    args.retain(|arg| arg != "--ai" && arg != "--noai");
+    // Remove AI and language flags from arguments before further processing
+    let mut cleaned_args = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--ai" || arg == "--noai" {
+            // Skip AI flags
+            i += 1;
+        } else if arg == "--lang" {
+            // Skip --lang and its value
+            i += 2;
+        } else if arg.starts_with("--lang=") {
+            // Skip --lang=value
+            i += 1;
+        } else {
+            cleaned_args.push(arg.clone());
+            i += 1;
+        }
+    }
+    args = cleaned_args;
     
     if !use_ai {
         tracing::info!("🧠 智能 AI 模式：仅在出错时提供解释");
@@ -106,14 +139,14 @@ async fn main() -> Result<(), AppError> {
     if args.iter().any(|arg| arg == "review" || arg == "rv") {
         tracing::info!("🔍 执行 AI 代码评审");
         let review_args = construct_review_args(&args);
-        handle_review(&mut config, review_args).await?;
+        handle_review(&mut config, review_args, language_param.as_deref()).await?;
         return Ok(());
     }
 
     if args.iter().any(|arg| arg == "scan") {
         tracing::info!("🛡️ 执行代码安全扫描");
         let scan_args = construct_scan_args(&args);
-        handle_scan(&config, scan_args).await?;
+        handle_scan(&config, scan_args, language_param.as_deref()).await?;
         return Ok(());
     }
 

@@ -486,7 +486,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use crate::{
-        config::{AIConfig, TreeSitterConfig},
+        config::{AIConfig, TreeSitterConfig, LanguageConfig},
         types::git::CommitArgs,
     };
 
@@ -507,6 +507,7 @@ mod tests {
             tree_sitter: TreeSitterConfig::default(),
             review: crate::config::ReviewConfig::default(),
             account: None,
+            language: LanguageConfig::default(),
             scan: Default::default(),
             prompts,
         }

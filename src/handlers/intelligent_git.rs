@@ -119,7 +119,7 @@ mod tests {
     use std::collections::HashMap;
     use std::process::ExitStatus;
     use std::os::unix::process::ExitStatusExt;
-    use crate::config::{AIConfig, ReviewConfig};
+    use crate::config::{AIConfig, ReviewConfig, LanguageConfig};
     
     fn create_test_config() -> AppConfig {
         let mut prompts = HashMap::new();
@@ -142,6 +142,7 @@ mod tests {
                 max_age_hours: 168,
                 include_in_commit: false,
             },
+            language: LanguageConfig::default(),
             scan: Default::default(),
         }
     }

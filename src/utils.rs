@@ -56,7 +56,7 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
         ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -512,7 +512,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -533,7 +533,7 @@ mod tests {
             "gitai", "review",
             "--depth=deep",
             "--focus", "performance",
-            "--lang", "Rust",
+            "--language", "Rust",
             "--format", "json",
             "--output", "out.txt",
             "--tree-sitter",
@@ -548,7 +548,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "deep".to_string(),
             focus: Some("performance".to_string()),
-            lang: Some("Rust".to_string()),
+            language: Some("Rust".to_string()),
             format: "json".to_string(),
             output: Some("out.txt".to_string()),
             tree_sitter: true,
@@ -569,7 +569,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "shallow".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -594,7 +594,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -621,7 +621,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,

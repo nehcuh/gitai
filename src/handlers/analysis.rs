@@ -370,7 +370,7 @@ impl AIAnalysisEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AIConfig, AppConfig};
+    use crate::config::{AIConfig, AppConfig, LanguageConfig};
 
     fn create_test_config() -> Arc<AppConfig> {
         use std::collections::HashMap;
@@ -385,6 +385,7 @@ mod tests {
             tree_sitter: Default::default(),
             review: Default::default(),
             account: None,
+            language: LanguageConfig::default(),
             scan: Default::default(),
             prompts: HashMap::new(),
         })
