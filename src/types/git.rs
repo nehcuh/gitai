@@ -195,6 +195,10 @@ pub struct TranslateArgs {
     /// Output directory for translated files
     #[clap(short, long, value_name = "DIR")]
     pub output: Option<PathBuf>,
+
+    /// Target language for translation (cn|us)
+    #[clap(short = 'l', long = "to-lang", value_name = "LANG", default_value = "cn")]
+    pub to_language: String,
 }
 
 // Represents the entire Git diff

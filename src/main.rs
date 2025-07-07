@@ -14,7 +14,7 @@ use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::query_update::{handle_query_update, handle_query_cleanup, handle_query_status};
 use handlers::review::handle_review;
-use handlers::scan::handle_scan;
+use handlers::scan::{handle_scan, handle_update_scan_rules};
 use handlers::translate::handle_translate;
 use utils::{construct_commit_args, construct_review_args, construct_scan_args, construct_translate_args};
 
@@ -184,6 +184,11 @@ async fn main() -> Result<(), AppError> {
             "query-status" => {
                 tracing::info!("📊 显示查询文件状态");
                 handle_query_status()?;
+                return Ok(());
+            }
+            "update-scan-rules" => {
+                tracing::info!("🔄 更新代码扫描规则");
+                handle_update_scan_rules(&config).await?;
                 return Ok(());
             }
             _ => {

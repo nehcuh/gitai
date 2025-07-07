@@ -24,7 +24,7 @@ pub async fn handle_translate(config: &AppConfig, args: TranslateArgs) -> Result
 
 /// 处理规则翻译
 async fn handle_translate_rules(config: &AppConfig, args: TranslateArgs) -> Result<(), AppError> {
-    println!("{}", "🌐 开始翻译代码扫描规则...".blue());
+    println!("{}", format!("🌐 开始翻译代码扫描规则到{}语言...", args.to_language).blue());
     
     // 初始化规则管理器
     let mut rule_manager = RuleManager::new(config.scan.rule_manager.clone())
@@ -53,9 +53,9 @@ async fn handle_translate_rules(config: &AppConfig, args: TranslateArgs) -> Resu
         return Err(AppError::Generic("规则目录不存在".to_string()));
     }
     
-    // 设置翻译输出目录
+    // 设置翻译输出目录 - 使用目标语言目录
     let translated_dir = args.output.unwrap_or_else(|| {
-        rules_dir.parent().unwrap().join("translated")
+        rules_dir.parent().unwrap().join(&args.to_language)
     });
     
     if !translated_dir.exists() {
@@ -64,7 +64,7 @@ async fn handle_translate_rules(config: &AppConfig, args: TranslateArgs) -> Resu
     }
     
     println!("{}", format!("📂 规则目录: {}", rules_dir.display()).cyan());
-    println!("{}", format!("📂 翻译输出目录: {}", translated_dir.display()).cyan());
+    println!("{}", format!("📂 {}语言翻译输出目录: {}", args.to_language, translated_dir.display()).cyan());
     
     // 加载translator prompt
     let translator_prompt = load_translator_prompt(config)?;

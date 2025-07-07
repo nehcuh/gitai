@@ -3,7 +3,9 @@ use crate::errors::AppError;
 use crate::rule_manager::RuleManager;
 use crate::scanner::LocalScanner;
 use crate::types::git::ScanArgs;
+use colored::Colorize;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn handle_scan(
     config: &AppConfig,
@@ -89,18 +91,21 @@ async fn get_language_specific_rules(
         None => config.get_output_language(None)
     };
     
-    // If Chinese language is specified, try to use translated rules
-    if effective_language == "cn" {
-        match find_translated_rules(rule_manager, args).await {
+    // If language-specific language is specified, try to use translated rules
+    if effective_language == "cn" || effective_language == "us" {
+        match find_translated_rules(rule_manager, args, &effective_language).await {
             Ok(translated_paths) if !translated_paths.is_empty() => {
-                println!("🌐 使用中文翻译的扫描规则 ({}个规则文件)", translated_paths.len());
+                let language_name = if effective_language == "cn" { "中文" } else { "英文" };
+                println!("🌐 使用{}翻译的扫描规则 ({}个规则文件)", language_name, translated_paths.len());
                 return Ok(translated_paths);
             }
             Ok(_) => {
-                println!("🌐 未找到中文翻译规则，使用默认规则");
+                let language_name = if effective_language == "cn" { "中文" } else { "英文" };
+                println!("🌐 未找到{}翻译规则，使用默认规则", language_name);
             }
             Err(e) => {
-                tracing::warn!("查找中文翻译规则时出错: {}，使用默认规则", e);
+                let language_name = if effective_language == "cn" { "中文" } else { "英文" };
+                tracing::warn!("查找{}翻译规则时出错: {}，使用默认规则", language_name, e);
             }
         }
     }
@@ -111,10 +116,11 @@ async fn get_language_specific_rules(
     Ok(default_paths)
 }
 
-/// Find translated rules in the translated directory
+/// Find translated rules in the language-specific directory
 async fn find_translated_rules(
     rule_manager: &mut RuleManager,
     args: &ScanArgs,
+    language: &str,
 ) -> Result<Vec<PathBuf>, AppError> {
     // First ensure we have the latest rules
     let default_rule_paths = rule_manager.get_rule_paths(args.update_rules).await?;
@@ -130,11 +136,12 @@ async fn find_translated_rules(
         .and_then(|p| p.parent()) // Go up from rules/language/ to rules/
         .ok_or_else(|| AppError::Generic("无法确定规则基础目录".to_string()))?;
     
-    // Look for translated directory
-    let translated_dir = rules_base_dir.join("translated");
+    // Look for language-specific translated directory
+    // For "cn" language, look for "cn" directory, for "us" look for "us", etc.
+    let translated_dir = rules_base_dir.join(language);
     
     if !translated_dir.exists() {
-        tracing::debug!("翻译目录不存在: {:?}", translated_dir);
+        tracing::debug!("{}语言翻译目录不存在: {:?}", language, translated_dir);
         return Ok(Vec::new());
     }
     
@@ -143,9 +150,9 @@ async fn find_translated_rules(
     scan_translated_directory(&translated_dir, &mut translated_paths)?;
     
     if translated_paths.is_empty() {
-        tracing::debug!("翻译目录中未找到规则文件: {:?}", translated_dir);
+        tracing::debug!("{}语言翻译目录中未找到规则文件: {:?}", language, translated_dir);
     } else {
-        tracing::info!("在翻译目录中找到{}个规则文件", translated_paths.len());
+        tracing::info!("在{}语言翻译目录中找到{}个规则文件", language, translated_paths.len());
     }
     
     Ok(translated_paths)
@@ -172,4 +179,59 @@ fn scan_translated_directory(dir: &PathBuf, paths: &mut Vec<PathBuf>) -> Result<
     }
     
     Ok(())
+}
+
+/// Handle scan rules update command
+pub async fn handle_update_scan_rules(config: &AppConfig) -> Result<(), AppError> {
+    println!("{}", "🔄 开始更新代码扫描规则...".blue());
+    
+    // Initialize rule manager
+    let mut rule_manager = RuleManager::new(config.scan.rule_manager.clone())
+        .map_err(|e| AppError::Generic(format!("规则管理器初始化失败: {}", e)))?;
+    
+    // Check current version info
+    if let Some(version_info) = rule_manager.get_version_info() {
+        println!("{}", format!("📋 当前规则版本: {}", version_info.commit_hash).cyan());
+        println!("{}", format!("📅 最后更新时间: {}", format_system_time(&version_info.last_updated)).cyan());
+        println!("{}", format!("📊 规则数量: {}", version_info.rule_count).cyan());
+    } else {
+        println!("{}", "📋 尚未安装扫描规则".yellow());
+    }
+    
+    // Force update rules
+    println!("{}", "🚀 强制更新规则...".yellow());
+    rule_manager.force_update().await
+        .map_err(|e| AppError::Generic(format!("更新规则失败: {}", e)))?;
+    
+    // Get updated rule paths to verify
+    let rule_paths = rule_manager.get_rule_paths(false).await
+        .map_err(|e| AppError::Generic(format!("获取更新后规则路径失败: {}", e)))?;
+    
+    println!("{}", format!("✅ 规则更新完成！共找到 {} 个规则文件", rule_paths.len()).green());
+    
+    // Display updated version info
+    if let Some(version_info) = rule_manager.get_version_info() {
+        println!("{}", "📋 更新后版本信息:".cyan());
+        println!("{}", format!("  - 版本: {}", version_info.commit_hash).cyan());
+        println!("{}", format!("  - 更新时间: {}", format_system_time(&version_info.last_updated)).cyan());
+        println!("{}", format!("  - 规则数量: {}", version_info.rule_count).cyan());
+        if let Some(performance) = &version_info.performance_metrics {
+            println!("{}", format!("  - 平均执行时间: {:.2}ms", performance.avg_execution_time_ms).cyan());
+        }
+    }
+    
+    Ok(())
+}
+
+/// Helper function to format SystemTime for display
+fn format_system_time(system_time: &SystemTime) -> String {
+    match system_time.duration_since(UNIX_EPOCH) {
+        Ok(duration) => {
+            let timestamp = duration.as_secs();
+            // Simple formatting - you could use chrono for more sophisticated formatting
+            let datetime = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(timestamp);
+            format!("{:?}", datetime)
+        }
+        Err(_) => "无效时间".to_string()
+    }
 }

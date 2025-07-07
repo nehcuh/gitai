@@ -139,6 +139,7 @@ pub fn construct_translate_args(args: &[String]) -> TranslateArgs {
             target: "rules".to_string(),
             force: false,
             output: None,
+            to_language: "cn".to_string(),
         }
     }
 }
@@ -203,7 +204,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  \x1b[1mtranslate\x1b[0m              AI 翻译各种资源\n");
     help.push_str("    \x1b[36mTARGET\x1b[0m                翻译目标 (目前支持: rules)\n");
     help.push_str("    \x1b[36m-f, --force\x1b[0m           强制重新翻译已存在的文件\n");
-    help.push_str("    \x1b[36m-o, --output DIR\x1b[0m      指定翻译结果输出目录\n\n");
+    help.push_str("    \x1b[36m-o, --output DIR\x1b[0m      指定翻译结果输出目录\n");
+    help.push_str("    \x1b[36m-l, --to-lang LANG\x1b[0m    目标语言 (cn|us, 默认: cn)\n\n");
 
     // Standard Git Commands Section  
     help.push_str("📦 \x1b[1;35m标准 Git 命令\x1b[0m (完全兼容)\n");
@@ -216,7 +218,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("─────────────\n");
     help.push_str("  \x1b[1mupdate-queries\x1b[0m         更新 Tree-sitter 查询文件\n");
     help.push_str("  \x1b[1mcleanup-queries\x1b[0m        清理无用的查询文件\n");
-    help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n\n");
+    help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n");
+    help.push_str("  \x1b[1mupdate-scan-rules\x1b[0m      更新代码扫描规则\n\n");
 
     // Usage Examples Section
     help.push_str("📚 \x1b[1;37m使用示例\x1b[0m\n");
