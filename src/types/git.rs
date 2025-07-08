@@ -157,7 +157,7 @@ pub struct ReviewArgs {
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ScanArgs {
     /// Path to scan
-    #[clap(long, value_name = "PATH")]
+    #[clap(value_name = "PATH")]
     pub path: Option<String>,
 
     /// Perform a full scan instead of an incremental one

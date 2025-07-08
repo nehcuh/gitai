@@ -1,0 +1,10 @@
+# sgconfig.yml
+
+# 指定一个总的规则目录
+ruleDirs:
+  - ./ast-grep-essentials/rules
+
+# 明确告诉 ast-grep 在扫描规则时要忽略 `tests` 目录
+# 注意：路径是相对于 ruleDirs 中的路径的
+ignoreDirs:
+  - tests

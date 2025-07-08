@@ -416,47 +416,28 @@ impl AstGrepEngine {
                         }
                     }
                 }
-                Err(_) => {
-                    // Enhanced fallback to text search for security patterns
-                    for (line_num, line) in lines.iter().enumerate() {
-                        let should_match = match rule.language.as_str() {
-                            "python" => {
-                                line.contains("HTTPBasicAuth") ||
-                                line.contains("requests.auth") ||
-                                line.contains("hardcoded_password") ||
-                                line.contains("password=") ||
-                                line.contains("secret=") ||
-                                line.contains("token=") ||
-                                (line.contains("print(") && rule_id.contains("avoid-print"))
-                            },
-                            "javascript" | "typescript" => {
-                                line.contains("console.log") ||
-                                line.contains("hardcoded") ||
-                                line.contains("password:") ||
-                                line.contains("secret:")
-                            },
-                            "rust" => {
-                                (line.contains("println!") && rule_id.contains("avoid-println")) ||
-                                line.contains("hardcoded")
-                            },
-                            _ => {
-                                line.contains("password") ||
-                                line.contains("secret") ||
-                                line.contains("hardcoded")
+                Err(e) => {
+                    // Log regex compilation failure and skip this rule
+                    tracing::debug!("Failed to compile regex for rule {}: {}. Skipping pattern-based matching for this rule.", rule_id, e);
+                    
+                    // Only use specific fallback patterns based on the actual rule content
+                    if rule_id.contains("requests") && rule_id.contains("hardcoded") {
+                        // Specific fallback for requests-based hardcoded secret rules
+                        for (line_num, line) in lines.iter().enumerate() {
+                            if line.contains("HTTPBasicAuth") || line.contains("requests.auth") {
+                                matches.push(AstMatch {
+                                    line: line_num + 1,
+                                    column: self.find_match_column_simple(line, &["HTTPBasicAuth", "requests.auth"]).unwrap_or(1),
+                                    text: line.to_string(),
+                                    file_path: file_path.to_string(),
+                                    rule_id: rule_id.to_string(),
+                                    pattern_variables: HashMap::new(),
+                                });
                             }
-                        };
-                        
-                        if should_match {
-                            matches.push(AstMatch {
-                                line: line_num + 1,
-                                column: self.find_match_column_simple(line, &["password", "secret", "hardcoded", "HTTPBasicAuth"]).unwrap_or(1),
-                                text: line.to_string(),
-                                file_path: file_path.to_string(),
-                                rule_id: rule_id.to_string(),
-                                pattern_variables: HashMap::new(),
-                            });
                         }
                     }
+                    // For other rules, rely on the actual ast-grep engine if patterns fail
+                    // This ensures we don't have broad catch-all patterns that override specific rules
                 }
             }
         }

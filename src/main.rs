@@ -5,6 +5,7 @@ mod handlers;
 mod rule_manager;
 mod scanner;
 mod ast_grep_integration;
+mod ast_grep_installer;
 mod tree_sitter_analyzer;
 mod types;
 mod utils;
@@ -17,6 +18,8 @@ use handlers::review::handle_review;
 use handlers::scan::{handle_scan, handle_update_scan_rules};
 use handlers::translate::handle_translate;
 use utils::{construct_commit_args, construct_review_args, construct_scan_args, construct_translate_args};
+use ast_grep_installer::AstGrepInstaller;
+use colored::Colorize;
 
 use crate::config::AppConfig;
 use crate::errors::AppError;
@@ -191,6 +194,16 @@ async fn main() -> Result<(), AppError> {
                 handle_update_scan_rules(&config).await?;
                 return Ok(());
             }
+            "install-ast-grep" => {
+                tracing::info!("📦 安装 ast-grep 可执行文件");
+                handle_install_ast_grep().await?;
+                return Ok(());
+            }
+            "check-ast-grep" => {
+                tracing::info!("🔍 检查 ast-grep 安装状态");
+                handle_check_ast_grep().await?;
+                return Ok(());
+            }
             _ => {
                 // Continue to git proxy handling
             }
@@ -224,5 +237,85 @@ async fn main() -> Result<(), AppError> {
         },
     }
 
+    Ok(())
+}
+
+/// Handle ast-grep installation command
+async fn handle_install_ast_grep() -> Result<(), AppError> {
+    println!("{}", "🔧 ast-grep 安装工具".bold().blue());
+    
+    let mut installer = AstGrepInstaller::new();
+    
+    // Show system information
+    let system_info = installer.get_system_info();
+    system_info.print();
+    
+    // Check if already installed
+    if let Some(path) = installer.detect_ast_grep() {
+        println!("{}", format!("✅ ast-grep 已经安装在: {}", path.display()).green());
+        return Ok(());
+    }
+    
+    // Attempt installation
+    println!("{}", "🚀 开始安装 ast-grep...".cyan());
+    match installer.ensure_ast_grep_available().await {
+        Ok(path) => {
+            println!("{}", format!("🎉 ast-grep 安装成功！路径: {}", path.display()).green());
+            println!("{}", "现在您可以使用 gitai scan 命令进行代码扫描了。".green());
+        }
+        Err(e) => {
+            println!("{}", format!("❌ 安装失败: {}", e).red());
+            return Err(e);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Handle ast-grep status check command
+async fn handle_check_ast_grep() -> Result<(), AppError> {
+    println!("{}", "🔍 ast-grep 状态检查".bold().blue());
+    
+    let installer = AstGrepInstaller::new();
+    
+    // Show system information
+    let system_info = installer.get_system_info();
+    system_info.print();
+    
+    // Check installation status
+    if let Some(path) = installer.detect_ast_grep() {
+        println!("{}", format!("✅ ast-grep 已安装: {}", path.display()).green());
+        
+        // Try to get version information
+        match std::process::Command::new("sg").arg("--version").output() {
+            Ok(output) => {
+                if output.status.success() {
+                    let version = String::from_utf8_lossy(&output.stdout);
+                    println!("{}", format!("📦 版本信息: {}", version.trim()).blue());
+                }
+            }
+            Err(_) => {
+                println!("{}", "⚠️ 无法获取版本信息".yellow());
+            }
+        }
+        
+        // Check if it can run basic commands
+        match std::process::Command::new("sg").arg("--help").output() {
+            Ok(output) => {
+                if output.status.success() {
+                    println!("{}", "✅ ast-grep 可以正常运行".green());
+                } else {
+                    println!("{}", "❌ ast-grep 运行异常".red());
+                }
+            }
+            Err(e) => {
+                println!("{}", format!("❌ 无法运行 ast-grep: {}", e).red());
+            }
+        }
+    } else {
+        println!("{}", "❌ ast-grep 未安装".red());
+        println!("{}", "💡 使用 'gitai install-ast-grep' 命令进行安装".yellow());
+    }
+    
     Ok(())
 }

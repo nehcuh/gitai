@@ -243,6 +243,55 @@ pub async fn execute_explain_request(
     execute_ai_request_generic(config, messages, "解释", true).await
 }
 
+/// Dedicated function for translation requests
+/// Uses the translator.md prompt for translating scan results
+pub async fn execute_translation_request(
+    config: &AppConfig,
+    content: &str,
+    target_language: &str,
+) -> Result<String, AIError> {
+    // Get translator prompt content
+    let translator_prompt = config.prompts
+        .get("translator")
+        .cloned()
+        .unwrap_or_else(|| {
+            tracing::warn!("获取translator prompt失败，使用简单翻译模式");
+            "You are a translator. Translate the following content to the target language. Keep the original format.".to_string()
+        });
+
+    let target_lang_name = match target_language {
+        "us" => "English",
+        "cn" => "Chinese",
+        _ => "the target language"
+    };
+
+    let user_prompt = format!(
+        "{}\n\nTarget language: {}\n\nContent to translate:\n\n{}",
+        translator_prompt,
+        target_lang_name,
+        content
+    );
+
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: "You are a professional translator. Follow the instructions carefully.".to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt,
+        },
+    ];
+
+    let log_prefix = match target_language {
+        "us" => "translation to English",
+        "cn" => "翻译为中文",
+        _ => "translation"
+    };
+    
+    execute_ai_request_generic(config, messages, log_prefix, true).await
+}
+
 /// Helper function to create a review prompt for code changes
 pub fn create_review_prompt(
     diff_text: &str,

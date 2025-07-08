@@ -3,6 +3,7 @@ use crate::errors::AppError;
 use crate::rule_manager::RuleManager;
 use crate::scanner::LocalScanner;
 use crate::types::git::ScanArgs;
+use crate::handlers::ai::execute_translation_request;
 use colored::Colorize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -50,21 +51,57 @@ pub async fn handle_scan(
     
     if scan_result.summary.total_matches > 0 {
         println!("\n=== Match Details ===");
+        let mut display_content = String::new();
+        
         for (i, match_item) in scan_result.matches.iter().enumerate() {
             if i >= 10 {
-                println!("... and {} more matches", scan_result.matches.len() - 10);
+                let remaining_text = format!("... and {} more matches", scan_result.matches.len() - 10);
+                println!("{}", remaining_text);
+                display_content.push_str(&format!("{}\n", remaining_text));
                 break;
             }
-            println!("{}. {} ({}:{})", 
+            let match_line = format!("{}. {} ({}:{})", 
                      i + 1,
                      match_item.message,
                      match_item.file_path,
                      match_item.line_number);
-            println!("   Rule: {} | Severity: {}", 
+            let rule_line = format!("   Rule: {} | Severity: {}", 
                      match_item.rule_id, 
                      match_item.severity);
-            println!("   Match: {}", match_item.matched_text.trim());
+            let match_text_line = format!("   Match: {}", match_item.matched_text.trim());
+            
+            println!("{}", match_line);
+            println!("{}", rule_line);
+            println!("{}", match_text_line);
             println!();
+            
+            display_content.push_str(&format!("{}\n{}\n{}\n\n", match_line, rule_line, match_text_line));
+        }
+        
+        // Check if AI translation is needed
+        let effective_language = match language {
+            Some(lang) => {
+                let lang_str = lang.to_string();
+                config.get_output_language(Some(&lang_str))
+            }
+            None => config.get_output_language(None)
+        };
+        
+        // If specified language doesn't have cached translated rules, use AI to translate output
+        if (effective_language == "cn" || effective_language == "us") && 
+           !has_translated_rules_cache(&mut rule_manager, &effective_language).await {
+            
+            println!("\n🤖 Translating scan results using AI...");
+            match execute_translation_request(config, &display_content, &effective_language).await {
+                Ok(translated_content) => {
+                    println!("\n=== Translated Results ===");
+                    println!("{}", translated_content);
+                }
+                Err(e) => {
+                    tracing::warn!("AI translation failed: {}", e);
+                    println!("⚠️ AI translation failed, showing original results above");
+                }
+            }
         }
     }
     
@@ -234,4 +271,31 @@ fn format_system_time(system_time: &SystemTime) -> String {
         }
         Err(_) => "无效时间".to_string()
     }
+}
+
+/// Check if translated rules cache exists for the specified language
+async fn has_translated_rules_cache(rule_manager: &mut RuleManager, language: &str) -> bool {
+    // Try to find any rule paths for the language
+    // This is a simplified check - in a more sophisticated implementation,
+    // you might want to check specific translated rule files
+    let default_paths = match rule_manager.get_rule_paths(false).await {
+        Ok(paths) => paths,
+        Err(_) => return false,
+    };
+    
+    if default_paths.is_empty() {
+        return false;
+    }
+    
+    // Get the rules directory from the first rule path
+    let rules_base_dir = match default_paths[0]
+        .parent()
+        .and_then(|p| p.parent()) {
+        Some(dir) => dir,
+        None => return false,
+    };
+    
+    // Look for language-specific translated directory
+    let translated_dir = rules_base_dir.join(language);
+    translated_dir.exists() && translated_dir.is_dir()
 }
