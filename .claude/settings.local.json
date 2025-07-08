@@ -13,7 +13,9 @@
       "Bash(cargo clippy:*)",
       "Bash(cargo fix:*)",
       "Bash(mkdir:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
