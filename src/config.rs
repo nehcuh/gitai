@@ -108,8 +108,8 @@ impl AccountConfig {
         }
 
         // Check if core fields have meaningful values (not None and not empty)
-        let platform_is_meaningful = devops_platform.as_ref().map_or(false, |s| !s.is_empty());
-        let url_is_meaningful = base_url.as_ref().map_or(false, |s| !s.is_empty());
+        let platform_is_meaningful = devops_platform.as_ref().is_some_and(|s| !s.is_empty());
+        let url_is_meaningful = base_url.as_ref().is_some_and(|s| !s.is_empty());
         let token_is_meaningful = token.as_ref().map_or(false, |s| !s.is_empty());
 
         if !platform_is_meaningful && !url_is_meaningful && !token_is_meaningful {
@@ -223,6 +223,7 @@ pub struct ReviewConfig {
 
     /// Maximum age in hours to keep review results
     #[serde(default = "default_max_age_hours")]
+    #[allow(dead_code)]
     pub max_age_hours: u32,
 
     /// Whether to include review results in commit message generation
@@ -388,6 +389,7 @@ pub struct ScanConfig {
     #[serde(default)]
     pub rule_manager: RuleManagerConfig,
     #[serde(default)]
+    #[allow(dead_code)]
     pub remote_scan: RemoteScanConfig,
     #[serde(default = "default_scan_results_path")]
     pub results_path: String,
@@ -404,6 +406,7 @@ pub struct RuleManagerConfig {
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
+#[allow(dead_code)]
 pub struct RemoteScanConfig {
     #[serde(default)]
     pub url: Option<String>,

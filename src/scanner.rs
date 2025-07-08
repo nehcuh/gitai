@@ -294,7 +294,6 @@ impl LocalScanner {
             return Ok(1);
         }
         
-        let mut count = 0;
         let mut files = Vec::new();
         self.collect_files_recursive(&path_buf, &mut files)?;
         let filtered_files = self.filter_ignored_files(files)?;

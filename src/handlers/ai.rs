@@ -186,7 +186,6 @@ lazy_static! {
 }
 
 /// Helper function to execute the AI request and process the response
-
 /// Dedicated function for code review requests
 /// Returns the raw AI response without cleaning <think> tags as they might be useful for review context
 pub async fn execute_review_request(
