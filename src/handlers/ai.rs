@@ -12,6 +12,15 @@ pub async fn explain_git_command_output(
     config: &AppConfig,
     command_output: &str,
 ) -> Result<String, AIError> {
+    explain_git_command_output_with_language(config, command_output, None).await
+}
+
+/// Takes the raw output from a Git command with language support
+pub async fn explain_git_command_output_with_language(
+    config: &AppConfig,
+    command_output: &str,
+    language: Option<&str>,
+) -> Result<String, AIError> {
     if command_output.trim().is_empty() {
         // This is not an error, but a valid case where there's nothing to explain
         return Ok("该命令没有产生输出供 AI 解释。\
@@ -29,15 +38,24 @@ pub async fn explain_git_command_output(
     // let contains_gitai_help = command_output.contains("gitai: Git with AI assistance")
     //     || command_output.contains("Gitai 特有命令");
 
-    // Enhance system prompt to handle gitie-specific commands
-    tracing::debug!("system_prompt_content: {:#?}\n\n", config.prompts);
+    // Get language-specific prompt content
+    let effective_language_string = match language {
+        Some(lang) => lang.to_string(),
+        None => config.get_output_language(None)
+    };
+    let effective_language = effective_language_string.as_str();
+    
     let system_prompt_content = config
-        .prompts
-        .get("general-helper")
-        .cloned()
-        .unwrap_or_else(|| {
-            tracing::warn!("在配置中未找到 Git AI helper 提示词，使用空字符串");
-            "".to_string()
+        .get_language_prompt_content("general-helper", effective_language)
+        .unwrap_or_else(|e| {
+            tracing::warn!("获取{}语言的general-helper prompt失败: {}，尝试使用默认prompt", effective_language, e);
+            config.prompts
+                .get("general-helper")
+                .cloned()
+                .unwrap_or_else(|| {
+                    tracing::warn!("在配置中未找到默认Git AI helper提示词，使用空字符串");
+                    "".to_string()
+                })
         });
 
     // Add gitai-specified instructions if needed
@@ -68,6 +86,17 @@ pub async fn execute_ai_request_generic(
     messages: Vec<ChatMessage>,
     log_prefix: &str,
     clean_output: bool,
+) -> Result<String, AIError> {
+    execute_ai_request_with_language(config, messages, log_prefix, clean_output, None).await
+}
+
+/// Generic function to execute AI request with language support
+pub async fn execute_ai_request_with_language(
+    config: &AppConfig,
+    messages: Vec<ChatMessage>,
+    log_prefix: &str,
+    clean_output: bool,
+    _language: Option<&str>, // Language parameter for future use
 ) -> Result<String, AIError> {
     let request_payload = OpenAIChatRequest {
         model: config.ai.model_name.clone(),
@@ -165,6 +194,16 @@ pub async fn execute_review_request(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, AIError> {
+    execute_review_request_with_language(config, system_prompt, user_prompt, None).await
+}
+
+/// Execute review request with language support
+pub async fn execute_review_request_with_language(
+    config: &AppConfig,
+    system_prompt: &str,
+    user_prompt: &str,
+    language: Option<&str>,
+) -> Result<String, AIError> {
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -176,7 +215,11 @@ pub async fn execute_review_request(
         },
     ];
 
-    execute_ai_request_generic(config, messages, "评审", false).await
+    let log_prefix = match language {
+        Some("us") => "review",
+        _ => "评审"
+    };
+    execute_ai_request_with_language(config, messages, log_prefix, false, language).await
 }
 
 /// Dedicated function for explanation requests  
@@ -200,6 +243,55 @@ pub async fn execute_explain_request(
     execute_ai_request_generic(config, messages, "解释", true).await
 }
 
+/// Dedicated function for translation requests
+/// Uses the translator.md prompt for translating scan results
+pub async fn execute_translation_request(
+    config: &AppConfig,
+    content: &str,
+    target_language: &str,
+) -> Result<String, AIError> {
+    // Get translator prompt content
+    let translator_prompt = config.prompts
+        .get("translator")
+        .cloned()
+        .unwrap_or_else(|| {
+            tracing::warn!("获取translator prompt失败，使用简单翻译模式");
+            "You are a translator. Translate the following content to the target language. Keep the original format.".to_string()
+        });
+
+    let target_lang_name = match target_language {
+        "us" => "English",
+        "cn" => "Chinese",
+        _ => "the target language"
+    };
+
+    let user_prompt = format!(
+        "{}\n\nTarget language: {}\n\nContent to translate:\n\n{}",
+        translator_prompt,
+        target_lang_name,
+        content
+    );
+
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: "You are a professional translator. Follow the instructions carefully.".to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: user_prompt,
+        },
+    ];
+
+    let log_prefix = match target_language {
+        "us" => "translation to English",
+        "cn" => "翻译为中文",
+        _ => "translation"
+    };
+    
+    execute_ai_request_generic(config, messages, log_prefix, true).await
+}
+
 /// Helper function to create a review prompt for code changes
 pub fn create_review_prompt(
     diff_text: &str,
@@ -207,21 +299,51 @@ pub fn create_review_prompt(
     focus: Option<&str>,
     languages: &str,
 ) -> String {
+    create_review_prompt_with_language(diff_text, analysis, focus, languages, None)
+}
+
+/// Helper function to create a review prompt for code changes with language support
+pub fn create_review_prompt_with_language(
+    diff_text: &str,
+    analysis: &str,
+    focus: Option<&str>,
+    languages: &str,
+    output_language: Option<&str>,
+) -> String {
+    // Use language-specific prompts based on output_language
+    let (focus_label, language_label, review_header, analysis_header, changes_header) = match output_language {
+        Some("us") => (
+            "**Special Focus Areas:**",
+            "**Detected Programming Languages:**",
+            "## Code Review Request",
+            "## Code Structure Analysis",
+            "## Code Changes"
+        ),
+        _ => (
+            "**特别关注的方面:**",
+            "**检测到的编程语言:**",
+            "## 代码评审请求",
+            "## 代码结构分析",
+            "## 代码变更"
+        )
+    };
+
     let focus_instruction = if let Some(focus) = focus {
-        format!("\n\n**特别关注的方面:** {}", focus)
+        format!("\n\n{} {}", focus_label, focus)
     } else {
         String::new()
     };
 
     let language_context = if !languages.is_empty() {
-        format!("\n\n**检测到的编程语言:** {}", languages)
+        format!("\n\n{} {}", language_label, languages)
     } else {
         String::new()
     };
 
     format!(
-        "## 代码评审请求{}{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
-        focus_instruction, language_context, analysis, diff_text
+        "{}{}{}\n\n{}\n\n{}\n\n{}\n\n```diff\n{}\n```",
+        review_header, focus_instruction, language_context, 
+        analysis_header, analysis, changes_header, diff_text
     )
 }
 

@@ -2,6 +2,7 @@ use crate::config::AppConfig;
 use crate::errors::AppError;
 use crate::types::git::ScanArgs;
 use crate::ast_grep_integration::{AstGrepEngine, SupportedLanguage};
+use crate::ast_grep_installer::AstGrepInstaller;
 use serde_yaml::Value;
 use regex::Regex;
 use git2::{Repository, DiffOptions};
@@ -88,16 +89,31 @@ pub struct LocalScanner {
     config: AppConfig,
     repo: Option<Repository>,
     ast_engine: AstGrepEngine,
+    ast_grep_installer: AstGrepInstaller,
 }
 
 impl LocalScanner {
     pub fn new(config: AppConfig) -> Result<Self, AppError> {
         let repo = Repository::open_from_env().ok();
         let ast_engine = AstGrepEngine::new();
-        Ok(Self { config, repo, ast_engine })
+        let ast_grep_installer = AstGrepInstaller::new();
+        Ok(Self { config, repo, ast_engine, ast_grep_installer })
     }
 
     pub async fn scan(&mut self, args: &ScanArgs, rule_paths: &[PathBuf]) -> Result<ScanResult, AppError> {
+        // Try to ensure ast-grep is available, install if necessary
+        match self.ast_grep_installer.ensure_ast_grep_available().await {
+            Ok(sg_path) => {
+                tracing::info!("Using real ast-grep executable at: {}", sg_path.display());
+                return self.scan_with_ast_grep_executable(args, rule_paths).await;
+            }
+            Err(e) => {
+                tracing::warn!("Failed to ensure ast-grep availability: {}", e);
+                tracing::warn!("Falling back to library implementation");
+            }
+        }
+
+        // Fallback to library implementation
         let files_to_scan = if args.full {
             self.get_all_files(&args.path)?
         } else {
@@ -116,6 +132,198 @@ impl LocalScanner {
 
         let scan_result = self.build_scan_result(args, &matches, &files_to_scan, rule_paths.len())?;
         Ok(scan_result)
+    }
+
+    /// Scan using the real ast-grep executable
+    async fn scan_with_ast_grep_executable(&self, args: &ScanArgs, rule_paths: &[PathBuf]) -> Result<ScanResult, AppError> {
+        use std::process::Command;
+        
+        // Determine the target directory to scan
+        let scan_path = match &args.path {
+            Some(path) => path.clone(),
+            None => ".".to_string()
+        };
+        
+        // Find the rules directory - use the first rule's parent directory
+        let rules_dir = if let Some(first_rule) = rule_paths.first() {
+            // Go up from the specific rule file to find the rules root directory
+            let mut parent = first_rule.parent();
+            while let Some(p) = parent {
+                if p.file_name().and_then(|n| n.to_str()) == Some("rules") {
+                    parent = p.parent(); // Go one level up to get the directory containing rules/
+                    break;
+                }
+                parent = p.parent();
+            }
+            parent.unwrap_or_else(|| std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials"))
+        } else {
+            std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials")
+        };
+        
+        tracing::info!("Using rules directory: {}", rules_dir.display());
+        tracing::info!("Scanning path: {}", scan_path);
+        
+        // Build ast-grep command
+        let mut cmd = Command::new("sg");
+        cmd.arg("scan")
+           .arg(&scan_path)
+           .arg("--json");
+        
+        // Add config if sgconfig.yml exists
+        let config_file = rules_dir.join("sgconfig.yml");
+        if config_file.exists() {
+            cmd.arg("--config").arg(&config_file);
+            tracing::info!("Using config file: {}", config_file.display());
+        }
+        
+        // Execute the command
+        let output = cmd.output()
+            .map_err(|e| AppError::Generic(format!("Failed to execute ast-grep: {}", e)))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::warn!("ast-grep command failed: {}", stderr);
+            // Don't fail completely, just return empty results
+            return Ok(ScanResult {
+                scan_id: format!("{}_{}", self.get_commit_id()?, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()),
+                repository: self.get_repository_name()?,
+                commit_id: self.get_commit_id()?,
+                scan_type: if args.full { "full" } else { "incremental" }.to_string(),
+                scan_time: chrono::Utc::now().to_rfc3339(),
+                rules_count: rule_paths.len(),
+                files_scanned: 0,
+                matches: Vec::new(),
+                summary: ScanSummary {
+                    total_matches: 0,
+                    by_severity: HashMap::new(),
+                    by_rule: HashMap::new(),
+                    by_file: HashMap::new(),
+                },
+            });
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        tracing::debug!("ast-grep output: {}", stdout);
+        
+        // Parse the JSON output
+        let ast_grep_matches: Vec<serde_json::Value> = if stdout.trim().is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&stdout)
+                .map_err(|e| AppError::Generic(format!("Failed to parse ast-grep JSON output: {}", e)))?
+        };
+        
+        // Convert ast-grep matches to our format
+        let mut matches = Vec::new();
+        for ast_match in ast_grep_matches {
+            if let Some(scan_match) = self.convert_ast_grep_match(ast_match)? {
+                matches.push(scan_match);
+            }
+        }
+        
+        // Count files scanned - for now, estimate based on the target
+        let files_scanned = if args.full {
+            // Estimate by counting files in the directory
+            self.count_scannable_files(&scan_path)?
+        } else {
+            // For incremental, count changed files
+            self.get_incremental_files(&args.path)?.len()
+        };
+        
+        let scan_result = ScanResult {
+            scan_id: format!("{}_{}", self.get_commit_id()?, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()),
+            repository: self.get_repository_name()?,
+            commit_id: self.get_commit_id()?,
+            scan_type: if args.full { "full" } else { "incremental" }.to_string(),
+            scan_time: chrono::Utc::now().to_rfc3339(),
+            rules_count: rule_paths.len(),
+            files_scanned,
+            matches: matches.clone(),
+            summary: self.build_summary(&matches),
+        };
+        
+        Ok(scan_result)
+    }
+    
+    /// Convert ast-grep JSON match to our ScanMatch format
+    fn convert_ast_grep_match(&self, ast_match: serde_json::Value) -> Result<Option<ScanMatch>, AppError> {
+        let file_path = ast_match["file"].as_str()
+            .ok_or_else(|| AppError::Generic("Missing 'file' field in ast-grep match".to_string()))?;
+            
+        let text = ast_match["text"].as_str()
+            .ok_or_else(|| AppError::Generic("Missing 'text' field in ast-grep match".to_string()))?;
+            
+        let start_line = ast_match["range"]["start"]["line"].as_u64()
+            .ok_or_else(|| AppError::Generic("Missing line number in ast-grep match".to_string()))? as usize;
+            
+        let start_column = ast_match["range"]["start"]["column"].as_u64()
+            .ok_or_else(|| AppError::Generic("Missing column number in ast-grep match".to_string()))? as usize;
+        
+        // Extract rule information - ast-grep doesn't always provide this directly
+        // We'll extract it from the match context or use a generic identifier
+        let rule_id = ast_match["rule"].as_str()
+            .or_else(|| ast_match["ruleId"].as_str())
+            .unwrap_or("ast-grep-pattern")
+            .to_string();
+            
+        let message = ast_match["message"].as_str()
+            .unwrap_or("Pattern found by AST analysis")
+            .to_string();
+            
+        let severity = ast_match["severity"].as_str()
+            .unwrap_or("info")
+            .to_string();
+        
+        Ok(Some(ScanMatch {
+            file_path: file_path.to_string(),
+            line_number: start_line,
+            column_number: start_column,
+            rule_id,
+            rule_name: "ast-grep-pattern".to_string(),
+            message,
+            severity,
+            matched_text: text.to_string(),
+            context: ast_match["lines"].as_str().map(|s| s.to_string()),
+        }))
+    }
+    
+    /// Count scannable files in a directory
+    fn count_scannable_files(&self, path: &str) -> Result<usize, AppError> {
+        let path_buf = std::path::PathBuf::from(path);
+        if path_buf.is_file() {
+            return Ok(1);
+        }
+        
+        let mut count = 0;
+        let mut files = Vec::new();
+        self.collect_files_recursive(&path_buf, &mut files)?;
+        let filtered_files = self.filter_ignored_files(files)?;
+        Ok(filtered_files.len())
+    }
+    
+    /// Build summary from matches
+    fn build_summary(&self, matches: &[ScanMatch]) -> ScanSummary {
+        let mut by_severity = HashMap::new();
+        let mut by_rule = HashMap::new();
+        let mut by_file = HashMap::new();
+        
+        for match_item in matches {
+            *by_severity.entry(match_item.severity.clone()).or_insert(0) += 1;
+            *by_rule.entry(match_item.rule_id.clone()).or_insert(0) += 1;
+            *by_file.entry(match_item.file_path.clone()).or_insert(0) += 1;
+        }
+        
+        ScanSummary {
+            total_matches: matches.len(),
+            by_severity,
+            by_rule,
+            by_file,
+        }
+    }
+    
+    /// Get commit ID (alias for get_current_commit_id)
+    fn get_commit_id(&self) -> Result<String, AppError> {
+        self.get_current_commit_id()
     }
 
     /// Get all files for scanning based on the specified path or current directory
@@ -393,11 +601,13 @@ impl LocalScanner {
             
             // Try to add rule to AST engine
             match self.ast_engine.add_rule(&content) {
-                Ok(rule_id) => {
-                    println!("Successfully loaded rule: {}", rule_id);
+                Ok(_rule_id) => {
+                    // Successfully loaded - only log in debug mode
+                    tracing::debug!("Successfully loaded rule: {}", _rule_id);
                 }
                 Err(e) => {
-                    println!("Warning: Failed to load rule from {}: {}", rule_path.display(), e);
+                    // Only print warnings for actual failures
+                    tracing::warn!("Failed to load rule from {}: {}", rule_path.display(), e);
                 }
             }
             
@@ -411,7 +621,8 @@ impl LocalScanner {
             }
         }
         
-        println!("Loaded {} rules into AST engine", self.ast_engine.get_rules().len());
+        // Only show rule count summary
+        tracing::info!("Loaded {} rules for scanning", self.ast_engine.get_rules().len());
         Ok(rules)
     }
 

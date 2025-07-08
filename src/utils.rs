@@ -56,7 +56,7 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
         ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -139,6 +139,7 @@ pub fn construct_translate_args(args: &[String]) -> TranslateArgs {
             target: "rules".to_string(),
             force: false,
             output: None,
+            to_language: "cn".to_string(),
         }
     }
 }
@@ -203,7 +204,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  \x1b[1mtranslate\x1b[0m              AI 翻译各种资源\n");
     help.push_str("    \x1b[36mTARGET\x1b[0m                翻译目标 (目前支持: rules)\n");
     help.push_str("    \x1b[36m-f, --force\x1b[0m           强制重新翻译已存在的文件\n");
-    help.push_str("    \x1b[36m-o, --output DIR\x1b[0m      指定翻译结果输出目录\n\n");
+    help.push_str("    \x1b[36m-o, --output DIR\x1b[0m      指定翻译结果输出目录\n");
+    help.push_str("    \x1b[36m-l, --to-lang LANG\x1b[0m    目标语言 (cn|us, 默认: cn)\n\n");
 
     // Standard Git Commands Section  
     help.push_str("📦 \x1b[1;35m标准 Git 命令\x1b[0m (完全兼容)\n");
@@ -216,7 +218,10 @@ pub fn generate_gitai_help() -> String {
     help.push_str("─────────────\n");
     help.push_str("  \x1b[1mupdate-queries\x1b[0m         更新 Tree-sitter 查询文件\n");
     help.push_str("  \x1b[1mcleanup-queries\x1b[0m        清理无用的查询文件\n");
-    help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n\n");
+    help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n");
+    help.push_str("  \x1b[1mupdate-scan-rules\x1b[0m      更新代码扫描规则\n");
+    help.push_str("  \x1b[1minstall-ast-grep\x1b[0m       自动安装 ast-grep 可执行文件\n");
+    help.push_str("  \x1b[1mcheck-ast-grep\x1b[0m         检查 ast-grep 安装状态\n\n");
 
     // Usage Examples Section
     help.push_str("📚 \x1b[1;37m使用示例\x1b[0m\n");
@@ -231,6 +236,10 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  gitai review --depth=deep --focus=\"性能优化\"\n");
     help.push_str("  gitai scan                     # 代码安全扫描\n");
     help.push_str("  gitai scan --full --update-rules\n\n");
+    
+    help.push_str("  \x1b[32m# ast-grep 工具管理\x1b[0m\n");
+    help.push_str("  gitai check-ast-grep           # 检查 ast-grep 安装状态\n");
+    help.push_str("  gitai install-ast-grep         # 自动安装 ast-grep\n\n");
     
     help.push_str("  \x1b[32m# 标准 Git 操作 (带智能错误提示)\x1b[0m\n");
     help.push_str("  gitai status                   # 查看状态\n");
@@ -512,7 +521,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -533,7 +542,7 @@ mod tests {
             "gitai", "review",
             "--depth=deep",
             "--focus", "performance",
-            "--lang", "Rust",
+            "--language", "Rust",
             "--format", "json",
             "--output", "out.txt",
             "--tree-sitter",
@@ -548,7 +557,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "deep".to_string(),
             focus: Some("performance".to_string()),
-            lang: Some("Rust".to_string()),
+            language: Some("Rust".to_string()),
             format: "json".to_string(),
             output: Some("out.txt".to_string()),
             tree_sitter: true,
@@ -569,7 +578,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "shallow".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -594,7 +603,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,
@@ -621,7 +630,7 @@ mod tests {
         let expected = ReviewArgs {
             depth: "medium".to_string(),
             focus: None,
-            lang: None,
+            language: None,
             format: "text".to_string(),
             output: None,
             tree_sitter: false,

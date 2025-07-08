@@ -39,9 +39,9 @@ pub struct GitaiArgs {
     #[clap(long, global = true)]
     pub noai: bool,
 
-    /// Specify output language
-    // #[clap(long, global = true)]
-    // pub language: Option<String>,
+    /// Specify output language (cn|us|default)
+    #[clap(long, global = true, value_name = "LANG")]
+    pub lang: Option<String>,
 
     #[command(subcommand)]
     pub command: GitaiSubCommand,
@@ -108,9 +108,9 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "AREA")]
     pub focus: Option<String>,
 
-    /// Limit analysis to specific language
-    #[clap(long, value_name = "LANGUAGE")]
-    pub lang: Option<String>,
+    /// Limit analysis to specific programming language
+    #[clap(long, value_name = "PROGRAMMING_LANGUAGE")]
+    pub language: Option<String>,
 
     /// Output format
     #[clap(long, value_name = "FORMAT", default_value = "text")]
@@ -157,7 +157,7 @@ pub struct ReviewArgs {
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ScanArgs {
     /// Path to scan
-    #[clap(long, value_name = "PATH")]
+    #[clap(value_name = "PATH")]
     pub path: Option<String>,
 
     /// Perform a full scan instead of an incremental one
@@ -195,6 +195,10 @@ pub struct TranslateArgs {
     /// Output directory for translated files
     #[clap(short, long, value_name = "DIR")]
     pub output: Option<PathBuf>,
+
+    /// Target language for translation (cn|us)
+    #[clap(short = 'l', long = "to-lang", value_name = "LANG", default_value = "cn")]
+    pub to_language: String,
 }
 
 // Represents the entire Git diff
