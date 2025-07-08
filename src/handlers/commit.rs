@@ -80,14 +80,12 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
             // Simple mode: use custom message directly
             custom_message.clone()
         }
+    } else if args.tree_sitter {
+        // Enhanced mode: full Tree-sitter analysis with AI generation and review
+        generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
     } else {
-        if args.tree_sitter {
-            // Enhanced mode: full Tree-sitter analysis with AI generation and review
-            generate_enhanced_commit_message(config, &diff, None, &args, review_context.as_deref()).await?
-        } else {
-            // Basic mode: AI generation with optional review context
-            generate_commit_message_with_review(config, &diff, review_context.as_deref()).await?
-        }
+        // Basic mode: AI generation with optional review context
+        generate_commit_message_with_review(config, &diff, review_context.as_deref()).await?
     };
     
     // Add issue ID prefix if provided

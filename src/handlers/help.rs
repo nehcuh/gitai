@@ -16,18 +16,16 @@ pub async fn handle_help(
     }
 
     // 继续过滤当入参包含 commit 时，可能的 gitai 特有指令
-    if args.iter().any(|arg| arg == "commit" || arg == "cm") {
-        if args.iter().any(|arg| {
-            arg == "-t"
-                || arg == "--tree-sitter"
-                || arg == "-l"
-                || arg == "--level"
-                || arg == "-r"
-                || arg == "--review"
-        }) {
-            println!("{}", gitai_help);
-            return Ok(());
-        }
+    if args.iter().any(|arg| arg == "commit" || arg == "cm") && args.iter().any(|arg| {
+        arg == "-t"
+            || arg == "--tree-sitter"
+            || arg == "-l"
+            || arg == "--level"
+            || arg == "-r"
+            || arg == "--review"
+    }) {
+        println!("{}", gitai_help);
+        return Ok(());
     }
 
     // 获取完整的git帮助文本

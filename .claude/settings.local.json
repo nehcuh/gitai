@@ -1,33 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(cargo check:*)",
       "Bash(rg:*)",
-      "Bash(cargo:*)",
-      "Bash(./target/debug/gitai:*)",
-      "Bash(ls:*)",
-      "Bash(find:*)",
-      "Bash(touch:*)",
-      "Bash(rm:*)",
-      "Bash(./target/release/gitai scan:*)",
-      "Bash(grep:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cloc:*)",
+      "Bash(git checkout:*)",
       "Bash(git add:*)",
-      "Bash(git push:*)",
-      "WebFetch(domain:docs.rs)",
-      "WebFetch(domain:ast-grep.github.io)",
-      "Bash(timeout 60s cargo test --lib 2 >& 1)",
-      "Bash(RUST_BACKTRACE=1 cargo test config::tests::test_load_successful_custom_config -- --nocapture)",
-      "Bash(sg:*)",
-      "Bash(ast-grep:*)",
-      "Bash(timeout:*)",
-      "Bash(RUST_LOG=debug ./target/debug/gitai scan:*)",
-      "Bash(RUST_LOG=gitai::scanner=debug ./target/debug/gitai scan test_password.py --full)",
-      "Bash(cp:*)",
-      "Bash(mv:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(git merge:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fix:*)"
     ],
     "deny": []
   }

@@ -1,5 +1,6 @@
 // AST-grep integration for gitai
 // Provides correct API usage for ast-grep-core 0.38.6
+#![allow(dead_code)]
 
 use crate::errors::AppError;
 use ast_grep_config::SerializableRuleCore;
