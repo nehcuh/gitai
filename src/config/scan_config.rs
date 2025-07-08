@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use std::collections::HashMap;
 
 /// Configuration for code scanning functionality
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -22,6 +21,10 @@ pub struct RuleManagerConfig {
     pub auto_update: bool,
     #[serde(default = "default_rules_ttl")]
     pub ttl_hours: u32,
+    #[serde(default = "default_rules_url")]
+    pub url: String,
+    #[serde(default = "default_cache_path")]
+    pub cache_path: String,
 }
 
 /// Remote scan configuration
@@ -47,6 +50,8 @@ pub struct PartialRuleManagerConfig {
     path: Option<String>,
     auto_update: Option<bool>,
     ttl_hours: Option<u32>,
+    url: Option<String>,
+    cache_path: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -65,6 +70,8 @@ impl ScanConfig {
                 path: partial_rm.path.unwrap_or_else(default_rules_path),
                 auto_update: partial_rm.auto_update.unwrap_or_else(default_auto_update),
                 ttl_hours: partial_rm.ttl_hours.unwrap_or_else(default_rules_ttl),
+                url: partial_rm.url.unwrap_or_else(default_rules_url),
+                cache_path: partial_rm.cache_path.unwrap_or_else(default_cache_path),
             }
         } else {
             RuleManagerConfig::default()
@@ -102,6 +109,14 @@ fn default_rules_ttl() -> u32 {
 
 fn default_scan_results_path() -> String {
     "~/.config/gitai/scan-results".to_string()
+}
+
+fn default_rules_url() -> String {
+    "https://github.com/ast-grep/ast-grep/tree/main/crates/config/src/rules".to_string()
+}
+
+fn default_cache_path() -> String {
+    "~/.config/gitai/rule-cache".to_string()
 }
 
 #[cfg(test)]

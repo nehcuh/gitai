@@ -11,7 +11,9 @@
       "Bash(git merge:*)",
       "Bash(cargo check:*)",
       "Bash(cargo clippy:*)",
-      "Bash(cargo fix:*)"
+      "Bash(cargo fix:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

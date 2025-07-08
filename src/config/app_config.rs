@@ -44,7 +44,6 @@ pub struct AppConfig {
     pub review: ReviewConfig,
     pub account: Option<AccountConfig>,
     pub language: LanguageConfig,
-    #[serde(skip)]
     pub prompts: HashMap<String, String>,
     pub scan: ScanConfig,
 }
@@ -107,6 +106,31 @@ impl AppConfig {
     /// Get the effective language for output
     pub fn get_effective_language(&self, override_lang: Option<&str>) -> String {
         self.language.get_effective_language(override_lang)
+    }
+
+    /// Get the output language (alias for get_effective_language)
+    pub fn get_output_language(&self, override_lang: Option<&str>) -> String {
+        self.get_effective_language(override_lang)
+    }
+
+    /// Get language-specific prompt content
+    pub fn get_language_prompt_content(&self, prompt_key: &str, _language: &str) -> Result<String, crate::errors::ConfigError> {
+        self.prompts.get(prompt_key)
+            .cloned()
+            .ok_or_else(|| crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string()))
+    }
+
+    /// Get prompt file path (for backward compatibility)
+    pub fn get_prompt_path(&self, prompt_key: &str) -> Result<std::path::PathBuf, crate::errors::ConfigError> {
+        let prompt_file = match prompt_key {
+            "translator" => TRANSLATOR_PROMPT,
+            "helper" => HELPER_PROMPT,
+            "commit_generator" => COMMIT_GENERATOR_PROMPT,
+            "commit_deviation" => COMMIT_DIVIATION_PROMPT,
+            "review" => REVIEW_PROMPT,
+            _ => return Err(crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string())),
+        };
+        Ok(std::path::PathBuf::from(USER_PROMPT_PATH).join(prompt_file))
     }
 
     /// Validate the configuration

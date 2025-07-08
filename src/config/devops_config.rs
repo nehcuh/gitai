@@ -130,6 +130,19 @@ impl AccountConfig {
             retry_count,
         }))
     }
+
+    /// Validate the account configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.token.is_empty() {
+            return Err(ConfigError::EmptyToken);
+        }
+        
+        if self.base_url.is_empty() {
+            return Err(ConfigError::InvalidUrl("Base URL is empty".to_string()));
+        }
+        
+        Ok(())
+    }
 }
 
 #[cfg(test)]

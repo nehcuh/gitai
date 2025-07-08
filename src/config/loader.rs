@@ -1,0 +1,330 @@
+use std::{collections::HashMap, env, fs, path::PathBuf};
+use crate::errors::ConfigError;
+
+use super::{
+    app_config::{AppConfig, PartialAppConfig, abs_template_path, get_template_paths},
+    app_config::{
+        USER_CONFIG_PATH, USER_PROMPT_PATH, CONFIG_FILE_NAME,
+        HELPER_PROMPT, TRANSLATOR_PROMPT, COMMIT_GENERATOR_PROMPT,
+        COMMIT_DIVIATION_PROMPT, REVIEW_PROMPT, TOTAL_CONFIG_FILE_COUNT
+    },
+};
+
+/// Configuration loader responsible for loading config from files and environment
+pub struct ConfigLoader {
+    base_path: Option<PathBuf>,
+}
+
+impl ConfigLoader {
+    /// Create a new config loader with default paths
+    pub fn new() -> Self {
+        Self { base_path: None }
+    }
+
+    /// Create a config loader with custom base path (for testing)
+    pub fn with_base_path(base_path: PathBuf) -> Self {
+        Self { base_path: Some(base_path) }
+    }
+
+    /// Load complete application configuration
+    pub fn load_config(&self) -> Result<AppConfig, ConfigError> {
+        // Initialize configuration files if they don't exist
+        let (config_path, prompt_paths) = self.initialize_config()?;
+
+        // Load partial config from file
+        let partial_config = self.load_partial_config(&config_path)?;
+
+        // Collect environment variables
+        let env_map = self.collect_env_vars();
+
+        // Load prompts
+        let prompts = self.load_prompts(&prompt_paths)?;
+
+        // Create final config
+        AppConfig::from_partial_and_env(partial_config, env_map, prompts)
+    }
+
+    /// Initialize configuration files and directories
+    pub fn initialize_config(&self) -> Result<(PathBuf, HashMap<String, PathBuf>), ConfigError> {
+        let user_config_path = self.extract_file_path(USER_CONFIG_PATH, CONFIG_FILE_NAME)?;
+
+        // Prompt file paths
+        let commit_generator_prompt_path = self.extract_file_path(USER_PROMPT_PATH, COMMIT_GENERATOR_PROMPT)?;
+        let commit_deviation_prompt_path = self.extract_file_path(USER_PROMPT_PATH, COMMIT_DIVIATION_PROMPT)?;
+        let general_helper_prompt_path = self.extract_file_path(USER_PROMPT_PATH, HELPER_PROMPT)?;
+        let translator_prompt_path = self.extract_file_path(USER_PROMPT_PATH, TRANSLATOR_PROMPT)?;
+        let review_prompt_path = self.extract_file_path(USER_PROMPT_PATH, REVIEW_PROMPT)?;
+
+        let mut user_prompt_paths = HashMap::new();
+        user_prompt_paths.insert("commit_generator".to_string(), commit_generator_prompt_path.clone());
+        user_prompt_paths.insert("commit_deviation".to_string(), commit_deviation_prompt_path.clone());
+        user_prompt_paths.insert("general_helper".to_string(), general_helper_prompt_path.clone());
+        user_prompt_paths.insert("translator".to_string(), translator_prompt_path.clone());
+        user_prompt_paths.insert("review".to_string(), review_prompt_path.clone());
+
+        // Check existing files
+        let existing_count = self.count_existing_files(&user_config_path, &user_prompt_paths);
+        self.log_existing_files(existing_count)?;
+
+        // Create directories
+        self.create_config_directories(&user_config_path, &commit_generator_prompt_path)?;
+
+        // Initialize missing files
+        self.initialize_missing_files(&user_config_path, &user_prompt_paths)?;
+
+        Ok((user_config_path, user_prompt_paths))
+    }
+
+    /// Extract file path with tilde expansion and base path override
+    fn extract_file_path(&self, base_dir: &str, file_name: &str) -> Result<PathBuf, ConfigError> {
+        let expanded_base = if let Some(base_path) = &self.base_path {
+            // For testing: use custom base path
+            base_path.join(base_dir.trim_start_matches("~/"))
+        } else {
+            // Normal operation: expand tilde
+            let expanded = shellexpand::tilde(base_dir);
+            PathBuf::from(expanded.as_ref())
+        };
+
+        Ok(expanded_base.join(file_name))
+    }
+
+    /// Count existing configuration files
+    fn count_existing_files(
+        &self,
+        config_path: &PathBuf,
+        prompt_paths: &HashMap<String, PathBuf>
+    ) -> u32 {
+        let mut count = 0;
+        if config_path.exists() { count += 1; }
+        for path in prompt_paths.values() {
+            if path.exists() { count += 1; }
+        }
+        count
+    }
+
+    /// Log information about existing files
+    fn log_existing_files(&self, existing_count: u32) -> Result<(), ConfigError> {
+        match existing_count {
+            count if count == TOTAL_CONFIG_FILE_COUNT => {
+                tracing::info!("所有 {} 个配置文件已存在，将直接使用", count);
+            }
+            count if count < TOTAL_CONFIG_FILE_COUNT => {
+                tracing::info!(
+                    "发现 {}/{} 个配置文件已存在，将补充缺失的配置",
+                    count, TOTAL_CONFIG_FILE_COUNT
+                );
+            }
+            count if count > TOTAL_CONFIG_FILE_COUNT => {
+                return Err(ConfigError::Other(format!(
+                    "发现 {}/{} 个配置文件，超过全局配置文件需求",
+                    count, TOTAL_CONFIG_FILE_COUNT,
+                )));
+            }
+            0 => {
+                tracing::info!("未发现任何配置文件，将创建并使用默认配置文件");
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
+    /// Create configuration directories
+    fn create_config_directories(
+        &self,
+        config_path: &PathBuf,
+        prompt_path: &PathBuf
+    ) -> Result<(), ConfigError> {
+        // Create config directory
+        if let Some(config_dir) = config_path.parent() {
+            fs::create_dir_all(config_dir).map_err(|e| {
+                ConfigError::FileWrite(config_dir.to_string_lossy().to_string(), e)
+            })?;
+        }
+
+        // Create prompt directory
+        if let Some(prompt_dir) = prompt_path.parent() {
+            fs::create_dir_all(prompt_dir).map_err(|e| {
+                ConfigError::FileWrite(prompt_dir.to_string_lossy().to_string(), e)
+            })?;
+        }
+
+        Ok(())
+    }
+
+    /// Initialize missing configuration files
+    fn initialize_missing_files(
+        &self,
+        config_path: &PathBuf,
+        prompt_paths: &HashMap<String, PathBuf>
+    ) -> Result<(), ConfigError> {
+        let templates = get_template_paths();
+
+        // Initialize config file
+        if !config_path.exists() {
+            tracing::info!("配置文件 {} 不存在，正在初始化", CONFIG_FILE_NAME);
+            self.initialize_config_file(config_path, templates["config"])?;
+        }
+
+        // Initialize prompt files
+        let prompt_templates = [
+            ("commit_generator", "commit_generator"),
+            ("commit_deviation", "commit_deviation"), 
+            ("general_helper", "helper"),
+            ("translator", "translator"),
+            ("review", "review"),
+        ];
+
+        for (key, template_key) in &prompt_templates {
+            if let Some(path) = prompt_paths.get(*key) {
+                if !path.exists() {
+                    tracing::info!("提示词文件 {:?} 不存在，正在初始化", path.file_name());
+                    self.initialize_prompt_file(path, templates[template_key])?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Initialize a single config file from template
+    fn initialize_config_file(&self, target_path: &PathBuf, template_path: &str) -> Result<(), ConfigError> {
+        let template_full_path = abs_template_path(template_path);
+        let content = fs::read_to_string(&template_full_path).map_err(|e| {
+            ConfigError::FileRead(template_full_path.to_string_lossy().to_string(), e)
+        })?;
+
+        fs::write(target_path, content).map_err(|e| {
+            ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
+        })?;
+
+        tracing::info!("已初始化配置文件: {:?}", target_path);
+        Ok(())
+    }
+
+    /// Initialize a single prompt file from template
+    fn initialize_prompt_file(&self, target_path: &PathBuf, template_path: &str) -> Result<(), ConfigError> {
+        let template_full_path = abs_template_path(template_path);
+        let content = fs::read_to_string(&template_full_path).map_err(|e| {
+            ConfigError::FileRead(template_full_path.to_string_lossy().to_string(), e)
+        })?;
+
+        fs::write(target_path, content).map_err(|e| {
+            ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
+        })?;
+
+        tracing::info!("已初始化提示词文件: {:?}", target_path);
+        Ok(())
+    }
+
+    /// Load partial configuration from TOML file
+    fn load_partial_config(&self, config_path: &PathBuf) -> Result<Option<PartialAppConfig>, ConfigError> {
+        if !config_path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(config_path).map_err(|e| {
+            ConfigError::FileRead(config_path.to_string_lossy().to_string(), e)
+        })?;
+
+        let partial_config: PartialAppConfig = toml::from_str(&content).map_err(|e| {
+            ConfigError::Other(format!("Failed to parse config file: {}", e))
+        })?;
+
+        Ok(Some(partial_config))
+    }
+
+    /// Collect relevant environment variables
+    fn collect_env_vars(&self) -> HashMap<String, String> {
+        let env_keys = [
+            // AI config
+            "GITAI_AI_API_URL",
+            "GITAI_AI_MODEL", 
+            "GITAI_AI_TEMPERATURE",
+            "GITAI_AI_API_KEY",
+            // DevOps config
+            "GITAI_DEVOPS_PLATFORM",
+            "GITAI_DEVOPS_BASE_URL",
+            "GITAI_DEVOPS_TOKEN",
+        ];
+
+        let mut env_map = HashMap::new();
+        for key in &env_keys {
+            if let Ok(value) = env::var(key) {
+                env_map.insert(key.to_string(), value);
+            }
+        }
+        env_map
+    }
+
+    /// Load prompt templates from files
+    fn load_prompts(&self, prompt_paths: &HashMap<String, PathBuf>) -> Result<HashMap<String, String>, ConfigError> {
+        let mut prompts = HashMap::new();
+
+        for (key, path) in prompt_paths {
+            if path.exists() {
+                let content = fs::read_to_string(path).map_err(|e| {
+                    ConfigError::FileRead(path.to_string_lossy().to_string(), e)
+                })?;
+                prompts.insert(key.clone(), content);
+            }
+        }
+
+        Ok(prompts)
+    }
+}
+
+impl Default for ConfigLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn create_test_loader() -> (ConfigLoader, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let loader = ConfigLoader::with_base_path(temp_dir.path().to_path_buf());
+        (loader, temp_dir)
+    }
+
+    #[test]
+    fn test_extract_file_path() {
+        let (loader, _temp_dir) = create_test_loader();
+        let path = loader.extract_file_path("~/.config/gitai", "config.toml").unwrap();
+        assert!(path.to_string_lossy().contains("config.toml"));
+    }
+
+    #[test]
+    fn test_count_existing_files() {
+        let (loader, temp_dir) = create_test_loader();
+        
+        // Create config file
+        let config_path = temp_dir.path().join(".config/gitai/config.toml");
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        fs::write(&config_path, "# test config").unwrap();
+
+        let prompt_paths = HashMap::new();
+        let count = loader.count_existing_files(&config_path, &prompt_paths);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_collect_env_vars() {
+        env::set_var("GITAI_AI_API_URL", "http://test.com");
+        env::set_var("GITAI_AI_MODEL", "test-model");
+        
+        let loader = ConfigLoader::new();
+        let env_map = loader.collect_env_vars();
+        
+        assert_eq!(env_map.get("GITAI_AI_API_URL"), Some(&"http://test.com".to_string()));
+        assert_eq!(env_map.get("GITAI_AI_MODEL"), Some(&"test-model".to_string()));
+        
+        // Clean up
+        env::remove_var("GITAI_AI_API_URL");
+        env::remove_var("GITAI_AI_MODEL");
+    }
+}
