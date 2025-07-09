@@ -209,7 +209,7 @@ pub struct GitDiff {
 }
 
 // Defines the type of change in a Git diff
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChangeType {
     Added,
     Modified,

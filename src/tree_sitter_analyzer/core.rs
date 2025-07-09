@@ -19,7 +19,7 @@ pub enum AnalysisDepth {
 }
 
 // Complete analysis of a Git diff
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DiffAnalysis {
     pub file_analyses: Vec<FileAnalysis>,
     pub overall_summary: String,
@@ -28,7 +28,7 @@ pub struct DiffAnalysis {
 }
 
 // Analysis of a single file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FileAnalysis {
     pub path: PathBuf,
     #[allow(dead_code)]
@@ -40,7 +40,7 @@ pub struct FileAnalysis {
 }
 
 // Represents a node in the AST affected by changes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AffectedNode {
     pub node_type: String,
     pub name: String,
@@ -54,7 +54,7 @@ pub struct AffectedNode {
 }
 
 // Analysis of changes in a diff
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ChangeAnalysis {
     #[allow(dead_code)]
     pub function_changes: usize,
@@ -73,7 +73,7 @@ pub struct ChangeAnalysis {
 }
 
 // Types of change patterns
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChangePattern {
     #[allow(dead_code)]
     FeatureImplementation,
@@ -99,7 +99,7 @@ impl Default for ChangePattern {
 }
 
 // Scope of changes
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChangeScope {
     Minor,
     #[allow(dead_code)]
