@@ -34,7 +34,8 @@ const TEMPLATE_COMMIT_DEVIATION: &str = "assets/commit-deviation.md";
 const TEMPLATE_REVIEW: &str = "assets/review.md";
 
 // Total configuration files
-pub const TOTAL_CONFIG_FILE_COUNT: u32 = 6;
+// 1 config file + 5 default prompts + 5 cn prompts + 5 en prompts = 16 files
+pub const TOTAL_CONFIG_FILE_COUNT: u32 = 16;
 
 /// Main Application Configuration
 #[derive(Debug, Clone)]
@@ -114,7 +115,14 @@ impl AppConfig {
     }
 
     /// Get language-specific prompt content
-    pub fn get_language_prompt_content(&self, prompt_key: &str, _language: &str) -> Result<String, crate::errors::ConfigError> {
+    pub fn get_language_prompt_content(&self, prompt_key: &str, language: &str) -> Result<String, crate::errors::ConfigError> {
+        // First try to get language-specific version
+        let lang_specific_key = format!("{}_{}", prompt_key, language);
+        if let Some(content) = self.prompts.get(&lang_specific_key) {
+            return Ok(content.clone());
+        }
+        
+        // Fall back to default language version
         self.prompts.get(prompt_key)
             .cloned()
             .ok_or_else(|| crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string()))

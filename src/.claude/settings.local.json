@@ -26,7 +26,11 @@
       "Bash(chmod:*)",
       "Bash(pkill:*)",
       "Bash(true)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git commit:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
