@@ -13,51 +13,65 @@ pub async fn handle_scan(
     args: ScanArgs,
     language: Option<&str>,
 ) -> Result<(), AppError> {
-    println!("Starting scan...");
+    let _result = handle_scan_with_output(config, args, language).await?;
+    Ok(())
+}
+
+pub async fn handle_scan_with_output(
+    config: &AppConfig,
+    args: ScanArgs,
+    language: Option<&str>,
+) -> Result<String, AppError> {
+    let mut output = String::new();
+    output.push_str("🔍 开始代码扫描...\n\n");
     
     // Initialize rule manager and get rules
     let mut rule_manager = RuleManager::new(config.scan.rule_manager.clone())?;
     let rule_paths = get_language_specific_rules(&mut rule_manager, &args, language, config).await?;
     
     if rule_paths.is_empty() {
-        println!("No scan rules found. Make sure rules are available or run with --update-rules");
-        return Ok(());
+        output.push_str("❌ 未找到扫描规则。请确保规则可用或使用 --update-rules 参数\n");
+        return Ok(output);
     }
     
-    println!("Found {} rule files.", rule_paths.len());
+    output.push_str(&format!("📋 找到 {} 个规则文件\n", rule_paths.len()));
     
-    // Initialize scanner
-    let mut scanner = LocalScanner::new(config.clone())?;
+    // Clone config for scanner initialization
+    let scanner_config = config.clone();
     
-    // Perform scan
-    println!("Scanning {} files...", if args.full { "all" } else { "changed" });
-    let scan_result = scanner.scan(&args, &rule_paths).await?;
+    // Perform scan in a separate scope to avoid Send issues
+    let scan_result = {
+        // Initialize scanner
+        let mut scanner = LocalScanner::new(scanner_config)?;
+        
+        // Perform scan
+        output.push_str(&format!("🔍 扫描{}文件...\n", if args.full { "所有" } else { "变更的" }));
+        scanner.scan(&args, &rule_paths).await?
+    };
     
     // Display results summary
-    println!("\n=== Scan Results ===");
-    println!("Repository: {}", scan_result.repository);
-    println!("Commit ID: {}", scan_result.commit_id);
-    println!("Scan Type: {}", scan_result.scan_type);
-    println!("Files Scanned: {}", scan_result.files_scanned);
-    println!("Rules Applied: {}", scan_result.rules_count);
-    println!("Total Matches: {}", scan_result.summary.total_matches);
+    output.push_str("\n=== 扫描结果 ===\n");
+    output.push_str(&format!("📁 仓库: {}\n", scan_result.repository));
+    output.push_str(&format!("🔖 提交ID: {}\n", scan_result.commit_id));
+    output.push_str(&format!("📊 扫描类型: {}\n", scan_result.scan_type));
+    output.push_str(&format!("📄 扫描文件数: {}\n", scan_result.files_scanned));
+    output.push_str(&format!("📋 应用规则数: {}\n", scan_result.rules_count));
+    output.push_str(&format!("🎯 匹配总数: {}\n", scan_result.summary.total_matches));
     
     if !scan_result.summary.by_severity.is_empty() {
-        println!("\nBy Severity:");
+        output.push_str("\n📊 按严重性分类:\n");
         for (severity, count) in &scan_result.summary.by_severity {
-            println!("  {}: {}", severity, count);
+            output.push_str(&format!("  {}: {}\n", severity, count));
         }
     }
     
     if scan_result.summary.total_matches > 0 {
-        println!("\n=== Match Details ===");
-        let mut display_content = String::new();
+        output.push_str("\n=== 匹配详情 ===\n");
         
         for (i, match_item) in scan_result.matches.iter().enumerate() {
             if i >= 10 {
-                let remaining_text = format!("... and {} more matches", scan_result.matches.len() - 10);
-                println!("{}", remaining_text);
-                display_content.push_str(&format!("{}\n", remaining_text));
+                let remaining_text = format!("... 还有 {} 个匹配项", scan_result.matches.len() - 10);
+                output.push_str(&format!("{}\n", remaining_text));
                 break;
             }
             let match_line = format!("{}. {} ({}:{})", 
@@ -65,17 +79,12 @@ pub async fn handle_scan(
                      match_item.message,
                      match_item.file_path,
                      match_item.line_number);
-            let rule_line = format!("   Rule: {} | Severity: {}", 
+            let rule_line = format!("   规则: {} | 严重性: {}", 
                      match_item.rule_id, 
                      match_item.severity);
-            let match_text_line = format!("   Match: {}", match_item.matched_text.trim());
+            let match_text_line = format!("   匹配: {}", match_item.matched_text.trim());
             
-            println!("{}", match_line);
-            println!("{}", rule_line);
-            println!("{}", match_text_line);
-            println!();
-            
-            display_content.push_str(&format!("{}\n{}\n{}\n\n", match_line, rule_line, match_text_line));
+            output.push_str(&format!("{}\n{}\n{}\n\n", match_line, rule_line, match_text_line));
         }
         
         // Check if AI translation is needed
@@ -91,25 +100,28 @@ pub async fn handle_scan(
         if (effective_language == "cn" || effective_language == "us") && 
            !has_translated_rules_cache(&mut rule_manager, &effective_language).await {
             
-            println!("\n🤖 Translating scan results using AI...");
-            match execute_translation_request(config, &display_content, &effective_language).await {
+            output.push_str("\n🤖 使用 AI 翻译扫描结果...\n");
+            match execute_translation_request(config, &output, &effective_language).await {
                 Ok(translated_content) => {
-                    println!("\n=== Translated Results ===");
-                    println!("{}", translated_content);
+                    output.push_str("\n=== 翻译结果 ===\n");
+                    output.push_str(&translated_content);
                 }
                 Err(e) => {
                     tracing::warn!("AI translation failed: {}", e);
-                    println!("⚠️ AI translation failed, showing original results above");
+                    output.push_str("⚠️ AI 翻译失败，显示原始结果\n");
                 }
             }
         }
     }
     
-    // Save results
-    scanner.save_results(&scan_result, args.output.as_deref())?;
+    // Save results (create a new scanner instance for saving)
+    {
+        let mut save_scanner = LocalScanner::new(config.clone())?;
+        save_scanner.save_results(&scan_result, args.output.as_deref())?;
+    }
     
-    println!("Scan completed successfully!");
-    Ok(())
+    output.push_str("\n✅ 扫描完成！\n");
+    Ok(output)
 }
 
 /// Get language-specific rules based on the language parameter

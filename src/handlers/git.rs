@@ -281,35 +281,52 @@ pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> 
 ///
 /// This function gets the diff between specified commits or the current staged changes
 pub(crate) async fn extract_diff_for_review(args: &ReviewArgs) -> Result<String, AppError> {
+    extract_diff_for_review_in_dir(args, None).await
+}
+
+/// Extract diff information for review in specified directory
+///
+/// This function gets the diff between specified commits or the current staged changes
+pub(crate) async fn extract_diff_for_review_in_dir(args: &ReviewArgs, dir: Option<&str>) -> Result<String, AppError> {
     match (&args.commit1, &args.commit2) {
         (Some(commit1), Some(commit2)) => {
             // Compare two specific commits
             tracing::info!("比较两个指定的提交: {} 和 {}", commit1, commit2);
-            let diff_args = vec![
+            let mut diff_args = vec![];
+            if let Some(directory) = dir {
+                diff_args.extend(vec!["-C".to_string(), directory.to_string()]);
+            }
+            diff_args.extend(vec![
                 "diff".to_string(),
                 format!("{}..{}", commit1, commit2),
                 "--".to_string(),
-            ];
+            ]);
             let result = passthrough_to_git_with_error_handling(&diff_args, false)?;
             Ok(result.stdout)
         }
         (Some(commit), None) => {
             // Compare one commit with HEAD
             tracing::info!("比较指定的提交与HEAD: {}", commit);
-            let diff_args = vec![
+            let mut diff_args = vec![];
+            if let Some(directory) = dir {
+                diff_args.extend(vec!["-C".to_string(), directory.to_string()]);
+            }
+            diff_args.extend(vec![
                 "diff".to_string(),
                 format!("{}..HEAD", commit),
                 "--".to_string(),
-            ];
+            ]);
             let result = passthrough_to_git_with_error_handling(&diff_args, false)?;
             Ok(result.stdout)
         }
         (None, None) => {
             // Check if there are staged changes
-            let status_result = passthrough_to_git_with_error_handling(
-                &["status".to_string(), "--porcelain".to_string()],
-                true,
-            )?;
+            let mut status_args = vec![];
+            if let Some(directory) = dir {
+                status_args.extend(vec!["-C".to_string(), directory.to_string()]);
+            }
+            status_args.extend(vec!["status".to_string(), "--porcelain".to_string()]);
+            let status_result = passthrough_to_git_with_error_handling(&status_args, true)?;
 
             if status_result.stdout.trim().is_empty() {
                 return Err(AppError::Generic(
@@ -330,13 +347,18 @@ pub(crate) async fn extract_diff_for_review(args: &ReviewArgs) -> Result<String,
                     line.chars().next().map_or(false, |c| c != ' ' && c != '?')
                 });
 
-            let diff_args = if has_staged {
+            let mut diff_args = vec![];
+            if let Some(directory) = dir {
+                diff_args.extend(vec!["-C".to_string(), directory.to_string()]);
+            }
+            
+            if has_staged {
                 tracing::info!("评审已暂存的变更");
-                vec!["diff".to_string(), "--staged".to_string()]
+                diff_args.extend(vec!["diff".to_string(), "--staged".to_string()]);
             } else {
                 tracing::info!("评审工作区的变更");
-                vec!["diff".to_string()]
-            };
+                diff_args.extend(vec!["diff".to_string()]);
+            }
 
             let result = passthrough_to_git_with_error_handling(&diff_args, false)?;
             Ok(result.stdout)

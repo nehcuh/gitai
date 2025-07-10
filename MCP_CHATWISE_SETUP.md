@@ -7,12 +7,14 @@
 ### 根本原因
 1. **输出问题**: MCP 服务器返回的是简单的成功消息，而不是实际的评审内容
 2. **Git 命令错误**: `git diff --cached` 在某些情况下返回 exit code 129，导致 MCP 调用失败
+3. **路径问题**: MCP 工具无法指定不同的仓库路径，只能在当前工作目录中操作
 
 ### 解决方案
 1. **输出修复**: 新增 `handle_review_with_output` 方法，直接返回格式化的评审内容
 2. **Git 命令错误修复**: 改进了 `get_staged_diff()` 和 `get_diff_for_commit()` 的错误处理
 3. **MCP bridge 现在将完整的评审报告返回给客户端**
 4. **ChatWise 现在能看到完整的 AI 代码评审结果**
+5. **路径支持**: 所有 MCP 工具现在都支持 `path` 参数，可以指定不同的 Git 仓库路径
 
 ## ChatWise 配置步骤
 
@@ -62,7 +64,8 @@ cd /Users/huchen/Projects/tmp/gitai
     "depth": "medium",        // 可选：shallow, medium, deep
     "focus": "性能优化",       // 可选：特定关注领域
     "language": "rust",       // 可选：限制分析语言
-    "format": "markdown"      // 可选：输出格式
+    "format": "markdown",     // 可选：输出格式
+    "path": "/Users/huchen/Projects/RustPlay/gitai"  // 可选：指定 Git 仓库路径
   }
   ```
 
@@ -71,7 +74,8 @@ cd /Users/huchen/Projects/tmp/gitai
 - **参数**：
   ```json
   {
-    "detailed": true         // 可选：是否返回详细状态
+    "detailed": true,        // 可选：是否返回详细状态
+    "path": "/Users/huchen/Projects/RustPlay/gitai"  // 可选：指定 Git 仓库路径
   }
   ```
 
@@ -81,7 +85,8 @@ cd /Users/huchen/Projects/tmp/gitai
   ```json
   {
     "staged": true,          // 可选：显示已暂存的更改
-    "file_path": "src/main.rs" // 可选：特定文件路径
+    "file_path": "src/main.rs", // 可选：特定文件路径
+    "path": "/Users/huchen/Projects/RustPlay/gitai"  // 可选：指定 Git 仓库路径
   }
   ```
 
@@ -96,6 +101,32 @@ cd /Users/huchen/Projects/tmp/gitai
     "issue_id": "#123"                 // 可选：关联 issue
   }
   ```
+
+#### gitai_scan
+- **功能**：执行代码安全和质量扫描（支持详细结果和缓存）
+- **参数**：
+  ```json
+  {
+    "path": ".",               // 可选：指定扫描路径
+    "full_scan": true,         // 可选：是否执行全量扫描
+    "update_rules": false,     // 可选：是否更新扫描规则
+    "show_results": true       // 可选：是否展示详细扫描结果（默认：false）
+  }
+  ```
+- **返回内容**：
+  - **基础模式**（`show_results: false` 或未设置）：
+    - 扫描路径和类型信息
+    - 扫描状态和基本信息
+    - 提示如何获取详细结果
+  - **详细模式**（`show_results: true`）：
+    - 完整的扫描结果分析
+    - 问题统计和分类
+    - 具体安全/质量问题详情
+    - 严重性分布和建议
+- **缓存特性**：
+  - 自动缓存扫描结果（24小时有效期）
+  - 相同参数的扫描会优先使用缓存
+  - 大幅提升重复扫描的响应速度
 
 ## 预期行为
 

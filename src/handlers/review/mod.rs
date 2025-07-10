@@ -17,7 +17,7 @@ pub mod types;
 use crate::{
     config::AppConfig,
     errors::AppError,
-    handlers::git::extract_diff_for_review,
+    handlers::git::{extract_diff_for_review, extract_diff_for_review_in_dir},
     types::git::ReviewArgs,
 };
 use std::{sync::Arc, time::Instant};
@@ -155,6 +155,16 @@ impl ReviewOrchestrator {
         args: ReviewArgs,
         _language: Option<&str>,
     ) -> Result<String, AppError> {
+        self.handle_review_with_output_in_dir(args, _language, None).await
+    }
+
+    /// Handle review and return formatted output for specified directory
+    pub async fn handle_review_with_output_in_dir(
+        &mut self,
+        args: ReviewArgs,
+        _language: Option<&str>,
+        dir: Option<&str>,
+    ) -> Result<String, AppError> {
         let start_time = Instant::now();
 
         tracing::info!("开始代码审查流程");
@@ -166,7 +176,7 @@ impl ReviewOrchestrator {
         }
 
         // Step 2: Extract diff for review
-        let diff_text = extract_diff_for_review(&args).await?;
+        let diff_text = extract_diff_for_review_in_dir(&args, dir).await?;
         if diff_text.trim().is_empty() {
             return Err(AppError::Generic("没有找到需要审查的代码变更".to_string()));
         }
@@ -252,6 +262,18 @@ pub async fn handle_review_with_output(
     let config_arc = Arc::new(config.clone());
     let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
     orchestrator.handle_review_with_output(review_args, language).await
+}
+
+/// Handle review and return the formatted output for MCP clients in specified directory
+pub async fn handle_review_with_output_in_dir(
+    config: &mut AppConfig,
+    review_args: ReviewArgs,
+    language: Option<&str>,
+    dir: Option<&str>,
+) -> Result<String, AppError> {
+    let config_arc = Arc::new(config.clone());
+    let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
+    orchestrator.handle_review_with_output_in_dir(review_args, language, dir).await
 }
 
 #[cfg(test)]

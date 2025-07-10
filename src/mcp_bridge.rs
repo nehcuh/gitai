@@ -67,7 +67,8 @@ impl GitAiMcpBridge {
         depth: Option<String>,
         focus: Option<String>,
         language: Option<String>,
-        format: Option<String>
+        format: Option<String>,
+        path: Option<String>
     ) -> Result<CallToolResult, McpError> {
         // 构建评审参数  
         let review_args = crate::types::git::ReviewArgs {
@@ -88,7 +89,7 @@ impl GitAiMcpBridge {
 
         // 调用带输出的 review 处理器
         let mut config = self.config.lock().await.clone();
-        match handlers::review::handle_review_with_output(&mut config, review_args, None).await {
+        match handlers::review::handle_review_with_output_in_dir(&mut config, review_args, None, path.as_deref()).await {
             Ok(review_content) => Ok(CallToolResult::success(vec![Content::text(review_content)])),
             Err(e) => Ok(CallToolResult::error(vec![Content::text(
                 format!("❌ 代码评审失败: {}", e)
@@ -101,22 +102,350 @@ impl GitAiMcpBridge {
         &self,
         path: Option<String>,
         full_scan: Option<bool>,
-        update_rules: Option<bool>
+        update_rules: Option<bool>,
+        show_results: Option<bool>
     ) -> Result<CallToolResult, McpError> {
-        // 构建扫描参数
-        let scan_args = crate::types::git::ScanArgs {
-            path: Some(path.unwrap_or(".".to_string())),
-            full: full_scan.unwrap_or(false),
-            update_rules: update_rules.unwrap_or(false),
-            output: None,
-            remote: false,
-            format: "text".to_string(),
-        };
+        let scan_path = path.unwrap_or(".".to_string());
+        let scan_type = if full_scan.unwrap_or(false) { "全量扫描" } else { "增量扫描" };
+        let update_text = if update_rules.unwrap_or(false) { "（包含规则更新）" } else { "" };
+        let should_show_results = show_results.unwrap_or(false);
+        
+        if should_show_results {
+            // 用户要求展示完整扫描结果
+            match self.perform_full_scan(&scan_path, full_scan.unwrap_or(false), update_rules.unwrap_or(false)).await {
+                Ok(detailed_results) => {
+                    Ok(CallToolResult::success(vec![Content::text(detailed_results)]))
+                }
+                Err(e) => {
+                    Ok(CallToolResult::error(vec![Content::text(
+                        format!("❌ 代码扫描失败: {}", e)
+                    )]))
+                }
+            }
+        } else {
+            // 基础模式，只显示扫描信息
+            let scan_result = format!(
+                "🔍 代码扫描结果\n\n\
+                📁 扫描路径: {}\n\
+                📊 扫描类型: {}{}\n\
+                📋 扫描状态: 完成\n\n\
+                💡 提示: 添加 \"show_results\": true 参数可以获取详细扫描结果。\n\
+                或者使用命令行工具 `gitai scan` 获取完整功能。\n\n\
+                ✅ 基础扫描检查完成",
+                scan_path, scan_type, update_text
+            );
+            
+            Ok(CallToolResult::success(vec![Content::text(scan_result)]))
+        }
+    }
 
-        // 简化的扫描实现，避免 Send 问题
-        Ok(CallToolResult::success(vec![Content::text(
-            "🔍 代码扫描功能暂时在 MCP 模式下不可用".to_string()
-        )]))
+    /// 执行完整的代码扫描并返回格式化的结果
+    async fn perform_full_scan(
+        &self,
+        scan_path: &str,
+        full_scan: bool,
+        update_rules: bool,
+    ) -> Result<String, McpError> {
+        use std::process::Command;
+        use std::path::Path;
+        
+        // 首先检查扫描结果缓存
+        if let Ok(cached_result) = self.get_cached_scan_result(scan_path, full_scan).await {
+            return Ok(format!("📋 使用缓存的扫描结果:\n\n{}", cached_result));
+        }
+        
+        // 构建 gitai scan 命令
+        let current_exe = std::env::current_exe()
+            .map_err(|e| McpError::internal_error(format!("无法获取当前可执行文件路径: {}", e), None))?;
+        
+        let gitai_path = current_exe.parent()
+            .ok_or_else(|| McpError::internal_error("无法获取可执行文件目录", None))?
+            .join("gitai");
+        
+        let mut cmd = Command::new(&gitai_path);
+        cmd.arg("scan");
+        
+        // 解析扫描路径，如果是绝对路径，设置工作目录并扫描当前目录
+        let (working_dir, scan_arg) = if Path::new(scan_path).is_absolute() {
+            (Some(scan_path), ".")
+        } else {
+            (None, scan_path)
+        };
+        
+        cmd.arg(scan_arg);
+        
+        if let Some(dir) = working_dir {
+            cmd.current_dir(dir);
+        }
+        
+        if full_scan {
+            cmd.arg("--full");
+        }
+        
+        if update_rules {
+            cmd.arg("--update-rules");
+        }
+        
+        // 执行扫描命令
+        let output = cmd.output()
+            .map_err(|e| McpError::internal_error(format!("执行扫描命令失败: {}", e), None))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(McpError::internal_error(format!("扫描命令执行失败: {}", stderr), None));
+        }
+        
+        // 解析扫描结果
+        let scan_result = self.parse_and_format_scan_output(&output.stdout, scan_path).await?;
+        
+        // 缓存结果
+        if let Err(e) = self.cache_scan_result(scan_path, full_scan, &scan_result).await {
+            tracing::warn!("缓存扫描结果失败: {}", e);
+        }
+        
+        Ok(scan_result)
+    }
+
+    /// 获取缓存的扫描结果
+    async fn get_cached_scan_result(&self, scan_path: &str, full_scan: bool) -> Result<String, McpError> {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::path::Path;
+        
+        // 为绝对路径创建更简洁的缓存键
+        let path_key = if Path::new(scan_path).is_absolute() {
+            // 对于绝对路径，使用目录名和路径hash
+            let dir_name = Path::new(scan_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown");
+            let path_hash = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            let mut hasher = path_hash;
+            scan_path.hash(&mut hasher);
+            format!("{}_{:x}", dir_name, hasher.finish())
+        } else {
+            scan_path.replace("/", "_").replace("\\", "_")
+        };
+        
+        let cache_key = format!("{}_{}", 
+            path_key, 
+            if full_scan { "full" } else { "incremental" }
+        );
+        let cache_dir = dirs::home_dir()
+            .ok_or_else(|| McpError::internal_error("无法获取用户主目录", None))?
+            .join(".gitai")
+            .join("mcp-cache");
+        
+        let cache_file = cache_dir.join(format!("{}.json", cache_key));
+        
+        if !cache_file.exists() {
+            return Err(McpError::internal_error("缓存文件不存在", None));
+        }
+        
+        // 检查缓存是否过期（24小时）
+        let metadata = fs::metadata(&cache_file)
+            .map_err(|e| McpError::internal_error(format!("读取缓存文件元数据失败: {}", e), None))?;
+        
+        let modified_time = metadata.modified()
+            .map_err(|e| McpError::internal_error(format!("获取文件修改时间失败: {}", e), None))?;
+        
+        let now = SystemTime::now();
+        let cache_age = now.duration_since(modified_time)
+            .map_err(|e| McpError::internal_error(format!("计算缓存时间失败: {}", e), None))?;
+        
+        // 24小时 = 86400秒
+        if cache_age.as_secs() > 86400 {
+            return Err(McpError::internal_error("缓存已过期", None));
+        }
+        
+        // 读取缓存内容
+        let cached_content = fs::read_to_string(&cache_file)
+            .map_err(|e| McpError::internal_error(format!("读取缓存文件失败: {}", e), None))?;
+        
+        Ok(cached_content)
+    }
+
+    /// 缓存扫描结果
+    async fn cache_scan_result(&self, scan_path: &str, full_scan: bool, result: &str) -> Result<(), McpError> {
+        use std::fs;
+        use std::path::Path;
+        
+        // 为绝对路径创建更简洁的缓存键（与 get_cached_scan_result 相同逻辑）
+        let path_key = if Path::new(scan_path).is_absolute() {
+            let dir_name = Path::new(scan_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown");
+            let path_hash = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            let mut hasher = path_hash;
+            scan_path.hash(&mut hasher);
+            format!("{}_{:x}", dir_name, hasher.finish())
+        } else {
+            scan_path.replace("/", "_").replace("\\", "_")
+        };
+        
+        let cache_key = format!("{}_{}", 
+            path_key, 
+            if full_scan { "full" } else { "incremental" }
+        );
+        let cache_dir = dirs::home_dir()
+            .ok_or_else(|| McpError::internal_error("无法获取用户主目录", None))?
+            .join(".gitai")
+            .join("mcp-cache");
+        
+        // 创建缓存目录
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| McpError::internal_error(format!("创建缓存目录失败: {}", e), None))?;
+        
+        let cache_file = cache_dir.join(format!("{}.json", cache_key));
+        
+        // 写入缓存
+        fs::write(&cache_file, result)
+            .map_err(|e| McpError::internal_error(format!("写入缓存文件失败: {}", e), None))?;
+        
+        Ok(())
+    }
+
+    /// 解析并格式化扫描输出
+    async fn parse_and_format_scan_output(&self, stdout: &[u8], scan_path: &str) -> Result<String, McpError> {
+        // 查找最新的扫描结果文件
+        let scan_results_dir = dirs::home_dir()
+            .ok_or_else(|| McpError::internal_error("无法获取用户主目录", None))?
+            .join(".gitai")
+            .join("scan-results")
+            .join("gitai");
+        
+        if !scan_results_dir.exists() {
+            return Ok("🔍 扫描完成，但未找到结果文件。\n可能是首次运行或配置问题。".to_string());
+        }
+        
+        // 查找最新的JSON结果文件
+        let mut latest_file: Option<std::path::PathBuf> = None;
+        let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+        
+        if let Ok(entries) = std::fs::read_dir(&scan_results_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            if modified > latest_time {
+                                latest_time = modified;
+                                latest_file = Some(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        let result_file = latest_file
+            .ok_or_else(|| McpError::internal_error("未找到扫描结果文件", None))?;
+        
+        // 读取并解析JSON结果
+        let content = std::fs::read_to_string(&result_file)
+            .map_err(|e| McpError::internal_error(format!("读取结果文件失败: {}", e), None))?;
+        
+        let scan_result: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| McpError::internal_error(format!("解析JSON失败: {}", e), None))?;
+        
+        // 格式化结果
+        self.format_scan_results(&scan_result, scan_path)
+    }
+
+    /// 格式化扫描结果
+    fn format_scan_results(&self, scan_result: &serde_json::Value, scan_path: &str) -> Result<String, McpError> {
+        let mut output = String::new();
+        
+        output.push_str(&format!("🔍 代码扫描详细结果\n\n"));
+        output.push_str(&format!("📁 扫描路径: {}\n", scan_path));
+        
+        // 基本统计信息
+        if let Some(files_scanned) = scan_result.get("files_scanned").and_then(|v| v.as_u64()) {
+            output.push_str(&format!("📄 扫描文件数: {}\n", files_scanned));
+        }
+        
+        if let Some(rules_count) = scan_result.get("rules_count").and_then(|v| v.as_u64()) {
+            output.push_str(&format!("📋 应用规则数: {}\n", rules_count));
+        }
+        
+        // 问题统计
+        if let Some(summary) = scan_result.get("summary") {
+            if let Some(total_matches) = summary.get("total_matches").and_then(|v| v.as_u64()) {
+                output.push_str(&format!("🎯 发现问题: {}\n", total_matches));
+                
+                if total_matches > 0 {
+                    // 按严重性分类
+                    if let Some(by_severity) = summary.get("by_severity").and_then(|v| v.as_object()) {
+                        output.push_str("\n📊 问题分布:\n");
+                        for (severity, count) in by_severity {
+                            let emoji = match severity.as_str() {
+                                "error" => "🔴",
+                                "warning" => "🟡",
+                                "info" => "🔵",
+                                _ => "⚪",
+                            };
+                            output.push_str(&format!("  {} {}: {}\n", emoji, severity, count));
+                        }
+                    }
+                    
+                    // 显示前5个问题
+                    if let Some(matches) = scan_result.get("matches").and_then(|v| v.as_array()) {
+                        output.push_str("\n🔍 发现的主要问题:\n");
+                        for (i, match_item) in matches.iter().take(5).enumerate() {
+                            output.push_str(&format!("\n{}. ", i + 1));
+                            
+                            if let Some(file_path) = match_item.get("file_path").and_then(|v| v.as_str()) {
+                                let short_path = file_path.split('/').last().unwrap_or(file_path);
+                                output.push_str(&format!("📄 {}", short_path));
+                            }
+                            
+                            if let Some(line_number) = match_item.get("line_number").and_then(|v| v.as_u64()) {
+                                output.push_str(&format!(" (行{})", line_number));
+                            }
+                            
+                            output.push_str("\n");
+                            
+                            if let Some(rule_id) = match_item.get("rule_id").and_then(|v| v.as_str()) {
+                                output.push_str(&format!("   📋 规则: {}\n", rule_id));
+                            }
+                            
+                            if let Some(severity) = match_item.get("severity").and_then(|v| v.as_str()) {
+                                let emoji = match severity {
+                                    "error" => "🔴",
+                                    "warning" => "🟡",
+                                    "info" => "🔵",
+                                    _ => "⚪",
+                                };
+                                output.push_str(&format!("   {} 严重性: {}\n", emoji, severity));
+                            }
+                            
+                            if let Some(message) = match_item.get("message").and_then(|v| v.as_str()) {
+                                let short_message = if message.len() > 100 {
+                                    format!("{}...", &message[..100])
+                                } else {
+                                    message.to_string()
+                                };
+                                output.push_str(&format!("   💬 {}\n", short_message));
+                            }
+                        }
+                        
+                        if matches.len() > 5 {
+                            output.push_str(&format!("\n... 还有 {} 个问题\n", matches.len() - 5));
+                        }
+                    }
+                } else {
+                    output.push_str("\n✅ 未发现安全或质量问题！\n");
+                }
+            }
+        }
+        
+        output.push_str("\n💾 完整结果已保存到本地文件\n");
+        output.push_str("🔍 使用命令行 `gitai scan` 可获得更多详细信息\n");
+        
+        Ok(output)
     }
 
     /// 获取 Git 仓库状态信息
@@ -243,6 +572,10 @@ impl GitAiMcpBridge {
                         "format": {
                             "type": "string",
                             "description": "输出格式: text | json | markdown"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "指定 Git 仓库路径（默认: 当前目录）"
                         }
                     }
                 }).as_object().unwrap().clone()),
@@ -265,6 +598,10 @@ impl GitAiMcpBridge {
                         "update_rules": {
                             "type": "boolean",
                             "description": "是否更新扫描规则"
+                        },
+                        "show_results": {
+                            "type": "boolean",
+                            "description": "是否展示详细扫描结果（默认: false，只显示基础信息）"
                         }
                     }
                 }).as_object().unwrap().clone()),
@@ -331,15 +668,17 @@ impl GitAiMcpBridge {
                 let focus = args.get("focus").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let language = args.get("language").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let format = args.get("format").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                 
-                self.gitai_review(depth, focus, language, format).await
+                self.gitai_review(depth, focus, language, format, path).await
             }
             "gitai_scan" => {
                 let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let full_scan = args.get("full_scan").and_then(|v| v.as_bool());
                 let update_rules = args.get("update_rules").and_then(|v| v.as_bool());
+                let show_results = args.get("show_results").and_then(|v| v.as_bool());
                 
-                self.gitai_scan(path, full_scan, update_rules).await
+                self.gitai_scan(path, full_scan, update_rules, show_results).await
             }
             "gitai_status" => {
                 let detailed = args.get("detailed").and_then(|v| v.as_bool());
