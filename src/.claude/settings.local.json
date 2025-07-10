@@ -30,7 +30,9 @@
       "Bash(git commit:*)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cargo run:*)",
+      "Bash(rustc:*)"
     ],
     "deny": []
   }

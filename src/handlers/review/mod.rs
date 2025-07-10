@@ -149,6 +149,81 @@ impl ReviewOrchestrator {
         Ok(())
     }
 
+    /// Handle review and return formatted output instead of printing to console
+    pub async fn handle_review_with_output(
+        &mut self,
+        args: ReviewArgs,
+        _language: Option<&str>,
+    ) -> Result<String, AppError> {
+        let start_time = Instant::now();
+
+        tracing::info!("开始代码审查流程");
+
+        // Step 1: Fetch work items if specified
+        let work_items = self.devops_fetcher.fetch_work_items(&args).await?;
+        if !work_items.is_empty() {
+            tracing::info!("成功获取 {} 个工作项", work_items.len());
+        }
+
+        // Step 2: Extract diff for review
+        let diff_text = extract_diff_for_review(&args).await?;
+        if diff_text.trim().is_empty() {
+            return Err(AppError::Generic("没有找到需要审查的代码变更".to_string()));
+        }
+
+        // Step 3: Analyze diff
+        let use_tree_sitter = self.should_use_tree_sitter(&args);
+        let analysis_result = self.diff_analyzer.analyze_diff(&diff_text, use_tree_sitter).await?;
+        
+        tracing::info!("差分分析完成，语言类型: {}", analysis_result.language_info);
+
+        // Step 4: Perform AI analysis
+        let ai_result = if !work_items.is_empty() {
+            // Enhanced analysis with work items
+            let request = EnhancedAnalysisRequest {
+                diff_text: diff_text.clone(),
+                work_items: work_items.clone(),
+                args: args.clone(),
+                language_info: analysis_result.language_info.clone(),
+            };
+            self.ai_engine.perform_enhanced_analysis(request).await?
+        } else {
+            // Standard analysis
+            let request = StandardReviewRequest {
+                diff_text: diff_text.clone(),
+                analysis_text: analysis_result.analysis_text.clone(),
+                language_info: analysis_result.language_info.clone(),
+            };
+            self.ai_engine.perform_standard_review(request).await?
+        };
+
+        // Step 5: Format output
+        let work_item_analysis: Vec<crate::types::devops::AnalysisWorkItem> = work_items.iter()
+            .map(|item| crate::types::devops::AnalysisWorkItem::from(item))
+            .collect();
+
+        let formatted_output = if !work_items.is_empty() {
+            self.output_formatter.format_enhanced_result(&ai_result, &work_item_analysis)
+        } else {
+            self.output_formatter.format_for_display(&ai_result.content)
+        };
+
+        // Step 6: Save results if auto-save is enabled
+        let mut result_text = formatted_output.clone();
+        if let Some(saved_path) = self.file_manager.save_review_results(&ai_result.content).await? {
+            result_text.push_str(&format!("\n\n💾 审查结果已自动保存到: {}", saved_path.display()));
+        }
+
+        // Step 7: Add statistics if enabled
+        if self.output_formatter.config.show_stats {
+            let stats = self.output_formatter.output_review_stats(start_time, &ai_result.analysis_type);
+            result_text.push_str(&format!("\n\n{}", stats));
+        }
+
+        tracing::info!("代码审查流程完成");
+        Ok(result_text)
+    }
+
     /// Determine whether to use TreeSitter analysis
     fn should_use_tree_sitter(&self, _args: &ReviewArgs) -> bool {
         // Use TreeSitter for enhanced analysis by default
@@ -166,6 +241,17 @@ pub async fn handle_review(
     let config_arc = Arc::new(config.clone());
     let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
     orchestrator.handle_review(review_args, language).await
+}
+
+/// Handle review and return the formatted output for MCP clients
+pub async fn handle_review_with_output(
+    config: &mut AppConfig,
+    review_args: ReviewArgs,
+    language: Option<&str>,
+) -> Result<String, AppError> {
+    let config_arc = Arc::new(config.clone());
+    let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
+    orchestrator.handle_review_with_output(review_args, language).await
 }
 
 #[cfg(test)]
