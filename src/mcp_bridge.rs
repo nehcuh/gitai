@@ -178,7 +178,12 @@ impl GitAiMcpBridge {
                 }
             }
         } else {
-            handlers::git::get_diff_for_commit().await.unwrap_or_default()
+            match handlers::git::get_unstaged_diff().await {
+                Ok(diff) => diff,
+                Err(e) => return Ok(CallToolResult::error(vec![Content::text(
+                    format!("❌ 获取未暂存差异失败: {}", e)
+                )]))
+            }
         };
 
         Ok(CallToolResult::success(vec![Content::text(

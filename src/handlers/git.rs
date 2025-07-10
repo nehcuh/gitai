@@ -180,6 +180,13 @@ pub async fn get_staged_diff() -> Result<String, AppError> {
     Ok(result.stdout)
 }
 
+/// Get diff of unstaged changes only
+pub async fn get_unstaged_diff() -> Result<String, AppError> {
+    let args = vec!["diff".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
+    Ok(result.stdout)
+}
+
 /// Get diff for commit analysis (staged changes with fallback to unstaged)
 pub async fn get_diff_for_commit() -> Result<String, AppError> {
     // First try to get staged changes
