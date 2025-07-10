@@ -24,6 +24,7 @@ pub fn construct_scan_args(args: &[String]) -> ScanArgs {
         update_rules: false,
         output: None,
         format: "json".to_string(),
+        translate: false,
     }
 }
 

@@ -179,6 +179,10 @@ pub struct ScanArgs {
     /// Output format
     #[clap(long, value_name = "FORMAT", default_value = "json")]
     pub format: String,
+
+    /// Enable AI translation for scan results
+    #[clap(long)]
+    pub translate: bool,
 }
 
 /// Arguments for the `translate` subcommand

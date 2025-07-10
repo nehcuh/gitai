@@ -96,8 +96,9 @@ pub async fn handle_scan_with_output(
             None => config.get_output_language(None)
         };
         
-        // If specified language doesn't have cached translated rules, use AI to translate output
-        if (effective_language == "cn" || effective_language == "us") && 
+        // If AI translation is explicitly enabled, and specified language doesn't have cached translated rules, use AI to translate output
+        if args.translate && 
+           (effective_language == "cn" || effective_language == "us") && 
            !has_translated_rules_cache(&mut rule_manager, &effective_language).await {
             
             output.push_str("\n🤖 使用 AI 翻译扫描结果...\n");
