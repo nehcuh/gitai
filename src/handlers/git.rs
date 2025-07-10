@@ -91,7 +91,7 @@ pub async fn get_staged_files_status() -> Result<String, AppError> {
 /// Get diff of staged changes
 pub async fn get_staged_diff() -> Result<String, AppError> {
     let args = vec!["diff".to_string(), "--cached".to_string()];
-    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }
 
@@ -107,7 +107,7 @@ pub async fn get_diff_for_commit() -> Result<String, AppError> {
     
     // If no staged changes, check for unstaged changes
     let args = vec!["diff".to_string()];
-    let result = passthrough_to_git_with_error_handling(&args, false)?;
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
     
     if !result.stdout.trim().is_empty() {
         tracing::debug!("使用未暂存的变更进行提交分析");
