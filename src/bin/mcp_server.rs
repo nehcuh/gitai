@@ -86,30 +86,44 @@ async fn handle_mcp_message(bridge: &GitAiMcpBridge, message: &str) -> Result<St
                 return Ok(serde_json::to_string(&json_response).map_err(|e| e.to_string())?);
             }
             "tools/call" => {
-                // 解析工具调用请求
-                if let Ok(tool_request) = serde_json::from_value::<CallToolRequest>(request.get("params").unwrap_or(&serde_json::Value::Null).clone()) {
-                    match bridge.handle_tool_call(tool_request).await {
-                        Ok(result) => {
-                            let json_response = serde_json::json!({
-                                "jsonrpc": "2.0",
-                                "id": request.get("id"),
-                                "result": result
-                            });
-                            
-                            return Ok(serde_json::to_string(&json_response).map_err(|e| e.to_string())?);
+                // 解析工具调用请求 - 从整个请求解析，而不是只从params
+                match serde_json::from_value::<CallToolRequest>(request.clone()) {
+                    Ok(tool_request) => {
+                        match bridge.handle_tool_call(tool_request).await {
+                            Ok(result) => {
+                                let json_response = serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": request.get("id"),
+                                    "result": result
+                                });
+                                
+                                return Ok(serde_json::to_string(&json_response).map_err(|e| e.to_string())?);
+                            }
+                            Err(e) => {
+                                let error_response = serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": request.get("id"),
+                                    "error": {
+                                        "code": -32603,
+                                        "message": format!("Tool call failed: {}", e)
+                                    }
+                                });
+                                
+                                return Ok(serde_json::to_string(&error_response).map_err(|e| e.to_string())?);
+                            }
                         }
-                        Err(e) => {
-                            let error_response = serde_json::json!({
-                                "jsonrpc": "2.0",
-                                "id": request.get("id"),
-                                "error": {
-                                    "code": -32603,
-                                    "message": format!("Tool call failed: {}", e)
-                                }
-                            });
-                            
-                            return Ok(serde_json::to_string(&error_response).map_err(|e| e.to_string())?);
-                        }
+                    }
+                    Err(e) => {
+                        let error_response = serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": request.get("id"),
+                            "error": {
+                                "code": -32602,
+                                "message": format!("Invalid params: {}", e)
+                            }
+                        });
+                        
+                        return Ok(serde_json::to_string(&error_response).map_err(|e| e.to_string())?);
                     }
                 }
             }

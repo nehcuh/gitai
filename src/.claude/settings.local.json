@@ -21,7 +21,12 @@
       "Bash(git add:*)",
       "Bash(git reset:*)",
       "Bash(curl:*)",
-      "Bash(./target/release/mcp_server --help)"
+      "Bash(./target/release/mcp_server --help)",
+      "Bash(git push:*)",
+      "Bash(chmod:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(python3:*)"
     ],
     "deny": []
   }
