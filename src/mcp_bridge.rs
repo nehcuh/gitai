@@ -88,14 +88,14 @@ impl GitAiMcpBridge {
 
         // 调用现有的 review 处理器
         let mut config = self.config.lock().await.clone();
-        let error_msg = match handlers::review::handle_review(&mut config, review_args, None).await {
-            Ok(_) => return Ok(CallToolResult::success(vec![Content::text(
-                "📝 代码评审完成".to_string()
+        match handlers::review::handle_review(&mut config, review_args, None).await {
+            Ok(_) => Ok(CallToolResult::success(vec![Content::text(
+                "📝 代码评审已完成，结果已显示在上方".to_string()
             )])),
-            Err(e) => format!("❌ 代码评审失败: {}", e),
-        };
-        
-        Ok(CallToolResult::error(vec![Content::text(error_msg)]))
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(
+                format!("❌ 代码评审失败: {}", e)
+            )])),
+        }
     }
 
     /// 执行代码安全和质量扫描

@@ -195,10 +195,16 @@ pub(crate) async fn extract_diff_for_review(args: &ReviewArgs) -> Result<String,
             }
 
             // If no commit specified, use staged changes or unstaged changes
+            // In git status --porcelain output:
+            // - First character shows staged status
+            // - Second character shows unstaged status
             let has_staged = status_result
                 .stdout
                 .lines()
-                .any(|line| line.starts_with(|c| c == 'M' || c == 'A' || c == 'D' || c == 'R'));
+                .any(|line| {
+                    !line.is_empty() && 
+                    line.chars().next().map_or(false, |c| c != ' ' && c != '?')
+                });
 
             let diff_args = if has_staged {
                 tracing::info!("评审已暂存的变更");
