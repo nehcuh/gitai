@@ -5,13 +5,14 @@
 之前你遇到的问题："ChatWise 提示工具调用成功，但看不到暂存区有修改" 现在已经解决。
 
 ### 根本原因
-- MCP 服务器返回的是简单的成功消息，而不是实际的评审内容
-- ChatWise 只能看到工具调用成功，但收不到详细的评审结果
+1. **输出问题**: MCP 服务器返回的是简单的成功消息，而不是实际的评审内容
+2. **Git 命令错误**: `git diff --cached` 在某些情况下返回 exit code 129，导致 MCP 调用失败
 
 ### 解决方案
-- 新增 `handle_review_with_output` 方法，直接返回格式化的评审内容
-- MCP bridge 现在将完整的评审报告返回给客户端
-- ChatWise 现在能看到完整的 AI 代码评审结果
+1. **输出修复**: 新增 `handle_review_with_output` 方法，直接返回格式化的评审内容
+2. **Git 命令错误修复**: 改进了 `get_staged_diff()` 和 `get_diff_for_commit()` 的错误处理
+3. **MCP bridge 现在将完整的评审报告返回给客户端**
+4. **ChatWise 现在能看到完整的 AI 代码评审结果**
 
 ## ChatWise 配置步骤
 
@@ -132,6 +133,17 @@ ChatWise: 工具调用成功
 - 确认服务器正在运行
 - 检查 ChatWise 的 MCP 配置
 - 验证可执行文件路径正确
+
+### 4. Git 命令错误（已修复）
+如果你遇到以下错误：
+```
+❌ 获取暂存差异失败: Git command error: Git passthrough command 'git diff --cached' failed with exit code 129
+```
+
+这个问题在最新版本中已经修复。如果仍然遇到此问题：
+- 确保使用最新编译的 `mcp_server`
+- 检查 Git 仓库状态是否正常
+- 尝试重新初始化 Git 仓库（如果是测试环境）
 
 ## 示例会话
 
