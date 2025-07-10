@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(git stash show:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test)",
+      "Bash(ls:*)",
+      "Bash(rm:*)",
+      "Bash(fd:*)",
+      "Bash(cargo build:*)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.chatwise.app)",
+      "Bash(./target/release/gitai review:*)",
+      "Bash(./target/release/gitai --help)",
+      "Bash(./target/release/gitai:*)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(curl:*)",
+      "Bash(./target/release/mcp_server --help)"
+    ],
+    "deny": []
+  }
+}

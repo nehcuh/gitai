@@ -921,6 +921,7 @@ version = "0.1.0"
 dependencies = [
  "ast-grep-config",
  "ast-grep-core",
+ "async-trait",
  "base64 0.22.1",
  "chrono",
  "clap",

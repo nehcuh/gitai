@@ -176,7 +176,7 @@ async fn main() -> Result<(), AppError> {
         match args[0].as_str() {
             "update-queries" => {
                 tracing::info!("🔄 更新 Tree-sitter 查询文件");
-                handle_query_update()?;
+                handle_query_update().await?;
                 return Ok(());
             }
             "cleanup-queries" => {

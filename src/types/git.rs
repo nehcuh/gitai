@@ -245,3 +245,74 @@ pub struct DiffHunk {
     #[allow(dead_code)]
     pub lines: Vec<String>,
 }
+
+// DevOps work item types
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefectList(pub Vec<u32>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoryList(pub Vec<u32>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskList(pub Vec<u32>);
+
+// Implement FromStr for DevOps work item types
+impl FromStr for DefectList {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            Ok(DefectList(Vec::new()))
+        } else {
+            s.split(',')
+                .map(|item_str| {
+                    item_str
+                        .trim()
+                        .parse::<u32>()
+                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
+                })
+                .collect::<Result<Vec<u32>, String>>()
+                .map(DefectList)
+        }
+    }
+}
+
+impl FromStr for StoryList {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            Ok(StoryList(Vec::new()))
+        } else {
+            s.split(',')
+                .map(|item_str| {
+                    item_str
+                        .trim()
+                        .parse::<u32>()
+                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
+                })
+                .collect::<Result<Vec<u32>, String>>()
+                .map(StoryList)
+        }
+    }
+}
+
+impl FromStr for TaskList {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            Ok(TaskList(Vec::new()))
+        } else {
+            s.split(',')
+                .map(|item_str| {
+                    item_str
+                        .trim()
+                        .parse::<u32>()
+                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
+                })
+                .collect::<Result<Vec<u32>, String>>()
+                .map(TaskList)
+        }
+    }
+}

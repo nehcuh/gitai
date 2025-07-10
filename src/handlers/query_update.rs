@@ -5,7 +5,7 @@ use crate::errors::AppError;
 use crate::tree_sitter_analyzer::analyzer::TreeSitterAnalyzer;
 
 /// 更新查询命令的处理器
-pub fn handle_query_update() -> Result<(), AppError> {
+pub async fn handle_query_update() -> Result<(), AppError> {
     println!("{}", "正在更新 Tree-sitter 查询文件...".blue());
 
     // 加载配置
@@ -23,7 +23,7 @@ pub fn handle_query_update() -> Result<(), AppError> {
     println!("{}", "正在强制更新所有查询文件...".cyan());
     
     // 强制更新所有查询
-    match analyzer.update_queries() {
+    match analyzer.update_queries().await {
         Ok(_) => {
             println!("{}", "✓ 查询文件更新成功".green());
             

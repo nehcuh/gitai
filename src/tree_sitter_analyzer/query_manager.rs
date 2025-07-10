@@ -101,13 +101,13 @@ impl Default for QueryManagerConfig {
 pub struct QueryManager {
     config: QueryManagerConfig,
     metadata: HashMap<String, QueryMetadata>,
-    http_client: reqwest::blocking::Client,
+    http_client: reqwest::Client,
 }
 
 impl QueryManager {
     /// 创建新的查询管理器
     pub fn new(config: QueryManagerConfig) -> Result<Self, TreeSitterError> {
-        let http_client = reqwest::blocking::Client::builder()
+        let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.network_timeout))
             .build()
             .map_err(|e| TreeSitterError::QueryError(format!("Failed to create HTTP client: {}", e)))?;
@@ -129,7 +129,7 @@ impl QueryManager {
     }
 
     /// 获取查询文件内容
-    pub fn get_query(&mut self, language: &str, query_type: &str) -> Result<String, TreeSitterError> {
+    pub async fn get_query(&mut self, language: &str, query_type: &str) -> Result<String, TreeSitterError> {
         let key = format!("{}:{}", language, query_type);
 
         // 检查缓存
@@ -148,7 +148,7 @@ impl QueryManager {
                 continue;
             }
 
-            match self.download_query_from_source(source, language, query_type) {
+            match self.download_query_from_source(source, language, query_type).await {
                 Ok(content) => {
                     // 缓存成功下载的查询
                     self.cache_query(source, language, query_type, &content)?;
@@ -174,7 +174,7 @@ impl QueryManager {
     }
 
     /// 从源下载查询
-    fn download_query_from_source(
+    async fn download_query_from_source(
         &self,
         source: &QuerySource,
         language: &str,
@@ -190,6 +190,7 @@ impl QueryManager {
         let response = self.http_client
             .get(&url)
             .send()
+            .await
             .map_err(|e| TreeSitterError::QueryError(format!("HTTP request failed: {}", e)))?;
 
         if !response.status().is_success() {
@@ -201,6 +202,7 @@ impl QueryManager {
 
         let content = response
             .text()
+            .await
             .map_err(|e| TreeSitterError::QueryError(format!("Failed to read response: {}", e)))?;
 
         Ok(content)
@@ -330,7 +332,7 @@ impl QueryManager {
     }
 
     /// 强制更新所有查询
-    pub fn force_update_all(&mut self) -> Result<(), TreeSitterError> {
+    pub async fn force_update_all(&mut self) -> Result<(), TreeSitterError> {
         let keys: Vec<String> = self.metadata.keys().cloned().collect();
         
         for key in keys {
@@ -341,7 +343,7 @@ impl QueryManager {
                 
                 // 强制重新下载
                 self.metadata.remove(&key);
-                if let Err(e) = self.get_query(language, query_type) {
+                if let Err(e) = self.get_query(language, query_type).await {
                     tracing::warn!("Failed to update query {}:{}: {}", language, query_type, e);
                 }
             }

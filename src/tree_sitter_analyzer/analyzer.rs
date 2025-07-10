@@ -447,8 +447,8 @@ impl TreeSitterAnalyzer {
     }
 
     /// 强制更新所有查询
-    pub fn update_queries(&mut self) -> Result<(), TreeSitterError> {
-        self.query_manager.force_update_all()?;
+    pub async fn update_queries(&mut self) -> Result<(), TreeSitterError> {
+        self.query_manager.force_update_all().await?;
         self.structure_queries.clear();
         self.initialize_queries()
     }
