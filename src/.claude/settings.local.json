@@ -32,7 +32,8 @@
       "Bash(mv:*)",
       "Bash(grep:*)",
       "Bash(cargo run:*)",
-      "Bash(rustc:*)"
+      "Bash(rustc:*)",
+      "Bash(git -C /Users/huchen/Projects/RustPlay/gitai status --porcelain)"
     ],
     "deny": []
   }

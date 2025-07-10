@@ -90,14 +90,28 @@ pub async fn get_staged_files_status() -> Result<String, AppError> {
 
 /// Get comprehensive Git repository status
 pub async fn get_repository_status() -> Result<String, AppError> {
-    let args = vec!["status".to_string(), "--porcelain".to_string()];
+    get_repository_status_in_dir(None).await
+}
+
+/// Get comprehensive Git repository status in specified directory
+pub async fn get_repository_status_in_dir(dir: Option<&str>) -> Result<String, AppError> {
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["status".to_string(), "--porcelain".to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }
 
 /// Format Git status into human-readable format
 pub async fn get_formatted_repository_status() -> Result<String, AppError> {
-    let status_output = get_repository_status().await?;
+    get_formatted_repository_status_in_dir(None).await
+}
+
+/// Format Git status into human-readable format for specified directory
+pub async fn get_formatted_repository_status_in_dir(dir: Option<&str>) -> Result<String, AppError> {
+    let status_output = get_repository_status_in_dir(dir).await?;
     
     if status_output.trim().is_empty() {
         return Ok("🌟 工作目录干净，没有未跟踪的文件".to_string());
@@ -175,14 +189,32 @@ pub async fn get_formatted_repository_status() -> Result<String, AppError> {
 
 /// Get diff of staged changes
 pub async fn get_staged_diff() -> Result<String, AppError> {
-    let args = vec!["diff".to_string(), "--cached".to_string()];
+    get_staged_diff_in_dir(None).await
+}
+
+/// Get diff of staged changes in specified directory
+pub async fn get_staged_diff_in_dir(dir: Option<&str>) -> Result<String, AppError> {
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["diff".to_string(), "--cached".to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }
 
 /// Get diff of unstaged changes only
 pub async fn get_unstaged_diff() -> Result<String, AppError> {
-    let args = vec!["diff".to_string()];
+    get_unstaged_diff_in_dir(None).await
+}
+
+/// Get diff of unstaged changes only in specified directory
+pub async fn get_unstaged_diff_in_dir(dir: Option<&str>) -> Result<String, AppError> {
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["diff".to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
 }

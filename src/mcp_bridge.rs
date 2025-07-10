@@ -122,15 +122,16 @@ impl GitAiMcpBridge {
     /// 获取 Git 仓库状态信息
     pub async fn gitai_status(
         &self,
-        detailed: Option<bool>
+        detailed: Option<bool>,
+        path: Option<String>
     ) -> Result<CallToolResult, McpError> {
         // 获取 Git 状态  
-        let status_result = match handlers::git::get_formatted_repository_status().await {
+        let status_result = match handlers::git::get_formatted_repository_status_in_dir(path.as_deref()).await {
             Ok(status_output) => {
                 if detailed.unwrap_or(false) {
                     // 获取详细状态信息
-                    let staged_diff = handlers::git::get_staged_diff().await.unwrap_or_default();
-                    let unstaged_diff = handlers::git::get_diff_for_commit().await.unwrap_or_default();
+                    let staged_diff = handlers::git::get_staged_diff_in_dir(path.as_deref()).await.unwrap_or_default();
+                    let unstaged_diff = handlers::git::get_unstaged_diff_in_dir(path.as_deref()).await.unwrap_or_default();
                     
                     let mut detailed_result = format!("📊 Git 状态（详细）\n\n{}", status_output);
                     
@@ -161,16 +162,17 @@ impl GitAiMcpBridge {
     pub async fn gitai_diff(
         &self,
         staged: Option<bool>,
-        file_path: Option<String>
+        file_path: Option<String>,
+        path: Option<String>
     ) -> Result<CallToolResult, McpError> {
         let use_staged = staged.unwrap_or(true);
         
         let diff_content = if use_staged {
             if file_path.is_some() {
                 // 简化实现：不支持单文件diff
-                handlers::git::get_staged_diff().await.unwrap_or_default()
+                handlers::git::get_staged_diff_in_dir(path.as_deref()).await.unwrap_or_default()
             } else {
-                match handlers::git::get_staged_diff().await {
+                match handlers::git::get_staged_diff_in_dir(path.as_deref()).await {
                     Ok(diff) => diff,
                     Err(e) => return Ok(CallToolResult::error(vec![Content::text(
                         format!("❌ 获取暂存差异失败: {}", e)
@@ -178,7 +180,7 @@ impl GitAiMcpBridge {
                 }
             }
         } else {
-            match handlers::git::get_unstaged_diff().await {
+            match handlers::git::get_unstaged_diff_in_dir(path.as_deref()).await {
                 Ok(diff) => diff,
                 Err(e) => return Ok(CallToolResult::error(vec![Content::text(
                     format!("❌ 获取未暂存差异失败: {}", e)
@@ -277,6 +279,10 @@ impl GitAiMcpBridge {
                         "detailed": {
                             "type": "boolean",
                             "description": "是否返回详细状态信息"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "指定 Git 仓库路径（默认: 当前目录）"
                         }
                     }
                 }).as_object().unwrap().clone()),
@@ -295,6 +301,10 @@ impl GitAiMcpBridge {
                         "file_path": {
                             "type": "string",
                             "description": "特定文件路径（可选）"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "指定 Git 仓库路径（默认: 当前目录）"
                         }
                     }
                 }).as_object().unwrap().clone()),
@@ -333,14 +343,16 @@ impl GitAiMcpBridge {
             }
             "gitai_status" => {
                 let detailed = args.get("detailed").and_then(|v| v.as_bool());
+                let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                 
-                self.gitai_status(detailed).await
+                self.gitai_status(detailed, path).await
             }
             "gitai_diff" => {
                 let staged = args.get("staged").and_then(|v| v.as_bool());
                 let file_path = args.get("file_path").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                 
-                self.gitai_diff(staged, file_path).await
+                self.gitai_diff(staged, file_path, path).await
             }
             _ => {
                 Ok(CallToolResult::error(vec![Content::text(
