@@ -81,11 +81,96 @@ pub fn is_git_repository() -> Result<bool, AppError> {
     Ok(result.status.success())
 }
 
-/// Get the status of staged files
+/// Get the status of staged files (names only)
 pub async fn get_staged_files_status() -> Result<String, AppError> {
     let args = vec!["diff".to_string(), "--cached".to_string(), "--name-only".to_string()];
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     Ok(result.stdout)
+}
+
+/// Get comprehensive Git repository status
+pub async fn get_repository_status() -> Result<String, AppError> {
+    let args = vec!["status".to_string(), "--porcelain".to_string()];
+    let result = passthrough_to_git_with_error_handling(&args, true)?;
+    Ok(result.stdout)
+}
+
+/// Format Git status into human-readable format
+pub async fn get_formatted_repository_status() -> Result<String, AppError> {
+    let status_output = get_repository_status().await?;
+    
+    if status_output.trim().is_empty() {
+        return Ok("🌟 工作目录干净，没有未跟踪的文件".to_string());
+    }
+    
+    let mut staged_files = Vec::new();
+    let mut unstaged_files = Vec::new();
+    let mut untracked_files = Vec::new();
+    
+    for line in status_output.lines() {
+        if line.len() < 3 {
+            continue;
+        }
+        
+        let staged_status = line.chars().nth(0).unwrap_or(' ');
+        let unstaged_status = line.chars().nth(1).unwrap_or(' ');
+        let file_path = &line[3..];
+        
+        // Check staged changes
+        if staged_status != ' ' && staged_status != '?' {
+            let status_desc = match staged_status {
+                'A' => "新增",
+                'M' => "修改",
+                'D' => "删除",
+                'R' => "重命名",
+                'C' => "复制",
+                _ => "变更",
+            };
+            staged_files.push(format!("  {} {}", status_desc, file_path));
+        }
+        
+        // Check unstaged changes
+        if unstaged_status != ' ' && unstaged_status != '?' {
+            let status_desc = match unstaged_status {
+                'M' => "修改",
+                'D' => "删除",
+                _ => "变更",
+            };
+            unstaged_files.push(format!("  {} {}", status_desc, file_path));
+        }
+        
+        // Check untracked files
+        if staged_status == '?' && unstaged_status == '?' {
+            untracked_files.push(format!("  {}", file_path));
+        }
+    }
+    
+    let mut result = String::new();
+    
+    if !staged_files.is_empty() {
+        result.push_str("📋 暂存的更改:\n");
+        result.push_str(&staged_files.join("\n"));
+        result.push('\n');
+    }
+    
+    if !unstaged_files.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str("📝 未暂存的更改:\n");
+        result.push_str(&unstaged_files.join("\n"));
+        result.push('\n');
+    }
+    
+    if !untracked_files.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str("❓ 未跟踪的文件:\n");
+        result.push_str(&untracked_files.join("\n"));
+    }
+    
+    Ok(result)
 }
 
 /// Get diff of staged changes

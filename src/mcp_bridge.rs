@@ -125,15 +125,26 @@ impl GitAiMcpBridge {
         detailed: Option<bool>
     ) -> Result<CallToolResult, McpError> {
         // 获取 Git 状态  
-        let status_result = match handlers::git::get_staged_files_status().await {
+        let status_result = match handlers::git::get_formatted_repository_status().await {
             Ok(status_output) => {
                 if detailed.unwrap_or(false) {
                     // 获取详细状态信息
                     let staged_diff = handlers::git::get_staged_diff().await.unwrap_or_default();
                     let unstaged_diff = handlers::git::get_diff_for_commit().await.unwrap_or_default();
                     
-                    format!("📊 Git 状态（详细）\n\n状态: {}\n\n暂存的更改:\n{}\n\n未暂存的更改:\n{}", 
-                           status_output, staged_diff, unstaged_diff)
+                    let mut detailed_result = format!("📊 Git 状态（详细）\n\n{}", status_output);
+                    
+                    if !staged_diff.trim().is_empty() {
+                        detailed_result.push_str("\n\n📋 暂存的更改详情:\n");
+                        detailed_result.push_str(&staged_diff);
+                    }
+                    
+                    if !unstaged_diff.trim().is_empty() {
+                        detailed_result.push_str("\n\n📝 未暂存的更改详情:\n");
+                        detailed_result.push_str(&unstaged_diff);
+                    }
+                    
+                    detailed_result
                 } else {
                     format!("📊 Git 状态\n\n{}", status_output)
                 }
