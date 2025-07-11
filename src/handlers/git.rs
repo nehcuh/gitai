@@ -366,48 +366,51 @@ pub(crate) async fn extract_diff_for_review_in_dir(args: &ReviewArgs, dir: Optio
             Ok(result.stdout)
         }
         (None, None) => {
-            // Check if there are staged changes
-            let mut status_args = vec![];
-            if let Some(directory) = dir {
-                status_args.extend(vec!["-C".to_string(), directory.to_string()]);
-            }
-            status_args.extend(vec!["status".to_string(), "--porcelain".to_string()]);
-            let status_result = passthrough_to_git_with_error_handling(&status_args, true)?;
-
-            if status_result.stdout.trim().is_empty() {
+            // Use the existing workspace status detection functions
+            let status_output = get_repository_status_in_dir(dir).await?;
+            
+            if status_output.trim().is_empty() {
                 return Err(AppError::Generic(
-                    "没有检测到变更，无法执行代码评审。请先暂存(git add)或提交一些变更。"
+                    "没有检测到变更，无法执行代码评审。\n\n💡 提示：\n• 如果要分析特定的提交，请使用 --commit1 和 --commit2 参数\n• 如果要分析工作区变更，请先修改一些文件\n• 或者使用 `git add` 暂存一些变更后再进行评审"
                         .to_string(),
                 ));
             }
 
-            // If no commit specified, use staged changes or unstaged changes
-            // In git status --porcelain output:
-            // - First character shows staged status
-            // - Second character shows unstaged status
-            let has_staged = status_result
-                .stdout
-                .lines()
-                .any(|line| {
-                    !line.is_empty() && 
-                    line.chars().next().map_or(false, |c| c != ' ' && c != '?')
-                });
-
-            let mut diff_args = vec![];
-            if let Some(directory) = dir {
-                diff_args.extend(vec!["-C".to_string(), directory.to_string()]);
-            }
+            // Parse status to determine what to review
+            let mut has_staged = false;
+            let mut has_unstaged = false;
             
-            if has_staged {
-                tracing::info!("评审已暂存的变更");
-                diff_args.extend(vec!["diff".to_string(), "--staged".to_string()]);
-            } else {
-                tracing::info!("评审工作区的变更");
-                diff_args.extend(vec!["diff".to_string()]);
+            for line in status_output.lines() {
+                if line.len() < 2 { continue; }
+                
+                let staged_status = line.chars().nth(0).unwrap_or(' ');
+                let unstaged_status = line.chars().nth(1).unwrap_or(' ');
+                
+                if staged_status != ' ' && staged_status != '?' {
+                    has_staged = true;
+                }
+                if unstaged_status != ' ' && unstaged_status != '?' {
+                    has_unstaged = true;
+                }
             }
 
-            let result = passthrough_to_git_with_error_handling(&diff_args, false)?;
-            Ok(result.stdout)
+            // Get appropriate diff based on what's available
+            let diff_content = if has_staged {
+                tracing::info!("评审已暂存的变更");
+                get_staged_diff_in_dir(dir).await?
+            } else if has_unstaged {
+                tracing::info!("评审工作区的变更");
+                get_unstaged_diff_in_dir(dir).await?
+            } else {
+                // If nothing is staged or unstaged, but status shows changes,
+                // try to get any available diff
+                match get_staged_diff_in_dir(dir).await {
+                    Ok(diff) if !diff.trim().is_empty() => diff,
+                    _ => get_unstaged_diff_in_dir(dir).await?,
+                }
+            };
+
+            Ok(diff_content)
         }
         (None, Some(_)) => {
             // This should not happen with the CLI parser, but handle it just in case
