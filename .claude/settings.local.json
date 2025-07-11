@@ -28,7 +28,8 @@
       "Bash(./rmcp_error_analysis)",
       "Bash(./target/release/gitai --help)",
       "Bash(git push:*)",
-      "mcp__mcp-sequentialthinking-tools__sequentialthinking_tools"
+      "mcp__mcp-sequentialthinking-tools__sequentialthinking_tools",
+      "Bash(git branch:*)"
     ],
     "deny": []
   }
