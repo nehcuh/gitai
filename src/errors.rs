@@ -79,6 +79,9 @@ pub enum GitError {
     },
     DiffError(std::io::Error), // Changed to std::io::Error as it's more idiomatic
     NotARepository,
+    NotRepository {
+        path: String,
+    },
     NoStagedChanges,
     Other(String), // Generic Git errors
 }
@@ -233,6 +236,10 @@ impl std::fmt::Display for GitError {
             GitError::NotARepository => write!(
                 f,
                 "Not a git repository (or any of the parent directories)."
+            ),
+            GitError::NotRepository { path } => write!(
+                f,
+                "路径 '{}' 不是一个 git 仓库", path
             ),
             GitError::NoStagedChanges => write!(f, "No changes staged for commit."),
             GitError::Other(s) => write!(f, "Git error: {}", s),
