@@ -84,6 +84,7 @@ impl GitAiMcpBridge {
             tasks: None,
             defects: None,
             space_id: None,
+            scan_results: None,
             passthrough_args: Vec::new(),
         };
 

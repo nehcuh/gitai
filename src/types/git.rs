@@ -148,6 +148,10 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "SPACE_ID")]
     pub space_id: Option<u32>,
 
+    /// Use scan results to assist review (specify scan result file path or commit ID)
+    #[clap(long, value_name = "SCAN_FILE_OR_COMMIT")]
+    pub scan_results: Option<String>,
+
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,

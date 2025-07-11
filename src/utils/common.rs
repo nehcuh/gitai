@@ -4,6 +4,7 @@ use std::process::Command;
 
 use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs, TranslateArgs};
 use crate::errors::AppError;
+use crate::scanner::{ScanResult, ScanMatch};
 
 pub fn construct_scan_args(args: &[String]) -> ScanArgs {
     let mut scan_args_vec = vec!["gitai".to_string(), "scan".to_string()];
@@ -68,6 +69,7 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
             tasks: None,
             defects: None,
             space_id: None,
+            scan_results: None,
         }
     }
 }
@@ -191,7 +193,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("    \x1b[36m--stories IDS\x1b[0m         关联用户故事 ID\n");
     help.push_str("    \x1b[36m--tasks IDS\x1b[0m           关联任务 ID\n");
     help.push_str("    \x1b[36m--defects IDS\x1b[0m         关联缺陷 ID\n");
-    help.push_str("    \x1b[36m--space-id ID\x1b[0m         DevOps 空间/项目 ID\n\n");
+    help.push_str("    \x1b[36m--space-id ID\x1b[0m         DevOps 空间/项目 ID\n");
+    help.push_str("    \x1b[36m--scan-results PATH\x1b[0m    使用扫描结果辅助评审 (文件路径或提交ID)\n\n");
     
     // Scan command
     help.push_str("  \x1b[1mscan\x1b[0m                   代码安全和质量扫描\n");
@@ -235,6 +238,7 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  \x1b[32m# 代码质量分析\x1b[0m\n");
     help.push_str("  gitai review                   # 评审当前更改\n");
     help.push_str("  gitai review --depth=deep --focus=\"性能优化\"\n");
+    help.push_str("  gitai review --scan-results=abc123  # 结合扫描结果评审\n");
     help.push_str("  gitai scan                     # 代码安全扫描\n");
     help.push_str("  gitai scan --full --update-rules\n\n");
     
@@ -507,6 +511,164 @@ pub fn extract_review_insights(content: &str) -> String {
     }
 }
 
+/// Load scan results from file path or commit ID
+pub fn load_scan_results(scan_input: &str) -> Result<ScanResult, AppError> {
+    use std::fs;
+
+    // First, try to load as a direct file path
+    if Path::new(scan_input).exists() {
+        let content = fs::read_to_string(scan_input)
+            .map_err(|e| AppError::Generic(format!("Failed to read scan result file {}: {}", scan_input, e)))?;
+        let scan_result: ScanResult = serde_json::from_str(&content)
+            .map_err(|e| AppError::Generic(format!("Failed to parse scan result JSON: {}", e)))?;
+        return Ok(scan_result);
+    }
+
+    // If not a direct file path, try to find by commit ID in scan results directory
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| AppError::Generic("Unable to determine home directory".to_string()))?;
+    
+    let scan_results_dir = home_dir.join(".gitai").join("scan-results");
+    
+    // Get current repository name for searching in the right directory
+    let repo_name = get_repository_name()?;
+    let repo_scan_dir = scan_results_dir.join(&repo_name);
+    
+    if !repo_scan_dir.exists() {
+        return Err(AppError::Generic(format!("No scan results found for repository '{}'", repo_name)));
+    }
+
+    // Search for file that matches the commit ID (either as prefix or exact match)
+    let entries = fs::read_dir(&repo_scan_dir)
+        .map_err(|e| AppError::Generic(format!("Failed to read scan results directory: {}", e)))?;
+    
+    let mut matching_files = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| AppError::Generic(format!("Failed to read directory entry: {}", e)))?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        
+        // Check if file name starts with the commit ID or contains it
+        if file_name.starts_with(scan_input) || file_name.contains(scan_input) {
+            matching_files.push(entry.path());
+        }
+    }
+
+    if matching_files.is_empty() {
+        return Err(AppError::Generic(format!("No scan results found matching commit ID or file: {}", scan_input)));
+    }
+
+    // If multiple matches, use the most recent one
+    matching_files.sort_by_key(|path| {
+        path.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    let latest_file = matching_files.last().unwrap();
+    
+    let content = fs::read_to_string(latest_file)
+        .map_err(|e| AppError::Generic(format!("Failed to read scan result file: {}", e)))?;
+    let scan_result: ScanResult = serde_json::from_str(&content)
+        .map_err(|e| AppError::Generic(format!("Failed to parse scan result JSON: {}", e)))?;
+    
+    Ok(scan_result)
+}
+
+/// Get current repository name for scan result lookup
+fn get_repository_name() -> Result<String, AppError> {
+    use git2::Repository;
+    
+    let repo = Repository::open_from_env()
+        .map_err(|e| AppError::Generic(format!("Not in a git repository: {}", e)))?;
+    
+    // Try to get repository name from remote URL first
+    if let Ok(remotes) = repo.remotes() {
+        for remote_name in remotes.iter() {
+            if let Some(remote_name) = remote_name {
+                if let Ok(remote) = repo.find_remote(remote_name) {
+                    if let Some(url) = remote.url() {
+                        // Extract repository name from URL
+                        let parts: Vec<&str> = url.split('/').collect();
+                        if let Some(last_part) = parts.last() {
+                            let repo_name = last_part.trim_end_matches(".git");
+                            if !repo_name.is_empty() {
+                                return Ok(repo_name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fall back to directory name
+    let workdir = repo.workdir()
+        .ok_or_else(|| AppError::Generic("Repository has no working directory".to_string()))?;
+    
+    let dir_name = workdir.file_name()
+        .ok_or_else(|| AppError::Generic("Unable to get directory name".to_string()))?
+        .to_string_lossy()
+        .to_string();
+    
+    Ok(dir_name)
+}
+
+/// Format scan results for inclusion in review prompts
+pub fn format_scan_results_for_review(scan_result: &ScanResult) -> String {
+    let mut formatted = String::new();
+    
+    formatted.push_str("## 🛡️ 安全扫描结果分析\n\n");
+    formatted.push_str(&format!("**扫描信息:**\n"));
+    formatted.push_str(&format!("- 扫描ID: {}\n", scan_result.scan_id));
+    formatted.push_str(&format!("- 仓库: {}\n", scan_result.repository));
+    formatted.push_str(&format!("- 提交: {}\n", scan_result.commit_id));
+    formatted.push_str(&format!("- 扫描类型: {}\n", scan_result.scan_type));
+    formatted.push_str(&format!("- 扫描时间: {}\n", scan_result.scan_time));
+    formatted.push_str(&format!("- 文件数量: {}\n", scan_result.files_scanned));
+    formatted.push_str(&format!("- 问题总数: {}\n\n", scan_result.summary.total_matches));
+
+    if !scan_result.matches.is_empty() {
+        formatted.push_str("**发现的安全问题:**\n\n");
+        
+        // Group by severity
+        let mut by_severity: std::collections::HashMap<String, Vec<&ScanMatch>> = std::collections::HashMap::new();
+        for scan_match in &scan_result.matches {
+            by_severity.entry(scan_match.severity.clone()).or_insert(Vec::new()).push(scan_match);
+        }
+        
+        // Sort by severity priority (critical, high, medium, low, warning, info)
+        let severity_order = ["critical", "high", "medium", "low", "warning", "info"];
+        for severity in &severity_order {
+            if let Some(matches) = by_severity.get(*severity) {
+                formatted.push_str(&format!("### {} 级别问题 ({}个)\n\n", severity.to_uppercase(), matches.len()));
+                
+                for scan_match in matches {
+                    formatted.push_str(&format!("**{}** ({}:{})\n", scan_match.rule_id, 
+                        scan_match.file_path.split('/').last().unwrap_or(&scan_match.file_path), 
+                        scan_match.line_number));
+                    formatted.push_str(&format!("- **问题描述**: {}\n", scan_match.message));
+                    formatted.push_str(&format!("- **匹配代码**: `{}`\n", scan_match.matched_text));
+                    if let Some(context) = &scan_match.context {
+                        formatted.push_str(&format!("- **代码上下文**: `{}`\n", context));
+                    }
+                    formatted.push_str("\n");
+                }
+            }
+        }
+    } else {
+        formatted.push_str("✅ **扫描结果**: 未发现安全问题\n\n");
+    }
+    
+    // Add summary statistics
+    if !scan_result.summary.by_severity.is_empty() {
+        formatted.push_str("**按严重程度统计:**\n");
+        for (severity, count) in &scan_result.summary.by_severity {
+            formatted.push_str(&format!("- {}: {} 个\n", severity, count));
+        }
+        formatted.push_str("\n");
+    }
+    
+    formatted.push_str("---\n\n");
+    formatted
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,6 +695,7 @@ mod tests {
             tasks: None,
             defects: None,
             space_id: None,
+            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -590,6 +753,7 @@ mod tests {
             tasks: None,
             defects: None,
             space_id: None,
+            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }

@@ -12,7 +12,7 @@ use crate::{
         devops::{AnalysisWorkItem, WorkItem}, // Added AnalysisWorkItem
         git::{GitDiff, ReviewArgs},
     },
-    utils::generate_review_file_path,
+    utils::{generate_review_file_path, load_scan_results, format_scan_results_for_review},
 };
 
 use super::{
@@ -1155,13 +1155,29 @@ async fn generate_ai_review_prompt(
         summary
     };
 
+    // Load and format scan results if provided
+    let scan_results_summary = if let Some(scan_input) = &args.scan_results {
+        match load_scan_results(scan_input) {
+            Ok(scan_result) => {
+                let formatted = format_scan_results_for_review(&scan_result);
+                format!("\n\n{}", formatted)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load scan results from '{}': {}", scan_input, e);
+                format!("\n\n⚠️ **扫描结果加载失败**: {}\n\n", e)
+            }
+        }
+    } else {
+        String::new()
+    };
+
     let prompt_without_work_items =
         create_review_prompt(diff_text, analysis, args.focus.as_deref(), languages);
 
-    // Append work items summary to the prompt
+    // Append work items summary and scan results to the prompt
     Ok(format!(
-        "{}{}",
-        prompt_without_work_items, work_items_summary
+        "{}{}{}",
+        prompt_without_work_items, work_items_summary, scan_results_summary
     ))
 }
 

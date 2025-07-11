@@ -10,4 +10,6 @@ pub use common::{
     construct_review_args,
     construct_scan_args,
     construct_translate_args,
+    load_scan_results,
+    format_scan_results_for_review,
 };
