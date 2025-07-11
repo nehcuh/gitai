@@ -242,26 +242,24 @@ impl LocalScanner {
             self.get_incremental_files(&args.path)?.len()
         };
         
-        // Get scan information based on scan type
-        let (repository_name, commit_id) = if args.full {
-            // For full scan, use simple directory-based info - no Git operations needed
-            let repo_name = std::path::Path::new(&scan_path)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let scan_id = format!("full-{}", chrono::Utc::now().timestamp());
-            (repo_name, scan_id)
-        } else {
-            // For incremental scan, we need Git information
-            self.get_scan_target_info(&scan_path)
-        };
+        // Get scan information from Git repository for both full and incremental scans
+        let (repository_name, commit_id) = self.get_scan_target_info(&scan_path);
         
+        // Generate a more readable scan_id
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let scan_type_str = if args.full { "full" } else { "incremental" };
+        let scan_id = format!("{}_{}_{}_{}", 
+            scan_type_str, 
+            timestamp, 
+            &commit_id[..std::cmp::min(8, commit_id.len())], // First 8 characters of commit ID
+            matches.len()
+        );
+
         let scan_result = ScanResult {
-            scan_id: format!("{}_{}", commit_id, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()),
+            scan_id,
             repository: repository_name,
             commit_id: commit_id.clone(),
-            scan_type: if args.full { "full" } else { "incremental" }.to_string(),
+            scan_type: scan_type_str.to_string(),
             scan_time: chrono::Utc::now().to_rfc3339(),
             rules_count: rule_paths.len(),
             files_scanned,
@@ -1152,7 +1150,15 @@ impl LocalScanner {
                     .map_err(|e| AppError::FileWrite(path.to_string_lossy().to_string(), e))?;
             }
             
-            path.push(format!("{}.json", result.commit_id));
+            // Create a more descriptive filename with timestamp and scan type
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            let filename = format!("scan_{}_{}_{}_{}.json", 
+                result.scan_type, 
+                timestamp, 
+                &result.commit_id[..8], // First 8 characters of commit ID
+                result.matches.len()    // Number of matches for quick reference
+            );
+            path.push(filename);
             path
         };
         
