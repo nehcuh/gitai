@@ -39,10 +39,6 @@ GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工
 - [MCP集成指南](docs/MCP_INTEGRATION_GUIDE.md) - 通用MCP服务配置和使用  
 - [ChatWise配置](docs/MCP_CHATWISE_SETUP.md) - ChatWise客户端专用配置
 
-### 📋 产品文档
-- [需求文档](docs/prds/) - 详细的产品需求文档
-- [开发故事](docs/stories/) - 功能开发的详细文档
-
 ## ✨ 核心功能
 
 ### 🔍 智能代码评审 (`gitai review`)
