@@ -19,25 +19,25 @@ GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工
 ## 📚 文档导航
 
 ### 🏃 快速开始
-- **[5分钟快速入门](docs/QUICK_START.md)** - 立即体验GitAI的核心功能
-- [安装指南](docs/INSTALLATION_GUIDE.md) - 详细的安装和配置说明
-- [配置参考](docs/CONFIGURATION_REFERENCE.md) - 完整的配置选项说明
+- **[5分钟快速入门](docs/user-guide/QUICK_START.md)** - 立即体验GitAI的核心功能
+- [安装指南](docs/user-guide/INSTALLATION_GUIDE.md) - 详细的安装和配置说明
+- [配置参考](docs/user-guide/CONFIGURATION_REFERENCE.md) - 完整的配置选项说明
 
 ### 📖 用户指南  
-- [API文档](docs/API_DOCUMENTATION.md) - 完整的CLI命令参考
-- [故障排除](docs/TROUBLESHOOTING.md) - 常见问题解决方案
+- [API文档](docs/user-guide/API_DOCUMENTATION.md) - 完整的CLI命令参考
+- [故障排除](docs/user-guide/TROUBLESHOOTING.md) - 常见问题解决方案
 
 ### 🛠️ 开发指南
-- [开发指南](docs/DEVELOPMENT_GUIDE.md) - 开发环境搭建和开发流程
-- [架构分析](docs/ARCHITECTURE_ANALYSIS.md) - 项目架构和技术设计  
-- [贡献指南](docs/CONTRIBUTING.md) - 参与项目开发的指南
+- [开发指南](docs/developer-guide/DEVELOPMENT_GUIDE.md) - 开发环境搭建和开发流程
+- [架构分析](docs/developer-guide/ARCHITECTURE_ANALYSIS.md) - 项目架构和技术设计  
+- [贡献指南](docs/developer-guide/CONTRIBUTING.md) - 参与项目开发的指南
 
 ### 🏭 运维部署
-- [部署指南](docs/DEPLOYMENT_GUIDE.md) - 生产环境部署和运维
+- [部署指南](docs/operations/DEPLOYMENT_GUIDE.md) - 生产环境部署和运维
 
 ### 🔧 集成指南
-- [MCP集成指南](docs/MCP_INTEGRATION_GUIDE.md) - 通用MCP服务配置和使用  
-- [ChatWise配置](docs/MCP_CHATWISE_SETUP.md) - ChatWise客户端专用配置
+- [MCP集成指南](docs/integration/MCP_INTEGRATION_GUIDE.md) - 通用MCP服务配置和使用  
+- [ChatWise配置](docs/integration/MCP_CHATWISE_SETUP.md) - ChatWise客户端专用配置
 
 ## ✨ 核心功能
 

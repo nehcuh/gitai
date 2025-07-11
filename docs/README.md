@@ -6,36 +6,36 @@
 
 ## 📋 文档结构
 
-### 🚀 用户文档 (新用户推荐阅读顺序)
+### 📖 用户文档 (新用户推荐阅读顺序)
 
 | 文档 | 描述 | 适用人群 | 预计阅读时间 |
 |------|------|----------|-------------|
-| [**快速入门**](QUICK_START.md) | 5分钟快速上手指南 | 所有用户 | 5 分钟 |
-| [**安装指南**](INSTALLATION_GUIDE.md) | 详细的安装和配置说明 | 所有用户 | 15 分钟 |
-| [**API 文档**](API_DOCUMENTATION.md) | 完整的 CLI 命令参考 | 用户/开发者 | 30 分钟 |
-| [**配置参考**](CONFIGURATION_REFERENCE.md) | 详细的配置选项说明 | 高级用户 | 20 分钟 |
-| [**故障排除**](TROUBLESHOOTING.md) | 常见问题解决方案 | 所有用户 | 按需阅读 |
+| [**快速入门**](user-guide/QUICK_START.md) | 5分钟快速上手指南 | 所有用户 | 5 分钟 |
+| [**安装指南**](user-guide/INSTALLATION_GUIDE.md) | 详细的安装和配置说明 | 所有用户 | 15 分钟 |
+| [**API 文档**](user-guide/API_DOCUMENTATION.md) | 完整的 CLI 命令参考 | 用户/开发者 | 30 分钟 |
+| [**配置参考**](user-guide/CONFIGURATION_REFERENCE.md) | 详细的配置选项说明 | 高级用户 | 20 分钟 |
+| [**故障排除**](user-guide/TROUBLESHOOTING.md) | 常见问题解决方案 | 所有用户 | 按需阅读 |
 
 ### 🛠️ 开发文档 (开发者必读)
 
 | 文档 | 描述 | 适用人群 | 预计阅读时间 |
 |------|------|----------|-------------|
-| [**开发指南**](DEVELOPMENT_GUIDE.md) | 完整的开发环境搭建和流程 | 开发者 | 45 分钟 |
-| [**贡献指南**](CONTRIBUTING.md) | 参与项目开发的指南 | 贡献者 | 30 分钟 |
-| [**架构分析**](ARCHITECTURE_ANALYSIS.md) | 项目架构和设计说明 | 开发者 | 40 分钟 |
+| [**开发指南**](developer-guide/DEVELOPMENT_GUIDE.md) | 完整的开发环境搭建和流程 | 开发者 | 45 分钟 |
+| [**架构分析**](developer-guide/ARCHITECTURE_ANALYSIS.md) | 项目架构和设计说明 | 开发者 | 40 分钟 |
+| [**贡献指南**](developer-guide/CONTRIBUTING.md) | 参与项目开发的指南 | 贡献者 | 30 分钟 |
 
 ### 🏭 运维文档 (运维人员必读)
 
 | 文档 | 描述 | 适用人群 | 预计阅读时间 |
 |------|------|----------|-------------|
-| [**部署指南**](DEPLOYMENT_GUIDE.md) | 生产环境部署和运维 | 运维人员 | 50 分钟 |
+| [**部署指南**](operations/DEPLOYMENT_GUIDE.md) | 生产环境部署和运维 | 运维人员 | 50 分钟 |
 
 ### 🔧 集成文档 (集成开发必读)
 
 | 文档 | 描述 | 适用人群 | 预计阅读时间 |
 |------|------|----------|-------------|
-| [**MCP集成指南**](MCP_INTEGRATION_GUIDE.md) | 通用MCP服务配置和使用 | 开发者/集成工程师 | 30 分钟 |
-| [**ChatWise配置**](MCP_CHATWISE_SETUP.md) | ChatWise客户端专用配置 | ChatWise用户 | 15 分钟 |
+| [**MCP集成指南**](integration/MCP_INTEGRATION_GUIDE.md) | 通用MCP服务配置和使用 | 开发者/集成工程师 | 30 分钟 |
+| [**ChatWise配置**](integration/MCP_CHATWISE_SETUP.md) | ChatWise客户端专用配置 | ChatWise用户 | 15 分钟 |
 
 ## 🎯 按角色推荐的阅读路径
 
