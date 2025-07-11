@@ -73,7 +73,18 @@ pub fn passthrough_to_git_with_error_handling(
 
 /// Check if current directory is a git repository
 pub fn is_git_repository() -> Result<bool, AppError> {
-    let result = Command::new("git")
+    is_git_repository_in_dir(None)
+}
+
+/// Check if specified directory is a git repository
+pub fn is_git_repository_in_dir(dir: Option<&str>) -> Result<bool, AppError> {
+    let mut cmd = Command::new("git");
+    
+    if let Some(directory) = dir {
+        cmd.args(&["-C", directory]);
+    }
+    
+    let result = cmd
         .args(&["rev-parse", "--is-inside-work-tree"])
         .output()
         .map_err(|e| AppError::IO("检查Git仓库状态失败".to_string(), e))?;
@@ -111,6 +122,14 @@ pub async fn get_formatted_repository_status() -> Result<String, AppError> {
 
 /// Format Git status into human-readable format for specified directory
 pub async fn get_formatted_repository_status_in_dir(dir: Option<&str>) -> Result<String, AppError> {
+    // 首先检查指定目录是否是 git 仓库
+    if !is_git_repository_in_dir(dir)? {
+        let path_desc = dir.unwrap_or("当前目录");
+        return Err(AppError::Git(crate::errors::GitError::NotRepository {
+            path: path_desc.to_string(),
+        }));
+    }
+    
     let status_output = get_repository_status_in_dir(dir).await?;
     
     if status_output.trim().is_empty() {
@@ -221,8 +240,13 @@ pub async fn get_unstaged_diff_in_dir(dir: Option<&str>) -> Result<String, AppEr
 
 /// Get diff for commit analysis (staged changes with fallback to unstaged)
 pub async fn get_diff_for_commit() -> Result<String, AppError> {
+    get_diff_for_commit_in_dir(None).await
+}
+
+/// Get diff for commit analysis (staged changes with fallback to unstaged) in specified directory
+pub async fn get_diff_for_commit_in_dir(dir: Option<&str>) -> Result<String, AppError> {
     // First try to get staged changes
-    let staged_diff = get_staged_diff().await?;
+    let staged_diff = get_staged_diff_in_dir(dir).await?;
     
     if !staged_diff.trim().is_empty() {
         tracing::debug!("使用已暂存的变更进行提交分析");
@@ -230,7 +254,11 @@ pub async fn get_diff_for_commit() -> Result<String, AppError> {
     }
     
     // If no staged changes, check for unstaged changes
-    let args = vec!["diff".to_string()];
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["diff".to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, true)?;
     
     if !result.stdout.trim().is_empty() {
@@ -245,7 +273,16 @@ pub async fn get_diff_for_commit() -> Result<String, AppError> {
 
 /// Auto-stage tracked modified files
 pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
-    let args = vec!["add".to_string(), "-u".to_string()];
+    auto_stage_tracked_files_in_dir(None).await
+}
+
+/// Auto-stage tracked modified files in specified directory
+pub async fn auto_stage_tracked_files_in_dir(dir: Option<&str>) -> Result<(), AppError> {
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["add".to_string(), "-u".to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {
@@ -262,7 +299,16 @@ pub async fn auto_stage_tracked_files() -> Result<(), AppError> {
 
 /// Execute git commit with message
 pub async fn execute_commit_with_message(message: &str) -> Result<(), AppError> {
-    let args = vec!["commit".to_string(), "-m".to_string(), message.to_string()];
+    execute_commit_with_message_in_dir(message, None).await
+}
+
+/// Execute git commit with message in specified directory
+pub async fn execute_commit_with_message_in_dir(message: &str, dir: Option<&str>) -> Result<(), AppError> {
+    let mut args = vec![];
+    if let Some(directory) = dir {
+        args.extend(vec!["-C".to_string(), directory.to_string()]);
+    }
+    args.extend(vec!["commit".to_string(), "-m".to_string(), message.to_string()]);
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {

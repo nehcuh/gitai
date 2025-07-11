@@ -36,9 +36,58 @@ impl GitAiMcpBridge {
         message: Option<String>,
         auto_stage: Option<bool>,
         tree_sitter: Option<bool>,
-        issue_id: Option<String>
+        issue_id: Option<String>,
+        path: Option<String>
     ) -> Result<CallToolResult, McpError> {
-        // 构建 CommitArgs
+        // 如果指定了路径，先检查是否为 git 仓库
+        if let Some(ref dir_path) = path {
+            match handlers::git::is_git_repository_in_dir(Some(dir_path)) {
+                Ok(is_repo) => {
+                    if !is_repo {
+                        return Ok(CallToolResult::error(vec![Content::text(
+                            format!("❌ 提交失败: 路径 '{}' 不是一个 git 仓库", dir_path)
+                        )]));
+                    }
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        format!("❌ 提交失败: 检查仓库状态时出错: {}", e)
+                    )]));
+                }
+            }
+        }
+
+        // 如果没有指定路径，检查当前目录是否为 git 仓库
+        if path.is_none() {
+            match handlers::git::is_git_repository_in_dir(None) {
+                Ok(is_repo) => {
+                    if !is_repo {
+                        return Ok(CallToolResult::error(vec![Content::text(
+                            "❌ 提交失败: 当前目录不是一个 git 仓库".to_string()
+                        )]));
+                    }
+                }
+                Err(e) => {
+                    return Ok(CallToolResult::error(vec![Content::text(
+                        format!("❌ 提交失败: 检查仓库状态时出错: {}", e)
+                    )]));
+                }
+            }
+        }
+
+        // 如果指定了路径，使用简化的提交逻辑
+        if let Some(ref dir_path) = path {
+            match self.handle_commit_in_dir(message, auto_stage.unwrap_or(false), issue_id, dir_path).await {
+                Ok(_) => return Ok(CallToolResult::success(vec![Content::text(
+                    "✅ 提交成功完成".to_string()
+                )])),
+                Err(e) => return Ok(CallToolResult::error(vec![Content::text(
+                    format!("❌ 提交失败: {}", e)
+                )])),
+            }
+        }
+
+        // 否则使用默认的 commit 处理器（当前目录）
         let commit_args = CommitArgs {
             message,
             auto_stage: auto_stage.unwrap_or(false),
@@ -49,7 +98,6 @@ impl GitAiMcpBridge {
             review: false,
         };
 
-        // 调用现有的 commit 处理器
         let config = self.config.lock().await.clone();
         let error_msg = match handlers::commit::handle_commit(&config, commit_args).await {
             Ok(_) => return Ok(CallToolResult::success(vec![Content::text(
@@ -59,6 +107,95 @@ impl GitAiMcpBridge {
         };
         
         Ok(CallToolResult::error(vec![Content::text(error_msg)]))
+    }
+
+    /// 在指定目录中处理提交
+    async fn handle_commit_in_dir(
+        &self,
+        message: Option<String>,
+        auto_stage: bool,
+        issue_id: Option<String>,
+        dir_path: &str
+    ) -> Result<(), McpError> {
+        // 如果需要自动暂存，先暂存文件
+        if auto_stage {
+            handlers::git::auto_stage_tracked_files_in_dir(Some(dir_path)).await
+                .map_err(|e| McpError::internal_error(format!("自动暂存失败: {}", e), None))?;
+        }
+
+        // 生成或使用提供的提交信息
+        let commit_message = if let Some(msg) = message {
+            msg
+        } else {
+            // 获取待提交的 diff 用于生成提交信息
+            let diff = handlers::git::get_diff_for_commit_in_dir(Some(dir_path)).await
+                .map_err(|e| McpError::internal_error(format!("获取 diff 失败: {}", e), None))?;
+            
+            if diff.trim().is_empty() {
+                return Err(McpError::internal_error("没有检测到任何变更可用于提交".to_string(), None));
+            }
+
+            // 使用 AI 生成提交信息
+            self.generate_commit_message(&diff).await
+                .map_err(|e| McpError::internal_error(format!("生成提交信息失败: {}", e), None))?
+        };
+
+        // 添加 issue 前缀（如果有）
+        let final_message = if let Some(ref id) = issue_id {
+            crate::utils::add_issue_prefix_to_commit_message(&commit_message, Some(id))
+        } else {
+            commit_message
+        };
+
+        // 执行提交
+        handlers::git::execute_commit_with_message_in_dir(&final_message, Some(dir_path)).await
+            .map_err(|e| McpError::internal_error(format!("提交失败: {}", e), None))?;
+
+        Ok(())
+    }
+
+    /// 使用 AI 生成提交信息
+    async fn generate_commit_message(&self, diff: &str) -> Result<String, McpError> {
+        let config = self.config.lock().await.clone();
+        
+        let system_prompt = config
+            .prompts
+            .get("commit-generator")
+            .cloned()
+            .unwrap_or_else(|| {
+                "你是一个专业的Git提交信息生成助手。请根据提供的代码变更生成简洁、清晰的提交信息。".to_string()
+            });
+
+        let user_prompt = format!(
+            "请根据以下Git diff生成一个规范的提交信息：\n\n```diff\n{}\n```\n\n要求：\n1. 使用中文\n2. 格式为：类型(范围): 简洁描述\n3. 第一行不超过50个字符\n4. 如有必要，可以添加详细说明",
+            diff
+        );
+
+        let messages = vec![
+            crate::types::ai::ChatMessage {
+                role: "system".to_string(),
+                content: system_prompt,
+            },
+            crate::types::ai::ChatMessage {
+                role: "user".to_string(),
+                content: user_prompt,
+            },
+        ];
+
+        match crate::handlers::ai::execute_ai_request_generic(&config, messages, "提交信息生成", true).await {
+            Ok(message) => {
+                // Clean up the AI response - remove any markdown formatting
+                let cleaned_message = message
+                    .trim()
+                    .replace("```", "")
+                    .replace("**", "")
+                    .trim()
+                    .to_string();
+                
+                Ok(cleaned_message)
+            }
+            Err(e) => Err(McpError::internal_error(format!("AI生成失败: {}", e), None)),
+        }
     }
 
     /// 对代码进行 AI 驱动的智能评审
@@ -547,6 +684,10 @@ impl GitAiMcpBridge {
                         "issue_id": {
                             "type": "string",
                             "description": "关联的 issue ID（可选）"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "指定 Git 仓库路径（默认: 当前目录）"
                         }
                     }
                 }).as_object().unwrap().clone()),
@@ -661,8 +802,9 @@ impl GitAiMcpBridge {
                 let auto_stage = args.get("auto_stage").and_then(|v| v.as_bool());
                 let tree_sitter = args.get("tree_sitter").and_then(|v| v.as_bool());
                 let issue_id = args.get("issue_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let path = args.get("path").and_then(|v| v.as_str()).map(|s| s.to_string());
                 
-                self.gitai_commit(message, auto_stage, tree_sitter, issue_id).await
+                self.gitai_commit(message, auto_stage, tree_sitter, issue_id, path).await
             }
             "gitai_review" => {
                 let depth = args.get("depth").and_then(|v| v.as_str()).map(|s| s.to_string());
