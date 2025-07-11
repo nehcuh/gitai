@@ -19,6 +19,7 @@ GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工
 ## 📚 文档导航
 
 ### 🏃 快速开始
+- **[📚 完整文档导航](docs/README.md)** - 全面的文档索引和学习路径
 - **[5分钟快速入门](docs/user-guide/QUICK_START.md)** - 立即体验GitAI的核心功能
 - [安装指南](docs/user-guide/INSTALLATION_GUIDE.md) - 详细的安装和配置说明
 - [配置参考](docs/user-guide/CONFIGURATION_REFERENCE.md) - 完整的配置选项说明
