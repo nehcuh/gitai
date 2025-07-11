@@ -1,9 +1,43 @@
-# GitAI - AI 驱动的智能 Git 工具套件
+# GitAI - AI驱动的Git工作流助手
 
 [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+![Platform](https://img.shields.io/badge/platform-Linux%20|%20macOS%20|%20Windows-lightgrey.svg)
 
-GitAI 是一个革命性的 AI 驱动 Git 工具套件，将人工智能深度集成到你的 Git 工作流中。从智能代码评审到自动提交信息生成，再到 Git 命令的智能解释，GitAI 让你的开发体验更加智能、高效。
+> 🤖 **让AI成为你的Git工作流伙伴** - 智能提交、代码审查、安全扫描一体化解决方案
+
+GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工具提升开发者的代码质量和工作效率。从智能代码评审到自动提交信息生成，再到Git命令的智能解释，GitAI让你的开发体验更加智能、高效。
+
+## 🚀 项目概览
+
+### 🎯 适用场景
+- **个人开发者** - 提升代码质量，规范提交流程
+- **团队协作** - 统一代码审查标准，提高协作效率  
+- **企业级项目** - 集成DevOps流程，自动化质量控制
+- **开源项目** - 维护代码质量，吸引贡献者参与
+
+## 📚 文档导航
+
+### 🏃 快速开始
+- **[5分钟快速入门](docs/QUICK_START.md)** - 立即体验GitAI的核心功能
+- [安装指南](docs/INSTALLATION_GUIDE.md) - 详细的安装和配置说明
+- [配置参考](docs/CONFIGURATION_REFERENCE.md) - 完整的配置选项说明
+
+### 📖 用户指南  
+- [API文档](docs/API_DOCUMENTATION.md) - 完整的CLI命令参考
+- [故障排除](docs/TROUBLESHOOTING.md) - 常见问题解决方案
+
+### 🛠️ 开发指南
+- [开发指南](docs/DEVELOPMENT_GUIDE.md) - 开发环境搭建和开发流程
+- [架构分析](docs/ARCHITECTURE_ANALYSIS.md) - 项目架构和技术设计  
+- [贡献指南](docs/CONTRIBUTING.md) - 参与项目开发的指南
+
+### 🏭 运维部署
+- [部署指南](docs/DEPLOYMENT_GUIDE.md) - 生产环境部署和运维
+
+### 📋 产品文档
+- [需求文档](docs/prds/) - 详细的产品需求文档
+- [开发故事](docs/stories/) - 功能开发的详细文档
 
 ## ✨ 核心功能
 
