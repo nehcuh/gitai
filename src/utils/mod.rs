@@ -1,4 +1,5 @@
 pub mod common;
+pub mod workspace_status;
 
 pub use common::{
     find_latest_review_file,
@@ -10,4 +11,9 @@ pub use common::{
     construct_review_args,
     construct_scan_args,
     construct_translate_args,
+};
+
+pub use workspace_status::{
+    WorkspaceStatus,
+    format_workspace_status_header,
 };
