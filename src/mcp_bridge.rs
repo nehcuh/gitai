@@ -219,6 +219,7 @@ impl GitAiMcpBridge {
 
         // 构建评审参数  
         let review_args = crate::types::git::ReviewArgs {
+            path: path.clone(),
             depth: depth.unwrap_or("medium".to_string()),
             focus,
             language,
