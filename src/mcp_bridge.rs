@@ -207,8 +207,19 @@ impl GitAiMcpBridge {
         format: Option<String>,
         path: Option<String>
     ) -> Result<CallToolResult, McpError> {
+        // 检测工作区状态
+        let workspace_status = match crate::utils::WorkspaceStatus::detect(path.as_deref()).await {
+            Ok(status) => status,
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    format!("❌ 无法检测工作区状态: {}", e)
+                )]));
+            }
+        };
+
         // 构建评审参数  
         let review_args = crate::types::git::ReviewArgs {
+            path: path.clone(),
             depth: depth.unwrap_or("medium".to_string()),
             focus,
             language,
@@ -228,10 +239,35 @@ impl GitAiMcpBridge {
         // 调用带输出的 review 处理器
         let mut config = self.config.lock().await.clone();
         match handlers::review::handle_review_with_output_in_dir(&mut config, review_args, None, path.as_deref()).await {
-            Ok(review_content) => Ok(CallToolResult::success(vec![Content::text(review_content)])),
-            Err(e) => Ok(CallToolResult::error(vec![Content::text(
-                format!("❌ 代码评审失败: {}", e)
-            )])),
+            Ok(review_content) => {
+                // 准备最终输出，包含状态信息
+                let status_header = crate::utils::format_workspace_status_header(&workspace_status);
+                let full_output = format!("{}\n{}", status_header, review_content);
+                Ok(CallToolResult::success(vec![Content::text(full_output)]))
+            }
+            Err(e) => {
+                // 检查是否是"没有变更"的错误，提供更友好的提示
+                let error_message = e.to_string();
+                if error_message.contains("没有检测到变更") || error_message.contains("没有找到需要审查的代码变更") {
+                    let friendly_message = if workspace_status.is_git_repo {
+                        format!(
+                            "{}\n\n💡 提示：\n\
+                            • 如果要分析特定的提交，请使用 commit1 和 commit2 参数\n\
+                            • 如果要分析工作区变更，请先修改一些文件\n\
+                            • 或者使用 `git add` 暂存一些变更后再进行评审",
+                            workspace_status.user_friendly_message
+                        )
+                    } else {
+                        "📁 当前目录不是 Git 仓库，无法进行代码评审\n\n💡 提示：请在 Git 仓库中运行代码评审功能".to_string()
+                    };
+                    
+                    Ok(CallToolResult::error(vec![Content::text(friendly_message)]))
+                } else {
+                    Ok(CallToolResult::error(vec![Content::text(
+                        format!("❌ 代码评审失败: {}", e)
+                    )]))
+                }
+            }
         }
     }
 
@@ -243,16 +279,45 @@ impl GitAiMcpBridge {
         update_rules: Option<bool>,
         show_results: Option<bool>
     ) -> Result<CallToolResult, McpError> {
-        let scan_path = path.unwrap_or(".".to_string());
-        let scan_type = if full_scan.unwrap_or(false) { "全量扫描" } else { "增量扫描" };
-        let update_text = if update_rules.unwrap_or(false) { "（包含规则更新）" } else { "" };
+        let scan_path = path.clone().unwrap_or(".".to_string());
+        let is_full_scan = full_scan.unwrap_or(false);
         let should_show_results = show_results.unwrap_or(false);
+        
+        // 检测工作区状态
+        let workspace_status = match crate::utils::WorkspaceStatus::detect(path.as_deref()).await {
+            Ok(status) => status,
+            Err(e) => {
+                return Ok(CallToolResult::error(vec![Content::text(
+                    format!("❌ 无法检测工作区状态: {}", e)
+                )]));
+            }
+        };
+
+        // 根据工作区状态调整扫描类型描述
+        let scan_type_desc = if is_full_scan {
+            "全量扫描".to_string()
+        } else {
+            if workspace_status.is_git_repo {
+                if workspace_status.is_clean {
+                    "增量扫描（基于最新提交）".to_string()
+                } else {
+                    "增量扫描（检测未提交变更）".to_string()
+                }
+            } else {
+                "全目录扫描（非Git仓库）".to_string()
+            }
+        };
+        
+        let update_text = if update_rules.unwrap_or(false) { "（包含规则更新）" } else { "" };
         
         if should_show_results {
             // 用户要求展示完整扫描结果
-            match self.perform_full_scan(&scan_path, full_scan.unwrap_or(false), update_rules.unwrap_or(false)).await {
+            match self.perform_full_scan(&scan_path, is_full_scan, update_rules.unwrap_or(false)).await {
                 Ok(detailed_results) => {
-                    Ok(CallToolResult::success(vec![Content::text(detailed_results)]))
+                    // 在详细结果前添加状态信息
+                    let status_header = crate::utils::format_workspace_status_header(&workspace_status);
+                    let full_output = format!("{}\n{}", status_header, detailed_results);
+                    Ok(CallToolResult::success(vec![Content::text(full_output)]))
                 }
                 Err(e) => {
                     Ok(CallToolResult::error(vec![Content::text(
@@ -261,16 +326,18 @@ impl GitAiMcpBridge {
                 }
             }
         } else {
-            // 基础模式，只显示扫描信息
+            // 基础模式，显示扫描信息和状态
+            let status_header = crate::utils::format_workspace_status_header(&workspace_status);
+            
             let scan_result = format!(
-                "🔍 代码扫描结果\n\n\
+                "{}🔍 代码扫描结果\n\n\
                 📁 扫描路径: {}\n\
                 📊 扫描类型: {}{}\n\
                 📋 扫描状态: 完成\n\n\
                 💡 提示: 添加 \"show_results\": true 参数可以获取详细扫描结果。\n\
                 或者使用命令行工具 `gitai scan` 获取完整功能。\n\n\
                 ✅ 基础扫描检查完成",
-                scan_path, scan_type, update_text
+                status_header, scan_path, scan_type_desc, update_text
             );
             
             Ok(CallToolResult::success(vec![Content::text(scan_result)]))

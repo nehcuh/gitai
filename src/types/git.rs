@@ -100,6 +100,10 @@ pub struct CommitArgs {
 /// Arguments for the `review` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ReviewArgs {
+    /// Path to repository or directory to review
+    #[clap(value_name = "PATH")]
+    pub path: Option<String>,
+
     /// Analysis depth level
     #[clap(long, value_name = "LEVEL", default_value = "medium")]
     pub depth: String,

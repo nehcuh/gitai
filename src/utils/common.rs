@@ -56,6 +56,7 @@ pub fn construct_review_args(args: &[String]) -> ReviewArgs {
         tracing::warn!("解析review命令失败");
         // 创建默认的ReviewArgs
         ReviewArgs {
+            path: None,
             depth: "medium".to_string(),
             focus: None,
             language: None,

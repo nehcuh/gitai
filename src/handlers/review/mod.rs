@@ -17,7 +17,7 @@ pub mod types;
 use crate::{
     config::AppConfig,
     errors::AppError,
-    handlers::git::{extract_diff_for_review, extract_diff_for_review_in_dir},
+    handlers::git::extract_diff_for_review_in_dir,
     types::git::ReviewArgs,
 };
 use std::{sync::Arc, time::Instant};
@@ -89,7 +89,7 @@ impl ReviewOrchestrator {
         }
 
         // Step 2: Extract diff for review
-        let diff_text = extract_diff_for_review(&args).await?;
+        let diff_text = extract_diff_for_review_in_dir(&args, args.path.as_deref()).await?;
         if diff_text.trim().is_empty() {
             return Err(AppError::Generic("没有找到需要审查的代码变更".to_string()));
         }
