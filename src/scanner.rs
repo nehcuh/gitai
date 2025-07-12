@@ -440,28 +440,60 @@ impl LocalScanner {
     /// Get incremental files (changed files) for scanning
     /// Respects the path parameter to filter files within the specified directory
     fn get_incremental_files(&self, path: &Option<String>) -> Result<Vec<PathBuf>, AppError> {
-        let repo = self.repo.as_ref().ok_or_else(|| {
-            AppError::Git(crate::errors::GitError::NotARepository)
-        })?;
+        // Open the repository from the scan path, not the current working directory
+        let repo_owned;
+        let repo = if let Some(scan_path_str) = path {
+            let scan_path = PathBuf::from(scan_path_str);
+            let repo_path = if scan_path.is_absolute() {
+                scan_path
+            } else {
+                std::env::current_dir()
+                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .join(scan_path)
+            };
+            repo_owned = Repository::open(&repo_path)
+                .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("无法打开仓库 {}: {}", repo_path.display(), e))))?;
+            &repo_owned
+        } else {
+            // Fallback to the instance repo if no path specified
+            self.repo.as_ref().ok_or_else(|| AppError::Git(crate::errors::GitError::NotARepository))?
+        };
 
         let mut diff_options = DiffOptions::new();
         diff_options.include_untracked(true);
         
-        let head_tree = repo.head().map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?.peel_to_tree().map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
-        let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut diff_options)).map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
-
         let mut files = Vec::new();
-        diff.foreach(
-            &mut |delta, _| {
-                if let Some(path) = delta.new_file().path() {
-                    files.push(path.to_path_buf());
-                }
-                true
-            },
-            None,
-            None,
-            None,
-        ).map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+        
+        // Try to get HEAD tree, if it fails (no commits), scan all untracked files
+        if let Ok(head) = repo.head() {
+            if let Ok(head_tree) = head.peel_to_tree() {
+                // Normal case: repository has commits, use diff
+                let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut diff_options))
+                    .map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+
+                diff.foreach(
+                    &mut |delta, _| {
+                        if let Some(path) = delta.new_file().path() {
+                            files.push(path.to_path_buf());
+                        }
+                        true
+                    },
+                    None,
+                    None,
+                    None,
+                ).map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+            } else {
+                // HEAD exists but no tree (empty repository), get all untracked files
+                tracing::info!("仓库为空（无提交历史），扫描所有未跟踪文件");
+                files = self.get_all_untracked_files(repo)?;
+            }
+        } else {
+            // No HEAD (no commits), get all untracked files  
+            tracing::info!("仓库无提交历史，扫描所有未跟踪文件");
+            files = self.get_all_untracked_files(repo)?;
+        }
+        
+        tracing::debug!("增量扫描获取到 {} 个文件", files.len());
 
         // Get repository root directory
         let repo_workdir = repo.workdir()
@@ -479,25 +511,38 @@ impl LocalScanner {
                 ));
             }
             
-            // Convert scan path to absolute if it's relative
+            // Convert scan path to absolute and canonicalize it
             let absolute_scan_path = if scan_path.is_absolute() {
-                scan_path
+                scan_path.canonicalize()
+                    .map_err(|e| AppError::FileRead(scan_path.to_string_lossy().to_string(), e))?
             } else {
                 std::env::current_dir()
                     .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
-                    .join(scan_path)
+                    .join(&scan_path)
+                    .canonicalize()
+                    .map_err(|e| AppError::FileRead(scan_path.to_string_lossy().to_string(), e))?
             };
             
-            println!("Filtering incremental scan files for directory: {}", absolute_scan_path.display());
+            tracing::debug!("Filtering incremental scan files for directory: {}", absolute_scan_path.display());
             
             // Filter files that are within the specified scan path
             files.into_iter()
                 .filter_map(|relative_file| {
                     let absolute_file = repo_workdir.join(&relative_file);
-                    if absolute_file.starts_with(&absolute_scan_path) {
-                        Some(absolute_file)
+                    // Try to canonicalize the file path for proper comparison
+                    if let Ok(canonical_file) = absolute_file.canonicalize() {
+                        if canonical_file.starts_with(&absolute_scan_path) {
+                            Some(canonical_file)
+                        } else {
+                            None
+                        }
                     } else {
-                        None
+                        // If canonicalize fails, fall back to direct comparison
+                        if absolute_file.starts_with(&absolute_scan_path) {
+                            Some(absolute_file)
+                        } else {
+                            None
+                        }
                     }
                 })
                 .collect()
@@ -514,9 +559,31 @@ impl LocalScanner {
             .collect();
         
         let final_files = self.filter_ignored_files(valid_files)?;
-        
         println!("Found {} changed files to scan after filtering", final_files.len());
         Ok(final_files)
+    }
+
+    /// Get all untracked files in the repository (for repositories without commits)
+    fn get_all_untracked_files(&self, repo: &git2::Repository) -> Result<Vec<PathBuf>, AppError> {
+        let mut status_options = git2::StatusOptions::new();
+        status_options.include_untracked(true);
+        status_options.include_ignored(false);
+        
+        let statuses = repo.statuses(Some(&mut status_options))
+            .map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+        
+        let mut files = Vec::new();
+        for entry in statuses.iter() {
+            if let Some(path_str) = entry.path() {
+                // Only include untracked files
+                if entry.status().contains(git2::Status::WT_NEW) {
+                    files.push(PathBuf::from(path_str));
+                }
+            }
+        }
+        
+        tracing::info!("找到 {} 个未跟踪文件", files.len());
+        Ok(files)
     }
 
     /// Recursively collect all files from a given path
@@ -1067,8 +1134,12 @@ impl LocalScanner {
     */
 
     fn build_scan_result(&self, args: &ScanArgs, matches: &[ScanMatch], files_scanned: &[PathBuf], rules_count: usize) -> Result<ScanResult, AppError> {
-        let repo_name = self.get_repository_name()?;
-        let commit_id = self.get_current_commit_id()?;
+        // Use the scan path to get correct repository info
+        let scan_path = match &args.path {
+            Some(path) => path.clone(),
+            None => ".".to_string()
+        };
+        let (repo_name, commit_id) = self.get_scan_target_info(&scan_path);
         let scan_type = if args.full { "full" } else { "incremental" };
         
         let mut by_severity = HashMap::new();
