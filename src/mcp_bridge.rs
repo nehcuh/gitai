@@ -415,23 +415,10 @@ impl GitAiMcpBridge {
     async fn get_cached_scan_result(&self, scan_path: &str, full_scan: bool) -> Result<String, McpError> {
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
-        use std::path::Path;
         
-        // 为绝对路径创建更简洁的缓存键
-        let path_key = if Path::new(scan_path).is_absolute() {
-            // 对于绝对路径，使用目录名和路径hash
-            let dir_name = Path::new(scan_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown");
-            let path_hash = std::collections::hash_map::DefaultHasher::new();
-            use std::hash::{Hash, Hasher};
-            let mut hasher = path_hash;
-            scan_path.hash(&mut hasher);
-            format!("{}_{:x}", dir_name, hasher.finish())
-        } else {
-            scan_path.replace("/", "_").replace("\\", "_")
-        };
+        // 使用仓库名作为缓存键
+        let repo_name = self.get_repository_name_from_path(scan_path)?;
+        let path_key = repo_name;
         
         let cache_key = format!("{}_{}", 
             path_key, 
@@ -474,22 +461,10 @@ impl GitAiMcpBridge {
     /// 缓存扫描结果
     async fn cache_scan_result(&self, scan_path: &str, full_scan: bool, result: &str) -> Result<(), McpError> {
         use std::fs;
-        use std::path::Path;
         
-        // 为绝对路径创建更简洁的缓存键（与 get_cached_scan_result 相同逻辑）
-        let path_key = if Path::new(scan_path).is_absolute() {
-            let dir_name = Path::new(scan_path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown");
-            let path_hash = std::collections::hash_map::DefaultHasher::new();
-            use std::hash::{Hash, Hasher};
-            let mut hasher = path_hash;
-            scan_path.hash(&mut hasher);
-            format!("{}_{:x}", dir_name, hasher.finish())
-        } else {
-            scan_path.replace("/", "_").replace("\\", "_")
-        };
+        // 使用仓库名作为缓存键（与 get_cached_scan_result 相同逻辑）
+        let repo_name = self.get_repository_name_from_path(scan_path)?;
+        let path_key = repo_name;
         
         let cache_key = format!("{}_{}", 
             path_key, 
@@ -515,12 +490,15 @@ impl GitAiMcpBridge {
 
     /// 解析并格式化扫描输出
     async fn parse_and_format_scan_output(&self, stdout: &[u8], scan_path: &str) -> Result<String, McpError> {
+        // 根据扫描路径确定仓库名
+        let repo_name = self.get_repository_name_from_path(scan_path)?;
+        
         // 查找最新的扫描结果文件
         let scan_results_dir = dirs::home_dir()
             .ok_or_else(|| McpError::internal_error("无法获取用户主目录", None))?
             .join(".gitai")
             .join("scan-results")
-            .join("gitai");
+            .join(&repo_name);
         
         if !scan_results_dir.exists() {
             return Ok("🔍 扫描完成，但未找到结果文件。\n可能是首次运行或配置问题。".to_string());
@@ -651,6 +629,52 @@ impl GitAiMcpBridge {
         output.push_str("🔍 使用命令行 `gitai scan` 可获得更多详细信息\n");
         
         Ok(output)
+    }
+
+    /// 根据扫描路径获取仓库名称
+    fn get_repository_name_from_path(&self, scan_path: &str) -> Result<String, McpError> {
+        use std::path::Path;
+        
+        let path = Path::new(scan_path);
+        
+        // 尝试获取Git仓库信息
+        if let Ok(repo) = git2::Repository::discover(path) {
+            // 尝试从远程origin获取仓库名
+            if let Ok(remote) = repo.find_remote("origin") {
+                if let Some(url) = remote.url() {
+                    let repo_name = url.split('/').last()
+                        .unwrap_or("unknown")
+                        .trim_end_matches(".git");
+                    return Ok(repo_name.to_string());
+                }
+            }
+            
+            // 如果没有远程origin，使用工作目录名
+            if let Some(workdir) = repo.workdir() {
+                if let Some(dir_name) = workdir.file_name().and_then(|n| n.to_str()) {
+                    return Ok(dir_name.to_string());
+                }
+            }
+        }
+        
+        // 如果不是Git仓库，使用目录名
+        let dir_name = if path.is_absolute() {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        } else {
+            // 对于相对路径，解析为绝对路径后获取目录名
+            let absolute_path = std::env::current_dir()
+                .map_err(|e| McpError::internal_error(format!("无法获取当前目录: {}", e), None))?
+                .join(path);
+            absolute_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        };
+        
+        Ok(dir_name)
     }
 
     /// 获取 Git 仓库状态信息
