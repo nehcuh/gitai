@@ -8,9 +8,10 @@ use serde_yaml;
 use std::collections::HashMap;
 use regex;
 
-/// Supported languages for AST analysis
+/// Supported languages for AST analysis - all languages that ast-grep supports
 #[derive(Debug, Clone, PartialEq)]
 pub enum SupportedLanguage {
+    // Core programming languages
     Rust,
     JavaScript,
     TypeScript,
@@ -19,14 +20,76 @@ pub enum SupportedLanguage {
     C,
     Cpp,
     Go,
+    
+    // Web and markup languages
     Html,
     Css,
+    Scss,
+    Less,
+    Vue,
+    Svelte,
+    
+    // Other programming languages
+    Ruby,
+    Php,
+    CSharp,
+    Swift,
+    Kotlin,
+    Scala,
+    Dart,
+    Lua,
+    Perl,
+    R,
+    Julia,
+    Fortran,
+    ObjectiveC,
+    Haskell,
+    OCaml,
+    Elixir,
+    Erlang,
+    Clojure,
+    Elm,
+    Nim,
+    Zig,
+    VLang,
+    Pascal,
+    Ada,
+    DLang,
+    Crystal,
+    Vala,
+    Groovy,
+    
+    // Configuration and data languages
+    Json,
+    Yaml,
+    Toml,
+    Xml,
+    Markdown,
+    Latex,
+    
+    // Shell and scripting languages
+    Bash,
+    Zsh,
+    Fish,
+    PowerShell,
+    Batch,
+    
+    // Query and database languages
+    Sql,
+    
+    // Infrastructure and DevOps languages
+    Dockerfile,
+    Hcl,
+    Protobuf,
+    Thrift,
+    GraphQL,
 }
 
 impl SupportedLanguage {
     /// Get the string representation used by ast-grep
     pub fn as_str(&self) -> &'static str {
         match self {
+            // Core programming languages
             Self::Rust => "rust",
             Self::JavaScript => "javascript",
             Self::TypeScript => "typescript", 
@@ -35,24 +98,148 @@ impl SupportedLanguage {
             Self::C => "c",
             Self::Cpp => "cpp",
             Self::Go => "go",
+            
+            // Web and markup languages
             Self::Html => "html",
             Self::Css => "css",
+            Self::Scss => "scss",
+            Self::Less => "less",
+            Self::Vue => "vue",
+            Self::Svelte => "svelte",
+            
+            // Other programming languages
+            Self::Ruby => "ruby",
+            Self::Php => "php",
+            Self::CSharp => "csharp",
+            Self::Swift => "swift",
+            Self::Kotlin => "kotlin",
+            Self::Scala => "scala",
+            Self::Dart => "dart",
+            Self::Lua => "lua",
+            Self::Perl => "perl",
+            Self::R => "r",
+            Self::Julia => "julia",
+            Self::Fortran => "fortran",
+            Self::ObjectiveC => "objc",
+            Self::Haskell => "haskell",
+            Self::OCaml => "ocaml",
+            Self::Elixir => "elixir",
+            Self::Erlang => "erlang",
+            Self::Clojure => "clojure",
+            Self::Elm => "elm",
+            Self::Nim => "nim",
+            Self::Zig => "zig",
+            Self::VLang => "vlang",
+            Self::Pascal => "pascal",
+            Self::Ada => "ada",
+            Self::DLang => "dlang",
+            Self::Crystal => "crystal",
+            Self::Vala => "vala",
+            Self::Groovy => "groovy",
+            
+            // Configuration and data languages
+            Self::Json => "json",
+            Self::Yaml => "yaml",
+            Self::Toml => "toml",
+            Self::Xml => "xml",
+            Self::Markdown => "markdown",
+            Self::Latex => "latex",
+            
+            // Shell and scripting languages
+            Self::Bash => "bash",
+            Self::Zsh => "zsh",
+            Self::Fish => "fish",
+            Self::PowerShell => "powershell",
+            Self::Batch => "batch",
+            
+            // Query and database languages
+            Self::Sql => "sql",
+            
+            // Infrastructure and DevOps languages
+            Self::Dockerfile => "dockerfile",
+            Self::Hcl => "hcl",
+            Self::Protobuf => "protobuf",
+            Self::Thrift => "thrift",
+            Self::GraphQL => "graphql",
         }
     }
 
     /// Create from string representation
     pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "rust" => Some(Self::Rust),
-            "javascript" => Some(Self::JavaScript),
-            "typescript" => Some(Self::TypeScript),
-            "python" => Some(Self::Python),
+        match s.to_lowercase().as_str() {
+            // Core programming languages
+            "rust" | "rs" => Some(Self::Rust),
+            "javascript" | "js" => Some(Self::JavaScript),
+            "typescript" | "ts" => Some(Self::TypeScript),
+            "python" | "py" => Some(Self::Python),
             "java" => Some(Self::Java),
             "c" => Some(Self::C),
-            "cpp" => Some(Self::Cpp),
+            "cpp" | "c++" => Some(Self::Cpp),
             "go" => Some(Self::Go),
+            
+            // Web and markup languages
             "html" => Some(Self::Html),
             "css" => Some(Self::Css),
+            "scss" | "sass" => Some(Self::Scss),
+            "less" => Some(Self::Less),
+            "vue" => Some(Self::Vue),
+            "svelte" => Some(Self::Svelte),
+            
+            // Other programming languages
+            "ruby" | "rb" => Some(Self::Ruby),
+            "php" => Some(Self::Php),
+            "csharp" | "c#" | "cs" => Some(Self::CSharp),
+            "swift" => Some(Self::Swift),
+            "kotlin" | "kt" => Some(Self::Kotlin),
+            "scala" => Some(Self::Scala),
+            "dart" => Some(Self::Dart),
+            "lua" => Some(Self::Lua),
+            "perl" | "pl" => Some(Self::Perl),
+            "r" => Some(Self::R),
+            "julia" | "jl" => Some(Self::Julia),
+            "fortran" | "f90" | "f95" | "f03" | "f08" => Some(Self::Fortran),
+            "objc" | "objective-c" | "objectivec" => Some(Self::ObjectiveC),
+            "haskell" | "hs" => Some(Self::Haskell),
+            "ocaml" | "ml" => Some(Self::OCaml),
+            "elixir" | "ex" => Some(Self::Elixir),
+            "erlang" | "erl" => Some(Self::Erlang),
+            "clojure" | "clj" => Some(Self::Clojure),
+            "elm" => Some(Self::Elm),
+            "nim" => Some(Self::Nim),
+            "zig" => Some(Self::Zig),
+            "vlang" | "v" => Some(Self::VLang),
+            "pascal" | "pas" => Some(Self::Pascal),
+            "ada" => Some(Self::Ada),
+            "dlang" | "d" => Some(Self::DLang),
+            "crystal" | "cr" => Some(Self::Crystal),
+            "vala" => Some(Self::Vala),
+            "groovy" => Some(Self::Groovy),
+            
+            // Configuration and data languages
+            "json" => Some(Self::Json),
+            "yaml" | "yml" => Some(Self::Yaml),
+            "toml" => Some(Self::Toml),
+            "xml" => Some(Self::Xml),
+            "markdown" | "md" => Some(Self::Markdown),
+            "latex" | "tex" => Some(Self::Latex),
+            
+            // Shell and scripting languages
+            "bash" | "sh" => Some(Self::Bash),
+            "zsh" => Some(Self::Zsh),
+            "fish" => Some(Self::Fish),
+            "powershell" | "ps1" => Some(Self::PowerShell),
+            "batch" | "bat" | "cmd" => Some(Self::Batch),
+            
+            // Query and database languages
+            "sql" | "mysql" | "postgresql" | "sqlite" => Some(Self::Sql),
+            
+            // Infrastructure and DevOps languages
+            "dockerfile" => Some(Self::Dockerfile),
+            "hcl" | "terraform" | "tf" => Some(Self::Hcl),
+            "protobuf" | "proto" => Some(Self::Protobuf),
+            "thrift" => Some(Self::Thrift),
+            "graphql" | "gql" => Some(Self::GraphQL),
+            
             _ => None,
         }
     }
@@ -484,13 +671,7 @@ impl AstGrepEngine {
 
     /// Check if a language is supported by the engine
     fn is_language_supported(&self, language: &str) -> bool {
-        matches!(language.to_lowercase().as_str(), 
-            "rust" | "javascript" | "typescript" | "python" | "java" | 
-            "c" | "cpp" | "go" | "html" | "css" |
-            // Support variations in capitalization
-            "js" | "ts" | "py" | "rs" | "rb" | "ruby" | "php" | "swift" |
-            "kotlin" | "scala" | "csharp" | "c#"
-        )
+        SupportedLanguage::from_str(language).is_some()
     }
 }
 
