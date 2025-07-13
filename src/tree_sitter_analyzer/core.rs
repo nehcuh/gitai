@@ -285,6 +285,21 @@ const JAVASCRIPT_LOCALS: &str = include_str!(concat!(
 ));
 const JAVASCRIPT_STRUCTURE: &str = "";
 
+// TypeScript 使用 JavaScript 的查询文件
+const TYPESCRIPT_HIGHLIGHTS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/queries/typescript/highlights.scm"
+));
+const TYPESCRIPT_INJECTIONS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/queries/typescript/injections.scm"
+));
+const TYPESCRIPT_LOCALS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/queries/typescript/locals.scm"
+));
+const TYPESCRIPT_STRUCTURE: &str = "";
+
 const C_HIGHLIGHTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/queries/c/highlights.scm"
@@ -332,6 +347,11 @@ define_ts_langs! {
     get_tree_sitter_cpp   => tree_sitter_cpp       => "C++ 语言解析器",
 }
 
+// TypeScript 使用 JavaScript 解析器
+pub fn get_tree_sitter_typescript() -> Language {
+    tree_sitter_javascript::LANGUAGE.into()
+}
+
 // 获取各语言的查询模式
 pub fn get_rust_query_pattern() -> &'static str {
     RUST_HIGHLIGHTS
@@ -359,6 +379,10 @@ pub fn get_c_query_pattern() -> &'static str {
 
 pub fn get_cpp_query_pattern() -> &'static str {
     CPP_HIGHLIGHTS
+}
+
+pub fn get_typescript_query_pattern() -> &'static str {
+    TYPESCRIPT_HIGHLIGHTS
 }
 
 // 获取所有查询模式的组合版本（用于更复杂的分析）
@@ -394,17 +418,23 @@ pub fn get_cpp_full_queries() -> (&'static str, &'static str, &'static str) {
     (CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)
 }
 
+pub fn get_typescript_full_queries() -> (&'static str, &'static str, &'static str) {
+    (TYPESCRIPT_HIGHLIGHTS, TYPESCRIPT_INJECTIONS, TYPESCRIPT_LOCALS)
+}
+
 // 通用查询模式获取函数
 pub fn get_query_pattern_for_language(language: &str) -> Option<&'static str> {
-    match language {
+    let normalized = normalize_language_name(language);
+    match normalized.as_str() {
         "rust" => Some(RUST_HIGHLIGHTS),
         "java" => Some(JAVA_HIGHLIGHTS),
         "python" => Some(PYTHON_HIGHLIGHTS),
         "go" => Some(GO_HIGHLIGHTS),
-        "js" | "javascript" => Some(JAVASCRIPT_HIGHLIGHTS),
+        "javascript" => Some(JAVASCRIPT_HIGHLIGHTS),
+        "typescript" => Some(TYPESCRIPT_HIGHLIGHTS),
         "c" => Some(C_HIGHLIGHTS),
-        "cpp" | "c++" => Some(CPP_HIGHLIGHTS),
-        _ => None,
+        "cpp" => Some(CPP_HIGHLIGHTS),
+        _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
     }
 }
 
@@ -412,19 +442,25 @@ pub fn get_query_pattern_for_language(language: &str) -> Option<&'static str> {
 pub fn get_full_queries_for_language(
     language: &str,
 ) -> Option<(&'static str, &'static str, &'static str)> {
-    match language {
+    let normalized = normalize_language_name(language);
+    match normalized.as_str() {
         "rust" => Some((RUST_HIGHLIGHTS, RUST_INJECTIONS, RUST_LOCALS)),
         "java" => Some((JAVA_HIGHLIGHTS, JAVA_INJECTIONS, JAVA_LOCALS)),
         "python" => Some((PYTHON_HIGHLIGHTS, PYTHON_INJECTIONS, PYTHON_LOCALS)),
         "go" => Some((GO_HIGHLIGHTS, GO_INJECTIONS, GO_LOCALS)),
-        "js" | "javascript" => Some((
+        "javascript" => Some((
             JAVASCRIPT_HIGHLIGHTS,
             JAVASCRIPT_INJECTIONS,
             JAVASCRIPT_LOCALS,
         )),
+        "typescript" => Some((
+            TYPESCRIPT_HIGHLIGHTS,
+            TYPESCRIPT_INJECTIONS,
+            TYPESCRIPT_LOCALS,
+        )),
         "c" => Some((C_HIGHLIGHTS, C_INJECTIONS, C_LOCALS)),
-        "cpp" | "c++" => Some((CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)),
-        _ => None,
+        "cpp" => Some((CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)),
+        _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
     }
 }
 
@@ -443,17 +479,58 @@ pub fn detect_language_from_extension(extension: &str) -> Option<&'static str> {
     }
 }
 
-// 获取支持的语言列表
-pub fn get_supported_languages() -> &'static [&'static str] {
-    &["rust", "java", "python", "go", "js", "c", "cpp"]
+// 获取当前实现了 tree-sitter 解析器的语言列表
+pub fn get_implemented_tree_sitter_languages() -> &'static [&'static str] {
+    &["rust", "java", "python", "go", "javascript", "typescript", "c", "cpp"]
 }
 
-// 检查语言是否被支持
+// 向后兼容的别名
+pub fn get_supported_languages() -> &'static [&'static str] {
+    get_implemented_tree_sitter_languages()
+}
+
+// 检查语言是否被支持（任何形式的支持）
 pub fn is_language_supported(language: &str) -> bool {
-    matches!(
-        language,
-        "rust" | "java" | "python" | "go" | "js" | "javascript" | "c" | "cpp" | "c++"
-    )
+    get_all_supported_languages().contains(&language)
+}
+
+// 标准化语言名称
+pub fn normalize_language_name(language: &str) -> String {
+    match language.to_lowercase().as_str() {
+        "js" => "javascript".to_string(),
+        "ts" => "typescript".to_string(), 
+        "c++" => "cpp".to_string(),
+        "c#" => "csharp".to_string(),
+        _ => language.to_lowercase(),
+    }
+}
+
+// 获取所有支持的语言列表（包括通过 AST-grep 支持的）
+pub fn get_all_supported_languages() -> Vec<&'static str> {
+    vec![
+        // Tree-sitter 已实现的语言
+        "rust", "java", "python", "go", "javascript", "typescript", "c", "cpp",
+        
+        // AST-grep 支持的其他语言
+        "ruby", "php", "csharp", "swift", "kotlin", "scala", "dart", "lua",
+        "perl", "r", "julia", "fortran", "objc", "haskell", "ocaml", "elixir",
+        "erlang", "clojure", "elm", "nim", "zig", "vlang", "pascal", "ada",
+        "dlang", "crystal", "vala", "groovy",
+        
+        // Web 和标记语言
+        "html", "css", "scss", "less", "vue", "svelte", "xml", "json",
+        "yaml", "toml", "markdown", "latex",
+        
+        // 配置和脚本语言
+        "bash", "zsh", "fish", "powershell", "batch", "sql", "dockerfile",
+        "hcl", "protobuf", "thrift", "graphql"
+    ]
+}
+
+// 检查语言是否有完整的 tree-sitter 实现
+pub fn has_tree_sitter_implementation(language: &str) -> bool {
+    let normalized = normalize_language_name(language);
+    get_implemented_tree_sitter_languages().contains(&normalized.as_str())
 }
 
 // 获取语言的标准文件扩展名
@@ -526,12 +603,24 @@ pub fn create_language_registry() -> LanguageRegistry {
     registry.register_language(LanguageConfig {
         name: "js",
         display_name: "JavaScript",
-        extensions: &["js", "mjs", "jsx", "ts", "tsx"],
+        extensions: &["js", "mjs", "jsx"],
         language_fn: get_tree_sitter_js,
         highlights_query: JAVASCRIPT_HIGHLIGHTS,
         injections_query: JAVASCRIPT_INJECTIONS,
         locals_query: JAVASCRIPT_LOCALS,
         structure_query: JAVASCRIPT_STRUCTURE,
+    });
+
+    // TypeScript 配置
+    registry.register_language(LanguageConfig {
+        name: "typescript",
+        display_name: "TypeScript",
+        extensions: &["ts", "tsx"],
+        language_fn: get_tree_sitter_typescript,
+        highlights_query: TYPESCRIPT_HIGHLIGHTS,
+        injections_query: TYPESCRIPT_INJECTIONS,
+        locals_query: TYPESCRIPT_LOCALS,
+        structure_query: TYPESCRIPT_STRUCTURE,
     });
 
     // C 配置

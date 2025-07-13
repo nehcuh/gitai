@@ -65,8 +65,68 @@ fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
 (string_literal) @string
 "#
         }
+        ("typescript", "highlights.scm") => {
+            // TypeScript 基本上和 JavaScript 相同
+            r#"
+(identifier) @variable
+(function_declaration name: (identifier) @function)
+(class_declaration name: (type_identifier) @type)
+(interface_declaration name: (type_identifier) @type)
+(import_statement) @keyword
+"#
+        }
+        ("ruby", "highlights.scm") => {
+            r#"
+(identifier) @variable
+(method name: (identifier) @function)
+(class name: (constant) @type)
+(module name: (constant) @type)
+"#
+        }
+        ("html", "highlights.scm") => {
+            r#"
+(tag_name) @tag
+(attribute_name) @attribute
+(text) @text
+"#
+        }
+        ("css", "highlights.scm") => {
+            r#"
+(tag_name) @tag
+(class_name) @class
+(id_name) @id
+(property_name) @property
+"#
+        }
+        ("json", "highlights.scm") => {
+            r#"
+(string) @string
+(number) @number
+(true) @boolean
+(false) @boolean
+(null) @null
+"#
+        }
+        ("yaml", "highlights.scm") => {
+            r#"
+(block_mapping_pair key: (_) @key)
+(flow_mapping_pair key: (_) @key)
+(string) @string
+(integer) @number
+(float) @number
+(boolean) @boolean
+"#
+        }
+        ("bash", "highlights.scm") => {
+            r#"
+(command_name) @function
+(variable_name) @variable
+(string) @string
+(number) @number
+"#
+        }
         _ => {
-            // 通用的最小查询
+            // 通用的最小查询 - 适用于大部分语言
             r#"
 (identifier) @variable
 "#
@@ -88,6 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let base = Path::new(&manifest_dir).join("queries");
     // 要拉取的各语言仓库和路径映射
+    // 只为当前在 Cargo.toml 中有 crate 依赖的语言下载查询文件
     let repos = [
         ("rust", "tree-sitter/tree-sitter-rust"),
         ("javascript", "tree-sitter/tree-sitter-javascript"),
@@ -96,6 +157,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("java", "tree-sitter/tree-sitter-java"),
         ("c", "tree-sitter/tree-sitter-c"),
         ("cpp", "tree-sitter/tree-sitter-cpp"),
+        
+        // TypeScript 可以使用 JavaScript 的查询文件作为基础
+        ("typescript", "tree-sitter/tree-sitter-typescript"),
     ];
     // 官方仓库里常见的 query 文件
     let files = ["highlights.scm", "injections.scm", "locals.scm"];
