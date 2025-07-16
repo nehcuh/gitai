@@ -155,9 +155,13 @@ impl LocalScanner {
                 }
                 parent = p.parent();
             }
-            parent.unwrap_or_else(|| std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials"))
+            // Use config-based default instead of hardcoded path
+            parent.unwrap_or_else(|| {
+                std::path::Path::new(&self.config.scan.rule_manager.path)
+            })
         } else {
-            std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials")
+            // Use config-based default instead of hardcoded path
+            std::path::Path::new(&self.config.scan.rule_manager.path)
         };
         
         tracing::info!("Using rules directory: {}", rules_dir.display());

@@ -146,10 +146,6 @@ pub struct LanguageConfig {
     pub display_name: &'static str,
     pub extensions: &'static [&'static str],
     pub language_fn: fn() -> Language,
-    pub highlights_query: &'static str,
-    pub injections_query: &'static str,
-    pub locals_query: &'static str,
-    pub structure_query: &'static str,
 }
 
 impl LanguageConfig {
@@ -157,11 +153,11 @@ impl LanguageConfig {
         (self.language_fn)()
     }
 
-    pub fn get_full_queries(&self) -> (&'static str, &'static str, &'static str) {
+    pub fn get_full_queries(&self) -> (String, String, String) {
         (
-            self.highlights_query,
-            self.injections_query,
-            self.locals_query,
+            load_query_file(self.name, "highlights"),
+            load_query_file(self.name, "injections"),
+            load_query_file(self.name, "locals"),
         )
     }
 
@@ -212,118 +208,38 @@ impl Default for LanguageRegistry {
     }
 }
 
-const RUST_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/rust/highlights.scm"
-));
-const RUST_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/rust/injections.scm"
-));
-const RUST_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/rust/locals.scm"
-));
-const RUST_STRUCTURE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/rust/structure.scm"
-));
+// 动态查询加载器
+use std::fs;
+use std::sync::OnceLock;
 
-const JAVA_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/java/highlights.scm"
-));
-const JAVA_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/java/injections.scm"
-));
-const JAVA_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/java/locals.scm"
-));
-const JAVA_STRUCTURE: &str = "";
+static QUERY_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-const PYTHON_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/python/highlights.scm"
-));
-const PYTHON_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/python/injections.scm"
-));
-const PYTHON_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/python/locals.scm"
-));
-const PYTHON_STRUCTURE: &str = "";
+/// 获取查询缓存目录
+fn get_query_cache_dir() -> &'static PathBuf {
+    QUERY_CACHE_DIR.get_or_init(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".cache")
+            .join("gitai")
+            .join("queries")
+    })
+}
 
-const GO_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/go/highlights.scm"
-));
-const GO_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/go/injections.scm"
-));
-const GO_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/go/locals.scm"
-));
-const GO_STRUCTURE: &str = "";
-
-const JAVASCRIPT_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/javascript/highlights.scm"
-));
-const JAVASCRIPT_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/javascript/injections.scm"
-));
-const JAVASCRIPT_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/javascript/locals.scm"
-));
-const JAVASCRIPT_STRUCTURE: &str = "";
-
-// TypeScript 使用 JavaScript 的查询文件
-const TYPESCRIPT_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/typescript/highlights.scm"
-));
-const TYPESCRIPT_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/typescript/injections.scm"
-));
-const TYPESCRIPT_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/typescript/locals.scm"
-));
-const TYPESCRIPT_STRUCTURE: &str = "";
-
-const C_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/c/highlights.scm"
-));
-const C_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/c/injections.scm"
-));
-const C_LOCALS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/queries/c/locals.scm"));
-const C_STRUCTURE: &str = "";
-
-const CPP_HIGHLIGHTS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/cpp/highlights.scm"
-));
-const CPP_INJECTIONS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/cpp/injections.scm"
-));
-const CPP_LOCALS: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/queries/cpp/locals.scm"
-));
-const CPP_STRUCTURE: &str = "";
+/// 加载查询文件内容，如果文件不存在则返回fallback
+pub fn load_query_file(language: &str, query_type: &str) -> String {
+    let cache_dir = get_query_cache_dir();
+    let query_path = cache_dir.join(language).join(format!("{}.scm", query_type));
+    
+    if let Ok(content) = fs::read_to_string(&query_path) {
+        content
+    } else {
+        // 提供基础的fallback查询
+        match (language, query_type) {
+            (_, "injections") | (_, "locals") => String::new(),
+            _ => "(identifier) @variable".to_string(),
+        }
+    }
+}
 
 macro_rules! define_ts_langs {
     ($( $fn_name:ident => $module:ident => $doc:expr ),* $(,)?) => {
@@ -353,87 +269,110 @@ pub fn get_tree_sitter_typescript() -> Language {
 }
 
 // 获取各语言的查询模式
-pub fn get_rust_query_pattern() -> &'static str {
-    RUST_HIGHLIGHTS
+pub fn get_rust_query_pattern() -> String {
+    load_query_file("rust", "highlights")
 }
 
-pub fn get_java_query_pattern() -> &'static str {
-    JAVA_HIGHLIGHTS
+pub fn get_java_query_pattern() -> String {
+    load_query_file("java", "highlights")
 }
 
-pub fn get_python_query_pattern() -> &'static str {
-    PYTHON_HIGHLIGHTS
+pub fn get_python_query_pattern() -> String {
+    load_query_file("python", "highlights")
 }
 
-pub fn get_go_query_pattern() -> &'static str {
-    GO_HIGHLIGHTS
+pub fn get_go_query_pattern() -> String {
+    load_query_file("go", "highlights")
 }
 
-pub fn get_js_query_pattern() -> &'static str {
-    JAVASCRIPT_HIGHLIGHTS
+pub fn get_js_query_pattern() -> String {
+    load_query_file("javascript", "highlights")
 }
 
-pub fn get_c_query_pattern() -> &'static str {
-    C_HIGHLIGHTS
+pub fn get_c_query_pattern() -> String {
+    load_query_file("c", "highlights")
 }
 
-pub fn get_cpp_query_pattern() -> &'static str {
-    CPP_HIGHLIGHTS
+pub fn get_cpp_query_pattern() -> String {
+    load_query_file("cpp", "highlights")
 }
 
-pub fn get_typescript_query_pattern() -> &'static str {
-    TYPESCRIPT_HIGHLIGHTS
+pub fn get_typescript_query_pattern() -> String {
+    load_query_file("typescript", "highlights")
 }
 
 // 获取所有查询模式的组合版本（用于更复杂的分析）
-pub fn get_rust_full_queries() -> (&'static str, &'static str, &'static str) {
-    (RUST_HIGHLIGHTS, RUST_INJECTIONS, RUST_LOCALS)
-}
-
-pub fn get_java_full_queries() -> (&'static str, &'static str, &'static str) {
-    (JAVA_HIGHLIGHTS, JAVA_INJECTIONS, JAVA_LOCALS)
-}
-
-pub fn get_python_full_queries() -> (&'static str, &'static str, &'static str) {
-    (PYTHON_HIGHLIGHTS, PYTHON_INJECTIONS, PYTHON_LOCALS)
-}
-
-pub fn get_go_full_queries() -> (&'static str, &'static str, &'static str) {
-    (GO_HIGHLIGHTS, GO_INJECTIONS, GO_LOCALS)
-}
-
-pub fn get_js_full_queries() -> (&'static str, &'static str, &'static str) {
+pub fn get_rust_full_queries() -> (String, String, String) {
     (
-        JAVASCRIPT_HIGHLIGHTS,
-        JAVASCRIPT_INJECTIONS,
-        JAVASCRIPT_LOCALS,
+        load_query_file("rust", "highlights"),
+        load_query_file("rust", "injections"),
+        load_query_file("rust", "locals")
     )
 }
 
-pub fn get_c_full_queries() -> (&'static str, &'static str, &'static str) {
-    (C_HIGHLIGHTS, C_INJECTIONS, C_LOCALS)
+pub fn get_java_full_queries() -> (String, String, String) {
+    (
+        load_query_file("java", "highlights"),
+        load_query_file("java", "injections"),
+        load_query_file("java", "locals")
+    )
 }
 
-pub fn get_cpp_full_queries() -> (&'static str, &'static str, &'static str) {
-    (CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)
+pub fn get_python_full_queries() -> (String, String, String) {
+    (
+        load_query_file("python", "highlights"),
+        load_query_file("python", "injections"),
+        load_query_file("python", "locals")
+    )
 }
 
-pub fn get_typescript_full_queries() -> (&'static str, &'static str, &'static str) {
-    (TYPESCRIPT_HIGHLIGHTS, TYPESCRIPT_INJECTIONS, TYPESCRIPT_LOCALS)
+pub fn get_go_full_queries() -> (String, String, String) {
+    (
+        load_query_file("go", "highlights"),
+        load_query_file("go", "injections"),
+        load_query_file("go", "locals")
+    )
+}
+
+pub fn get_js_full_queries() -> (String, String, String) {
+    (
+        load_query_file("javascript", "highlights"),
+        load_query_file("javascript", "injections"),
+        load_query_file("javascript", "locals")
+    )
+}
+
+pub fn get_c_full_queries() -> (String, String, String) {
+    (
+        load_query_file("c", "highlights"),
+        load_query_file("c", "injections"),
+        load_query_file("c", "locals")
+    )
+}
+
+pub fn get_cpp_full_queries() -> (String, String, String) {
+    (
+        load_query_file("cpp", "highlights"),
+        load_query_file("cpp", "injections"),
+        load_query_file("cpp", "locals")
+    )
+}
+
+pub fn get_typescript_full_queries() -> (String, String, String) {
+    (
+        load_query_file("typescript", "highlights"),
+        load_query_file("typescript", "injections"),
+        load_query_file("typescript", "locals")
+    )
 }
 
 // 通用查询模式获取函数
-pub fn get_query_pattern_for_language(language: &str) -> Option<&'static str> {
+pub fn get_query_pattern_for_language(language: &str) -> Option<String> {
     let normalized = normalize_language_name(language);
     match normalized.as_str() {
-        "rust" => Some(RUST_HIGHLIGHTS),
-        "java" => Some(JAVA_HIGHLIGHTS),
-        "python" => Some(PYTHON_HIGHLIGHTS),
-        "go" => Some(GO_HIGHLIGHTS),
-        "javascript" => Some(JAVASCRIPT_HIGHLIGHTS),
-        "typescript" => Some(TYPESCRIPT_HIGHLIGHTS),
-        "c" => Some(C_HIGHLIGHTS),
-        "cpp" => Some(CPP_HIGHLIGHTS),
+        "rust" | "java" | "python" | "go" | "javascript" | "typescript" | "c" | "cpp" => {
+            Some(load_query_file(&normalized, "highlights"))
+        }
         _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
     }
 }
@@ -441,25 +380,16 @@ pub fn get_query_pattern_for_language(language: &str) -> Option<&'static str> {
 // 获取语言的完整查询集合
 pub fn get_full_queries_for_language(
     language: &str,
-) -> Option<(&'static str, &'static str, &'static str)> {
+) -> Option<(String, String, String)> {
     let normalized = normalize_language_name(language);
     match normalized.as_str() {
-        "rust" => Some((RUST_HIGHLIGHTS, RUST_INJECTIONS, RUST_LOCALS)),
-        "java" => Some((JAVA_HIGHLIGHTS, JAVA_INJECTIONS, JAVA_LOCALS)),
-        "python" => Some((PYTHON_HIGHLIGHTS, PYTHON_INJECTIONS, PYTHON_LOCALS)),
-        "go" => Some((GO_HIGHLIGHTS, GO_INJECTIONS, GO_LOCALS)),
-        "javascript" => Some((
-            JAVASCRIPT_HIGHLIGHTS,
-            JAVASCRIPT_INJECTIONS,
-            JAVASCRIPT_LOCALS,
-        )),
-        "typescript" => Some((
-            TYPESCRIPT_HIGHLIGHTS,
-            TYPESCRIPT_INJECTIONS,
-            TYPESCRIPT_LOCALS,
-        )),
-        "c" => Some((C_HIGHLIGHTS, C_INJECTIONS, C_LOCALS)),
-        "cpp" => Some((CPP_HIGHLIGHTS, CPP_INJECTIONS, CPP_LOCALS)),
+        "rust" | "java" | "python" | "go" | "javascript" | "typescript" | "c" | "cpp" => {
+            Some((
+                load_query_file(&normalized, "highlights"),
+                load_query_file(&normalized, "injections"),
+                load_query_file(&normalized, "locals")
+            ))
+        }
         _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
     }
 }
@@ -557,10 +487,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "Rust",
         extensions: &["rs"],
         language_fn: get_tree_sitter_rust,
-        highlights_query: RUST_HIGHLIGHTS,
-        injections_query: RUST_INJECTIONS,
-        locals_query: RUST_LOCALS,
-        structure_query: RUST_STRUCTURE,
     });
 
     // Java 配置
@@ -569,10 +495,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "Java",
         extensions: &["java"],
         language_fn: get_tree_sitter_java,
-        highlights_query: JAVA_HIGHLIGHTS,
-        injections_query: JAVA_INJECTIONS,
-        locals_query: JAVA_LOCALS,
-        structure_query: JAVA_STRUCTURE,
     });
 
     // Python 配置
@@ -581,10 +503,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "Python",
         extensions: &["py", "pyw"],
         language_fn: get_tree_sitter_python,
-        highlights_query: PYTHON_HIGHLIGHTS,
-        injections_query: PYTHON_INJECTIONS,
-        locals_query: PYTHON_LOCALS,
-        structure_query: PYTHON_STRUCTURE,
     });
 
     // Go 配置
@@ -593,10 +511,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "Go",
         extensions: &["go"],
         language_fn: get_tree_sitter_go,
-        highlights_query: GO_HIGHLIGHTS,
-        injections_query: GO_INJECTIONS,
-        locals_query: GO_LOCALS,
-        structure_query: GO_STRUCTURE,
     });
 
     // JavaScript 配置
@@ -605,10 +519,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "JavaScript",
         extensions: &["js", "mjs", "jsx"],
         language_fn: get_tree_sitter_js,
-        highlights_query: JAVASCRIPT_HIGHLIGHTS,
-        injections_query: JAVASCRIPT_INJECTIONS,
-        locals_query: JAVASCRIPT_LOCALS,
-        structure_query: JAVASCRIPT_STRUCTURE,
     });
 
     // TypeScript 配置
@@ -617,10 +527,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "TypeScript",
         extensions: &["ts", "tsx"],
         language_fn: get_tree_sitter_typescript,
-        highlights_query: TYPESCRIPT_HIGHLIGHTS,
-        injections_query: TYPESCRIPT_INJECTIONS,
-        locals_query: TYPESCRIPT_LOCALS,
-        structure_query: TYPESCRIPT_STRUCTURE,
     });
 
     // C 配置
@@ -629,10 +535,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "C",
         extensions: &["c", "h"],
         language_fn: get_tree_sitter_c,
-        highlights_query: C_HIGHLIGHTS,
-        injections_query: C_INJECTIONS,
-        locals_query: C_LOCALS,
-        structure_query: C_STRUCTURE,
     });
 
     // C++ 配置
@@ -641,10 +543,6 @@ pub fn create_language_registry() -> LanguageRegistry {
         display_name: "C++",
         extensions: &["cpp", "cc", "cxx", "c++", "hpp", "hxx", "h++"],
         language_fn: get_tree_sitter_cpp,
-        highlights_query: CPP_HIGHLIGHTS,
-        injections_query: CPP_INJECTIONS,
-        locals_query: CPP_LOCALS,
-        structure_query: CPP_STRUCTURE,
     });
 
     registry

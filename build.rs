@@ -1,219 +1,632 @@
-use reqwest::StatusCode;
-use std::{env, fs, path::Path};
+use futures::future::join_all;
+use reqwest::{Client, StatusCode};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+use tokio::sync::Semaphore;
 
-/// 创建备用查询文件，当网络不可用时使用
-fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
-    let fallback_content = match (lang, file) {
-        (_, "injections.scm") | (_, "locals.scm") => {
-            // 对于 injections 和 locals，如果下载失败，创建一个空文件
-            ""
+// 每隔 10 天需要更新一次
+const CACHE_EXPIRATION: Duration = Duration::from_secs(864000);
+
+// 开源 ast-grep 代码扫描规则
+const AST_GREP_SCAN_RULES: &str = "https://github.com/coderabbitai/ast-grep-essentials.git";
+
+#[derive(Debug)]
+pub enum DownloadError {
+    NetworkError(reqwest::Error),
+    HttpStatus(StatusCode),
+    FileWrite(io::Error),
+    InvalidContent,
+    Timeout,
+}
+
+impl From<reqwest::Error> for DownloadError {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            DownloadError::Timeout
+        } else {
+            DownloadError::NetworkError(err)
         }
-        ("rust", "highlights.scm") => {
-            // 提供基础的 Rust 高亮查询
-            r#"
-(identifier) @variable
-(function_item name: (identifier) @function)
-(struct_item name: (type_identifier) @type)
-(enum_item name: (type_identifier) @type)
-(impl_item type: (type_identifier) @type)
-(use_declaration) @keyword
-(mod_item name: (identifier) @module)
-"#
-        }
-        ("java", "highlights.scm") => {
-            // 提供基础的 Java 高亮查询
-            r#"
-(identifier) @variable
-(method_declaration name: (identifier) @function)
-(class_declaration name: (identifier) @type)
-(interface_declaration name: (identifier) @type)
-(import_declaration) @keyword
-(package_declaration) @keyword
-"#
-        }
-        ("python", "highlights.scm") => {
-            // 提供基础的 Python 高亮查询
-            r#"
-(identifier) @variable
-(function_definition name: (identifier) @function)
-(class_definition name: (identifier) @type)
-(import_statement) @keyword
-(import_from_statement) @keyword
-"#
-        }
-        ("cpp", "highlights.scm") => {
-            // 提供兼容的 C++ 高亮查询，避免模块相关节点
-            r#"
-(identifier) @variable
-(function_declarator declarator: (identifier) @function)
-(call_expression function: (identifier) @function)
-(type_identifier) @type
-(primitive_type) @type.builtin
-(number_literal) @number
-(string_literal) @string
-"#
-        }
-        ("c", "highlights.scm") => {
-            // 提供基础的 C 高亮查询
-            r#"
-(identifier) @variable
-(function_declarator declarator: (identifier) @function)
-(call_expression function: (identifier) @function)
-(type_identifier) @type
-(primitive_type) @type.builtin
-(number_literal) @number
-(string_literal) @string
-"#
-        }
-        ("typescript", "highlights.scm") => {
-            // TypeScript 基本上和 JavaScript 相同
-            r#"
-(identifier) @variable
-(function_declaration name: (identifier) @function)
-(class_declaration name: (type_identifier) @type)
-(interface_declaration name: (type_identifier) @type)
-(import_statement) @keyword
-"#
-        }
-        ("ruby", "highlights.scm") => {
-            r#"
-(identifier) @variable
-(method name: (identifier) @function)
-(class name: (constant) @type)
-(module name: (constant) @type)
-"#
-        }
-        ("html", "highlights.scm") => {
-            r#"
-(tag_name) @tag
-(attribute_name) @attribute
-(text) @text
-"#
-        }
-        ("css", "highlights.scm") => {
-            r#"
-(tag_name) @tag
-(class_name) @class
-(id_name) @id
-(property_name) @property
-"#
-        }
-        ("json", "highlights.scm") => {
-            r#"
-(string) @string
-(number) @number
-(true) @boolean
-(false) @boolean
-(null) @null
-"#
-        }
-        ("yaml", "highlights.scm") => {
-            r#"
-(block_mapping_pair key: (_) @key)
-(flow_mapping_pair key: (_) @key)
-(string) @string
-(integer) @number
-(float) @number
-(boolean) @boolean
-"#
-        }
-        ("bash", "highlights.scm") => {
-            r#"
-(command_name) @function
-(variable_name) @variable
-(string) @string
-(number) @number
-"#
-        }
-        _ => {
-            // 通用的最小查询 - 适用于大部分语言
-            r#"
-(identifier) @variable
-"#
-        }
-    };
-    
-    if let Err(e) = fs::write(dest, fallback_content.trim()) {
-        println!("cargo:warning=创建备用查询文件失败 {}: {}", dest.display(), e);
-    } else {
-        println!("cargo:warning=创建备用查询文件: {}", dest.display());
     }
+}
+
+impl From<io::Error> for DownloadError {
+    fn from(err: io::Error) -> Self {
+        DownloadError::FileWrite(err)
+    }
+}
+
+struct DownloadTask {
+    lang: String,
+    file: String,
+    url: String,
+    dest: PathBuf,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // OUT_DIR 是 Cargo 在编译期提供的环境变量
-    // Use project root for queries directory
-    // `CARGO_MANIFEST_DIR` points to the crate root where Cargo.toml lives
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
-    let base = Path::new(&manifest_dir).join("queries");
-    // 要拉取的各语言仓库和路径映射
-    // 只为当前在 Cargo.toml 中有 crate 依赖的语言下载查询文件
+    // 检查离线构建模式
+    if std::env::var("GITAI_OFFLINE_BUILD").is_ok() {
+        println!("cargo::warnning=离线构建模式，跳过网络下载");
+        create_all_fallback_queries()?;
+        return Ok(());
+    }
+
+    // 检查基础缓存目录
+    let base_cache_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".cache")
+        .join("gitai");
+
+    // 查询文件目录
+    let user_cache_dir = base_cache_dir.join("queries");
+    fs::create_dir_all(&user_cache_dir)?;
+
+    // 扫描规则目录
+    let scan_rules_dir = base_cache_dir.join("scan-rules");
+    fs::create_dir_all(&scan_rules_dir)?;
+
+    // 配置 http 客户端
+    let client = Arc::new(
+        Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .pool_max_idle_per_host(5)
+            .user_agent("gitai-build/1.0")
+            .build()?,
+    );
+
+    // 定义仓库和文件
     let repos = [
         ("rust", "tree-sitter/tree-sitter-rust"),
         ("javascript", "tree-sitter/tree-sitter-javascript"),
+        ("typescript", "tree-sitter/tree-sitter-typescript"),
         ("python", "tree-sitter/tree-sitter-python"),
         ("go", "tree-sitter/tree-sitter-go"),
         ("java", "tree-sitter/tree-sitter-java"),
         ("c", "tree-sitter/tree-sitter-c"),
         ("cpp", "tree-sitter/tree-sitter-cpp"),
-        
-        // TypeScript 可以使用 JavaScript 的查询文件作为基础
-        ("typescript", "tree-sitter/tree-sitter-typescript"),
+        ("bash", "tree-sitter/tree-sitter-bash"),
+        ("css", "tree-sitter/tree-sitter-css"),
+        ("haskell", "tree-sitter/tree-sitter-haskell"),
+        ("html", "tree-sitter/tree-sitter-html"),
+        ("jsdoc", "tree-sitter/tree-sitter-jsdoc"),
+        ("json", "tree-sitter/tree-sitter-json"),
+        ("julia", "tree-sitter/tree-sitter-julia"),
+        ("php", "tree-sitter/tree-sitter-php"),
+        ("ql", "tree-sitter/tree-sitter-ql"),
+        ("regex", "tree-sitter/tree-sitter-regex"),
+        ("ruby", "tree-sitter/tree-sitter-ruby"),
+        ("scala", "tree-sitter/tree-sitter-scala"),
     ];
-    // 官方仓库里常见的 query 文件
+
     let files = ["highlights.scm", "injections.scm", "locals.scm"];
 
+    // 创建下载任务
+    let mut tasks = Vec::new();
     for (lang, repo) in repos {
-        let target_dir = base.join(lang);
-        fs::create_dir_all(&target_dir)?;
-        for file in &files {
-            let dest = target_dir.join(file);
-            
-            // 首先检查本地文件是否已存在
-            if dest.exists() {
-                println!("cargo:warning=本地文件已存在，跳过下载: {}", dest.display());
-                println!("cargo:rerun-if-changed={}", dest.display());
+        let user_target_dir = user_cache_dir.join(lang);
+        fs::create_dir_all(&user_target_dir)?;
+
+        for file in files {
+            let dest = user_target_dir.join(file);
+
+            if !should_update_file(&dest).await {
+                println!(
+                    "cargo::warning=文件已存在且未过期，跳过: {}",
+                    dest.display()
+                );
+                println!("cargo::rerun-if-changed={}", dest.display());
                 continue;
             }
-            
-            // 构造 raw URL
+
             let url = format!(
                 "https://raw.githubusercontent.com/{repo}/master/queries/{file}",
                 repo = repo,
                 file = file
             );
-            
-            // 尝试网络请求，失败时给出警告但不中断构建
-            match reqwest::get(&url).await {
-                Ok(resp) => {
-                    if resp.status() == StatusCode::OK {
-                        match resp.text().await {
-                            Ok(text) => {
-                                if let Err(e) = fs::write(&dest, text) {
-                                    println!("cargo:warning=写入文件失败 {}: {}", dest.display(), e);
-                                } else {
-                                    println!("cargo:warning=成功下载: {}", dest.display());
-                                    println!("cargo:rerun-if-changed={}", url);
-                                }
-                            }
-                            Err(e) => {
-                                println!("cargo:warning=读取响应内容失败 {}: {}", url, e);
-                            }
-                        }
-                    } else {
-                        println!("cargo:warning=HTTP请求失败 {} (状态码: {})", url, resp.status());
-                        create_fallback_query(&dest, lang, file);
-                    }
-                }
-                Err(e) => {
-                    println!("cargo:warning=网络请求失败 {}: {}. 如果本地存在备用文件，构建将继续。", url, e);
-                    // 检查是否有备用的内嵌查询可以使用
-                    create_fallback_query(&dest, lang, file);
-                }
+
+            tasks.push(DownloadTask {
+                lang: lang.to_string(),
+                file: file.to_string(),
+                url,
+                dest,
+            });
+        }
+    }
+
+    // 使用信号量限制并发数
+    let semaphore = Arc::new(Semaphore::new(5));
+
+    // 并发执行下载任务
+    let mut handles = Vec::new();
+    for task in tasks {
+        let client = client.clone();
+        let semaphore = semaphore.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap();
+            download_file(&client, task).await
+        }));
+    }
+
+    // 收集结果
+    let results = join_all(handles).await;
+
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    for result in results {
+        match result {
+            Ok(_) => success_count += 1,
+            Err(e) => {
+                error_count += 1;
+                println!("cargo:warning=任务执行失败: {}", e);
             }
         }
     }
-    println!("cargo:warning=Tree-sitter 查询文件准备完成");
+
+    println!(
+        "cargo:warning=下载完成: 成功 {} 个, 失败 {} 个",
+        success_count, error_count
+    );
+
+    // 下载扫描规则
+    download_scan_rules(&scan_rules_dir)?;
+
     Ok(())
 }
+
+async fn download_file(client: &Client, task: DownloadTask) -> Result<(), DownloadError> {
+    println!(
+        "cargo:warning=开始下载: {} -> {}",
+        task.url,
+        task.dest.display()
+    );
+
+    match client.get(&task.url).send().await {
+        Ok(resp) => {
+            if resp.status() == StatusCode::OK {
+                match resp.text().await {
+                    Ok(text) => {
+                        if text.trim().is_empty() {
+                            return Err(DownloadError::InvalidContent);
+                        }
+
+                        if let Some(parent) = task.dest.parent() {
+                            fs::create_dir_all(parent)?;
+                        }
+
+                        fs::write(&task.dest, text).map_err(DownloadError::FileWrite)?;
+
+                        println!("cargo:warning=成功下载: {}", task.dest.display());
+                        println!("cargo:rerun-if-changed={}", task.url);
+
+                        Ok(())
+                    }
+                    Err(e) => Err(DownloadError::NetworkError(e.into())),
+                }
+            } else if resp.status() == StatusCode::NOT_FOUND {
+                create_fallback_query(&task.dest, &task.lang, &task.file);
+                Ok(())
+            } else {
+                Err(DownloadError::HttpStatus(resp.status()))
+            }
+        }
+        Err(e) => {
+            // 网络错误使用回退方案
+            println!("cargo::warning=网络错误，使用回退方案: {}", e);
+            create_fallback_query(&task.dest, &task.lang, &task.file);
+            Ok(())
+        }
+    }
+}
+
+async fn should_update_file(path: &Path) -> bool {
+    if !path.exists() {
+        return true;
+    }
+
+    // 检查文件最后修改时间
+    if let Ok(metadata) = fs::metadata(path) {
+        if let Ok(modified) = metadata.modified() {
+            if let Ok(age) = SystemTime::now().duration_since(modified) {
+                return age > CACHE_EXPIRATION;
+            }
+        }
+    }
+
+    // 检查文件大小 (空文件需要更新)
+    if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
+        if size == 0 {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
+    let fallback_content = match (lang, file) {
+        (_, "injections.scm") | (_, "locals.scm") => "",
+        ("rust", "highlights.scm") => include_str!("fallback_queries/rust/highlights.scm"),
+        ("javascript", "highlights.scm") => {
+            include_str!("fallback_queries/javascript/highlights.scm")
+        }
+        _ => {
+            // 通用回退查询
+            match lang {
+                "python" => {
+                    "(identifier) @variable\n(string) @string\n(number) @number\n(function_definition name: (identifier) @function)\n(class_definition name: (identifier) @type)\n(comment) @comment\n"
+                }
+                "go" => {
+                    "(identifier) @variable\n(string_literal) @string\n(int_literal) @number\n(function_declaration name: (identifier) @function)\n(type_spec name: (type_identifier) @type)\n(comment) @comment\n"
+                }
+                "java" => {
+                    "(identifier) @variable\n(string_literal) @string\n(decimal_integer_literal) @number\n(method_declaration name: (identifier) @function)\n(class_declaration name: (identifier) @type)\n(line_comment) @comment\n"
+                }
+                _ => {
+                    "(identifier) @variable\n(string) @string\n(number) @number\n(function) @function\n(type) @type\n(comment) @comment\n"
+                }
+            }
+        }
+    };
+
+    if let Some(parent) = dest.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if let Err(e) = fs::write(dest, fallback_content.trim()) {
+        println!("cargo::warning=创建回退文件失败 {}: {}", dest.display(), e);
+    } else {
+        println!("cargo::warning=创建回退查询文件: {}", dest.display());
+    }
+}
+
+fn create_all_fallback_queries() -> Result<(), Box<dyn std::error::Error>> {
+    let base_cache_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".cache")
+        .join("gitai");
+
+    let user_cache_dir = base_cache_dir.join("queries");
+
+    let repos = [
+        "rust",
+        "javascript",
+        "typescript",
+        "python",
+        "go",
+        "java",
+        "c",
+        "cpp",
+        "bash",
+        "css",
+        "haskell",
+        "html",
+        "jsdoc",
+        "json",
+        "julia",
+        "php",
+        "ql",
+        "regex",
+        "ruby",
+        "scala",
+    ];
+
+    let files = ["highlights.scm", "injections.scm", "locals.scm"];
+
+    for lang in repos {
+        let user_target_dir = user_cache_dir.join(lang);
+        fs::create_dir_all(&user_target_dir)?;
+
+        for file in files {
+            let dest = user_target_dir.join(file);
+            create_fallback_query(&dest, lang, file);
+        }
+    }
+
+    Ok(())
+}
+
+fn download_scan_rules(scan_rules_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // 检查是否已经存在规则目录
+    if scan_rules_dir.exists() && scan_rules_dir.join(".git").exists() {
+        println!("cargo:warning=更新现有的扫描规则库...");
+
+        // 获取远程更新
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(scan_rules_dir)
+            .arg("fetch")
+            .arg("--depth=1")
+            .arg("origin")
+            .status()?;
+
+        if status.success() {
+            // 检查是否需要更新
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(scan_rules_dir)
+                .arg("rev-list")
+                .arg("--count")
+                .arg("HEAD..origin/main")
+                .output()?;
+
+            let commits_behind = String::from_utf8_lossy(&output.stdout);
+            if commits_behind.trim() != "0" {
+                println!("cargo:warning=发现更新，正在拉取...");
+                Command::new("git")
+                    .arg("-C")
+                    .arg(scan_rules_dir)
+                    .arg("pull")
+                    .arg("--ff-only")
+                    .status()?;
+                println!("cargo:warning=扫描规则更新成功");
+            } else {
+                println!("cargo:warning=扫描规则已是最新版本");
+            }
+        } else {
+            println!("cargo:warning=克隆扫描规则仓库...");
+            // 如果目录存在但不是git仓库，先删除
+            if scan_rules_dir.exists() {
+                let _ = fs::remove_dir_all(scan_rules_dir);
+            }
+
+            // 使用浅克隆减少下载量
+            let parent_dir = scan_rules_dir
+                .parent()
+                .ok_or("Invalid scan rules directory path")?;
+
+            let status = Command::new("git")
+                .arg("clone")
+                .arg("--depth=1")
+                .arg("--branch=main")
+                .arg(AST_GREP_SCAN_RULES)
+                .arg(scan_rules_dir.file_name().unwrap())
+                .current_dir(parent_dir)
+                .status()?;
+
+            if status.success() {
+                println!("cargo:warning=扫描规则克隆成功");
+            } else {
+                println!("cargo:warning=扫描规则克隆失败，创建基础结构");
+                fs::create_dir_all(scan_rules_dir.join("rules"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+// use std::{fs, path::Path, path::PathBuf, process::Command};
+
+// use tokio::sync::Semaphore;
+
+// #[tokio::main]
+// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//     // 设置基础缓存目录
+//     let base_cache_dir = PathBuf::from(dirs::home_dir().unwrap())
+//         .join(".cache")
+//         .join("gitai");
+
+//     // 查询文件目录
+//     let user_cache_dir = base_cache_dir.join("queries");
+//     fs::create_dir_all(&user_cache_dir)?;
+
+//     // 扫描规则目录
+//     let scan_rules_dir = base_cache_dir.join("scan-rules");
+//     fs::create_dir_all(&scan_rules_dir)?;
+
+//     let repos = [
+//         ("rust", "tree-sitter/tree-sitter-rust"),
+//         ("javascript", "tree-sitter/tree-sitter-javascript"),
+//         ("typescript", "tree-sitter/tree-sitter-typescript"),
+//         ("python", "tree-sitter/tree-sitter-python"),
+//         ("go", "tree-sitter/tree-sitter-go"),
+//         ("java", "tree-sitter/tree-sitter-java"),
+//         ("c", "tree-sitter/tree-sitter-c"),
+//         ("cpp", "tree-sitter/tree-sitter-cpp"),
+//         ("bash", "tree-sitter/tree-sitter-bash"),
+//         ("css", "tree-sitter/tree-sitter-css"),
+//         ("haskell", "tree-sitter/tree-sitter-haskell"),
+//         ("html", "tree-sitter/tree-sitter-html"),
+//         ("jsdoc", "tree-sitter/tree-sitter-jsdoc"),
+//         ("json", "tree-sitter/tree-sitter-json"),
+//         ("julia", "tree-sitter/tree-sitter-julia"),
+//         ("php", "tree-sitter/tree-sitter-php"),
+//         ("ql", "tree-sitter/tree-sitter-ql"), // CodeQL
+//         ("regex", "tree-sitter/tree-sitter-regex"),
+//         ("ruby", "tree-sitter/tree-sitter-ruby"),
+//         ("scala", "tree-sitter/tree-sitter-scala"),
+//     ];
+
+//     let files = ["highlights.scm", "injections.scm", "locals.scm"];
+
+//     for (lang, repo) in repos {
+//         let user_target_dir = user_cache_dir.join(lang);
+
+//         fs::create_dir_all(&user_target_dir)?;
+
+//         for file in files {
+//             let user_dest = user_target_dir.join(file);
+
+//             if user_dest.exists() {
+//                 println!(
+//                     "cargo:warning=本地文件已存在，跳过下载: {}",
+//                     user_dest.display()
+//                 );
+//                 println!("cargo:rerun-if-changed={}", user_dest.display());
+
+//                 continue;
+//             }
+
+//             let url = format!(
+//                 "https://raw.githubusercontent.com/{repo}/master/queries/{file}",
+//                 repo = repo,
+//                 file = file
+//             );
+
+//             match reqwest::get(&url).await {
+//                 Ok(resp) => {
+//                     if resp.status() == StatusCode::OK {
+//                         match resp.text().await {
+//                             Ok(text) => {
+//                                 if let Err(e) = fs::write(&user_dest, text) {
+//                                     println!(
+//                                         "cargo:warning=写入文件失败 {}: {}",
+//                                         user_dest.display(),
+//                                         e
+//                                     );
+//                                 } else {
+//                                     println!("cargo:warning=成功下载: {}", user_dest.display());
+//                                     println!("cargo:rerun-if-changed={}", url);
+//                                 }
+//                             }
+//                             Err(e) => {
+//                                 println!("cargo:warning=读取响应内容失败 {}: {}", url, e);
+//                             }
+//                         }
+//                     } else {
+//                         println!(
+//                             "cargo:warning=HTTP请求失败 {} (状态码: {})",
+//                             url,
+//                             resp.status()
+//                         );
+//                         create_fallback_query(&user_dest, lang, file);
+//                     }
+//                 }
+//                 Err(e) => {
+//                     println!(
+//                         "cargo:warning=网络请求失败 {}: {}. 如果本地存在备用文件，构建将继续。",
+//                         url, e
+//                     );
+//                     create_fallback_query(&user_dest, lang, file);
+//                 }
+//             }
+//         }
+//     }
+//     println!("cargo:warning=Tree-sitter 查询文件准备完成");
+
+//     // 下载扫描规则
+//     download_scan_rules(&scan_rules_dir)?;
+
+//     Ok(())
+// }
+
+// /// 下载扫描规则到指定目录
+// fn download_scan_rules(scan_rules_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+//     let git_url = "https://github.com/coderabbitai/ast-grep-essentials.git";
+
+//     // 检查是否已经存在规则目录，如果存在则更新，否则克隆
+//     if scan_rules_dir.exists() && scan_rules_dir.join(".git").exists() {
+//         println!("cargo:warning=更新现有的扫描规则仓库...");
+
+//         // 检查是否有新提交
+//         let output = Command::new("git")
+//             .args(&["-C", &scan_rules_dir.to_string_lossy(), "fetch", "origin"])
+//             .output()?;
+
+//         if !output.status.success() {
+//             println!("cargo:warning=获取远程更新失败，使用现有规则");
+//             return Ok(());
+//         }
+
+//         // 检查本地是否落后于远程
+//         let output = Command::new("git")
+//             .args(&[
+//                 "-C",
+//                 &scan_rules_dir.to_string_lossy(),
+//                 "rev-list",
+//                 "--count",
+//                 "HEAD..origin/main",
+//             ])
+//             .output()?;
+
+//         if output.status.success() {
+//             let commits_behind = String::from_utf8_lossy(&output.stdout);
+//             let commits_behind_trimmed = commits_behind.trim();
+//             if commits_behind_trimmed != "0" {
+//                 println!(
+//                     "cargo:warning=发现 {} 个新提交，正在更新...",
+//                     commits_behind_trimmed
+//                 );
+
+//                 // 拉取最新更改
+//                 let output = Command::new("git")
+//                     .args(&[
+//                         "-C",
+//                         &scan_rules_dir.to_string_lossy(),
+//                         "pull",
+//                         "origin",
+//                         "main",
+//                     ])
+//                     .output()?;
+
+//                 if output.status.success() {
+//                     println!("cargo:warning=扫描规则更新成功");
+//                 } else {
+//                     println!("cargo:warning=扫描规则更新失败，使用现有规则");
+//                 }
+//             } else {
+//                 println!("cargo:warning=扫描规则已是最新版本");
+//             }
+//         }
+//     } else {
+//         println!("cargo:warning=克隆扫描规则仓库...");
+
+//         // 如果目录存在但不是git仓库，先删除
+//         if scan_rules_dir.exists() {
+//             fs::remove_dir_all(scan_rules_dir)?;
+//         }
+
+//         // 克隆仓库并直接命名为 scan-rules
+//         let parent_dir = scan_rules_dir.parent().unwrap();
+//         let output = Command::new("git")
+//             .args(&["clone", git_url, &scan_rules_dir.to_string_lossy()])
+//             .current_dir(parent_dir)
+//             .output()?;
+
+//         if output.status.success() {
+//             println!("cargo:warning=扫描规则克隆成功");
+//         } else {
+//             println!(
+//                 "cargo:warning=扫描规则克隆失败: {}",
+//                 String::from_utf8_lossy(&output.stderr)
+//             );
+//             // 创建一个基础的fallback目录结构
+//             fs::create_dir_all(scan_rules_dir.join("rules"))?;
+//             println!("cargo:warning=创建了基础规则目录结构");
+//         }
+//     }
+
+//     Ok(())
+// }
+
+// fn create_fallback_query(dest: &Path, lang: &str, file: &str) {
+//     let fallback_content = match (lang, file) {
+//         (_, "injections.scm") | (_, "locals.scm") => {
+//             // 对于 injections 和 locals，如果下载失败，创建一个空文件
+//             ""
+//         }
+//         _ => {
+//             // 通用的最小查询 - 适用于大部分语言
+//             r#"
+// (identifier) @variable
+// "#
+//         }
+//     };
+
+//     if let Err(e) = fs::write(dest, fallback_content.trim()) {
+//         println!(
+//             "cargo:warning=创建备用查询文件失败 {}: {}",
+//             dest.display(),
+//             e
+//         );
+//     } else {
+//         println!("cargo:warning=创建备用查询文件: {}", dest.display());
+//     }
+// }

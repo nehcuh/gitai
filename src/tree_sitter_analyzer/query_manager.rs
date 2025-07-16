@@ -59,8 +59,9 @@ pub struct QueryManagerConfig {
 
 impl Default for QueryManagerConfig {
     fn default() -> Self {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| PathBuf::from(".cache"))
+        let cache_dir = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".cache")
             .join("gitai")
             .join("queries");
 
