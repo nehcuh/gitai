@@ -51,3 +51,8 @@ async-stream = "0.3"
 [dev-dependencies]
 tempfile = "3.20.0"
 httpmock = "0.7.0" # Using a recent version of httpmock
+criterion = "0.5"
+
+[[bench]]
+name = "core_benchmark"
+harness = false

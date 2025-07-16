@@ -128,7 +128,7 @@ make setup-dev  # 或手动执行后续步骤
 
 ```makefile
 # Makefile
-.PHONY: setup-dev build test lint clean
+.PHONY: setup-dev build test lint clean bench
 
 setup-dev:
 	rustup component add clippy rustfmt
@@ -154,6 +154,9 @@ lint:
 fix:
 	cargo fmt
 	cargo clippy --fix
+
+bench:
+	cargo bench --bench core_benchmark
 
 clean:
 	cargo clean
@@ -255,6 +258,8 @@ gitai/
 │   └── fixtures/              # 测试数据
 │       ├── sample_repo/       # 示例仓库
 │       └── config/            # 测试配置
+├── benches/                   # 基准测试
+│   └── core_benchmark.rs      # 核心基准测试
 ├── docs/                      # 文档
 ├── examples/                  # 示例代码
 ├── assets/                    # 资源文件
@@ -341,6 +346,7 @@ cargo watch -x check -x test
 # 4. 提交前检查
 make lint
 make test
+make bench
 make build-release
 
 # 5. 提交代码
@@ -379,7 +385,7 @@ cargo fmt --check
 cargo audit
 
 # 3. 性能测试
-cargo bench
+cargo bench --bench core_benchmark
 ```
 
 ## 🧪 调试和测试
@@ -521,27 +527,102 @@ async fn test_full_commit_workflow() {
 #### 3. 性能测试
 
 ```rust
-// benches/commit_bench.rs
+// benches/core_benchmark.rs
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use gitai::handlers::CommitHandler;
 
-fn bench_commit_generation(c: &mut Criterion) {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let config = Arc::new(AppConfig::default());
-    let handler = CommitHandler::new(config);
-    
-    c.bench_function("commit_generation", |b| {
+fn benchmark_basic_operations(c: &mut Criterion) {
+    // 基准测试：基本字符串操作
+    c.bench_function("string_clone", |b| {
+        let s = "Hello, World!".to_string();
         b.iter(|| {
-            rt.block_on(async {
-                handler.generate_message(black_box("test diff")).await
-            })
+            let cloned = s.clone();
+            black_box(cloned)
+        })
+    });
+
+    // 基准测试：向量操作
+    c.bench_function("vector_operations", |b| {
+        b.iter(|| {
+            let mut v = Vec::new();
+            for i in 0..100 {
+                v.push(i);
+            }
+            black_box(v)
         })
     });
 }
 
-criterion_group!(benches, bench_commit_generation);
+fn benchmark_string_operations(c: &mut Criterion) {
+    let sample_code = r#"
+    fn hello_world() {
+        println!("Hello, world!");
+        let x = 42;
+        let y = x * 2;
+        if y > 50 {
+            println!("y is greater than 50");
+        }
+    }
+    "#;
+
+    // 基准测试：字符串处理
+    c.bench_function("string_processing", |b| {
+        b.iter(|| {
+            let lines: Vec<&str> = sample_code.lines().collect();
+            let filtered: Vec<&str> = lines.into_iter()
+                .filter(|line| !line.trim().is_empty())
+                .collect();
+            black_box(filtered)
+        })
+    });
+}
+
+criterion_group!(benches, benchmark_basic_operations, benchmark_string_operations);
 criterion_main!(benches);
 ```
+
+### 基准测试配置
+
+在 `Cargo.toml` 中添加基准测试配置：
+
+```toml
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "core_benchmark"
+harness = false
+```
+
+### 运行基准测试
+
+```bash
+# 运行所有基准测试
+cargo bench
+
+# 运行特定基准测试
+cargo bench --bench core_benchmark
+
+# 只编译不运行
+cargo bench --no-run
+
+# 生成详细报告
+cargo bench -- --verbose
+```
+
+**基准测试最佳实践：**
+
+1. **基准测试应该被设计为独立的、可重复的测试**
+2. **使用 `black_box` 防止编译器优化掉测试代码**
+3. **测试真实的用例场景，而不是微优化**
+4. **定期运行基准测试以跟踪性能变化**
+5. **在 CI/CD 中集成基准测试，监控性能回归**
+
+**常见问题解决：**
+
+如果遇到 `cargo bench` 编译错误，可能是因为测试代码存在问题。可以：
+- 使用 `cargo bench --bench core_benchmark` 只运行特定基准测试
+- 使用 `cargo bench --no-run` 只编译不运行
+- 检查测试代码是否有编译错误
 
 ## 📏 代码规范
 
@@ -1039,7 +1120,7 @@ cargo build --release
 cargo flamegraph --bin gitai -- commit --verbose
 
 # 运行基准测试
-cargo bench
+cargo bench --bench core_benchmark
 
 # 内存分析
 valgrind --tool=massif target/release/gitai commit --verbose
