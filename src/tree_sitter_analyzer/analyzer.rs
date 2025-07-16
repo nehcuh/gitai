@@ -13,7 +13,7 @@ use super::core::LanguageRegistry;
 use super::core::{
     AffectedNode, ChangeAnalysis, ChangePattern, ChangeScope, ChangeStats, DiffAnalysis,
     FileAnalysis, FileAst, create_language_registry, get_node_analysis_config, is_node_public,
-    parse_git_diff,
+    parse_git_diff, load_query_file,
 };
 use super::utils::calculate_hash;
 use super::query_manager::{QueryManager, QueryManagerConfig};
@@ -466,8 +466,10 @@ impl TreeSitterAnalyzer {
     fn initialize_queries(&mut self) -> Result<(), TreeSitterError> {
         for language in self.language_registry.get_all_languages() {
             if let Some(config) = self.language_registry.get_config(language) {
-                if !config.structure_query.is_empty() {
-                    let query = Query::new(&config.get_language(), &config.structure_query)
+                // 尝试加载结构化查询文件，如果存在的话
+                let structure_query_content = load_query_file(language, "structure");
+                if !structure_query_content.is_empty() {
+                    let query = Query::new(&config.get_language(), &structure_query_content)
                         .map_err(|e| TreeSitterError::QueryError(format!("{}: {}", language, e)))?;
                     self.structure_queries.insert(language.to_string(), query);
                 }

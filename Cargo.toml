@@ -7,6 +7,8 @@ build = "build.rs"
 [build-dependencies]
 reqwest = { version = "0.12.15", features = ["json"] }
 tokio = { version = "1.45.0", features = ["full"] }
+dirs = "6.0.0"
+futures = "0.3"
 
 [dependencies]
 chrono = { version = "0.4.31", features = ["serde"] }
@@ -43,6 +45,8 @@ shellexpand = "3.1.1"
 which = "6.0.1"
 rmcp = { version = "0.2.1", features = ["server", "transport-io", "macros"] }
 async-trait = "0.1.83"
+warp = "0.3"
+async-stream = "0.3"
 
 [dev-dependencies]
 tempfile = "3.20.0"

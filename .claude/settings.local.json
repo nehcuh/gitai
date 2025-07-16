@@ -40,7 +40,16 @@
       "Bash(./target/release/gitai scan:*)",
       "Bash(git -C ../PythonPlay/anyio-demo status)",
       "Bash(RUST_LOG=debug ./target/release/gitai scan ../PythonPlay/anyio-demo)",
-      "Bash(RUST_LOG=info ./target/release/gitai scan ../PythonPlay/anyio-demo)"
+      "Bash(RUST_LOG=info ./target/release/gitai scan ../PythonPlay/anyio-demo)",
+      "Bash(./test_language_support)",
+      "Bash(python3:*)",
+      "Bash(cargo clean:*)",
+      "Bash(git clone:*)",
+      "Bash(sg scan:*)",
+      "Bash(timeout:*)",
+      "Bash(true)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

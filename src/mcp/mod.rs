@@ -215,6 +215,7 @@ impl Default for GitAiMcpConfig {
                 "gitai-devops-service".to_string(),
                 "gitai-rule-management-service".to_string(),
                 "gitai-scanner-service".to_string(),
+                "gitai-git-service".to_string(),
             ],
             service_ports: HashMap::new(),
             transport_config: TransportConfig {

@@ -96,7 +96,7 @@ impl ScanConfig {
 
 // Default functions
 fn default_rules_path() -> String {
-    "~/.config/gitai/scan-rules".to_string()
+    "~/.cache/gitai/scan-rules".to_string()
 }
 
 fn default_auto_update() -> bool {
@@ -112,11 +112,11 @@ fn default_scan_results_path() -> String {
 }
 
 fn default_rules_url() -> String {
-    "https://github.com/ast-grep/ast-grep/tree/main/crates/config/src/rules".to_string()
+    "https://github.com/coderabbitai/ast-grep-essentials.git".to_string()
 }
 
 fn default_cache_path() -> String {
-    "~/.config/gitai/rule-cache".to_string()
+    "~/.cache/gitai/rule-cache".to_string()
 }
 
 #[cfg(test)]
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_default_scan_config() {
         let config = ScanConfig::default();
-        assert_eq!(config.rule_manager.path, "~/.config/gitai/scan-rules");
+        assert_eq!(config.rule_manager.path, "~/.cache/gitai/scan-rules");
         assert!(config.rule_manager.auto_update);
         assert_eq!(config.rule_manager.ttl_hours, 24);
         assert_eq!(config.results_path, "~/.config/gitai/scan-results");
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn test_from_none_partial() {
         let config = ScanConfig::from_partial(None);
-        assert_eq!(config.rule_manager.path, "~/.config/gitai/scan-rules");
+        assert_eq!(config.rule_manager.path, "~/.cache/gitai/scan-rules");
         assert!(config.rule_manager.auto_update);
         assert_eq!(config.rule_manager.ttl_hours, 24);
         assert_eq!(config.results_path, "~/.config/gitai/scan-results");

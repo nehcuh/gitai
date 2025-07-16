@@ -44,7 +44,8 @@ pub struct RuleManager {
 
 impl RuleManager {
     pub fn new(config: RuleManagerConfig) -> Result<Self, AppError> {
-        let cache_path = Self::resolve_cache_path(&config.cache_path)?;
+        // Use the rules path directly since build.rs already handles downloading
+        let cache_path = Self::resolve_cache_path(&config.path)?;
         if !cache_path.exists() {
             std::fs::create_dir_all(&cache_path)
                 .map_err(|e| AppError::FileWrite(cache_path.to_string_lossy().to_string(), e))?;
@@ -101,34 +102,20 @@ impl RuleManager {
     }
 
     pub async fn get_rule_paths(&mut self, force_update: bool) -> Result<Vec<PathBuf>, AppError> {
-        let ttl = Duration::from_secs(self.config.ttl_hours as u64 * 3600);
-        let metadata_path = self.cache_path.join(".metadata");
-
-        let needs_update = if force_update || !metadata_path.exists() {
-            true
-        } else {
-            let metadata = std::fs::metadata(&metadata_path)
-                .map_err(|e| AppError::FileRead(metadata_path.to_string_lossy().to_string(), e))?;
-            let last_updated = metadata.modified()
-                .map_err(|e| AppError::FileRead(metadata_path.to_string_lossy().to_string(), e))?;
-            SystemTime::now().duration_since(last_updated).unwrap_or_default() > ttl
-        };
-
-        if needs_update {
-            self.update_rules().await?;
-            std::fs::write(&metadata_path, "")
-                .map_err(|e| AppError::FileWrite(metadata_path.to_string_lossy().to_string(), e))?;
-        }
+        // Since build.rs handles downloading, we just need to read the existing rules
+        // force_update is ignored since build.rs handles updates
 
         let mut rule_paths = Vec::new();
         
-        // Look for rules in the cloned repository
-        let rules_repo_path = self.cache_path.join("ast-grep-essentials");
-        let rules_dir = rules_repo_path.join("rules");
+        // Look for rules in the rules directory (build.rs already downloaded them)
+        let rules_dir = self.cache_path.join("rules");
         
         if rules_dir.exists() {
             // Recursively find all .yml files in the rules directory
             self.collect_rule_files(&rules_dir, &mut rule_paths)?;
+        } else {
+            // If rules directory doesn't exist, the build.rs download might have failed
+            tracing::warn!("Rules directory not found at: {:?}. Rules may not have been downloaded properly during build.", rules_dir);
         }
         
         // Also check for any .yml files in the cache root (for backward compatibility)
@@ -155,8 +142,8 @@ impl RuleManager {
             }
             Err(_) => {
                 // If we can't check remote, only update if we have no local rules
-                let rules_repo_path = self.cache_path.join("ast-grep-essentials");
-                Ok(!rules_repo_path.exists())
+                let rules_dir = self.cache_path.join("rules");
+                Ok(!rules_dir.exists())
             }
         }
     }
@@ -190,8 +177,8 @@ impl RuleManager {
     
     /// Download rules with atomic operation and version tracking
     async fn download_rules_atomic(&self) -> Result<RuleVersion, AppError> {
-        let rules_repo_path = self.cache_path.join("ast-grep-essentials");
-        let backup_path = self.cache_path.join("ast-grep-essentials.backup");
+        let rules_repo_path = self.cache_path.join("scan-rules");
+        let backup_path = self.cache_path.join("scan-rules.backup");
         
         // Create backup if repository exists
         if rules_repo_path.exists() {
@@ -231,11 +218,11 @@ impl RuleManager {
     
     /// Internal implementation of rule download
     async fn download_rules_impl(&self) -> Result<RuleVersion, AppError> {
-        let rules_repo_path = self.cache_path.join("ast-grep-essentials");
+        let rules_repo_path = self.cache_path.join("scan-rules");
         
         if rules_repo_path.exists() && rules_repo_path.join(".git").exists() {
             // Update existing repository
-            println!("Updating existing ast-grep rules repository...");
+            println!("Updating existing scan rules repository...");
             let output = Command::new("git")
                 .args(&["pull", "origin", "main"])
                 .current_dir(&rules_repo_path)
@@ -248,10 +235,10 @@ impl RuleManager {
                     String::from_utf8_lossy(&output.stderr)
                 ))));
             }
-            println!("Successfully updated ast-grep rules repository");
+            println!("Successfully updated scan rules repository");
         } else {
             // Clone repository for the first time
-            println!("Cloning ast-grep rules repository...");
+            println!("Cloning scan rules repository...");
             
             // Remove existing directory if it exists but isn't a git repo
             if rules_repo_path.exists() {
@@ -261,7 +248,7 @@ impl RuleManager {
             
             let git_url = self.config.url.replace("/contents", ".git");
             let output = Command::new("git")
-                .args(&["clone", &git_url, "ast-grep-essentials"])
+                .args(&["clone", &git_url, "scan-rules"])
                 .current_dir(&self.cache_path)
                 .output()
                 .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("Failed to execute git clone: {}", e))))?;
@@ -272,7 +259,7 @@ impl RuleManager {
                     String::from_utf8_lossy(&output.stderr)
                 ))));
             }
-            println!("Successfully cloned ast-grep rules repository");
+            println!("Successfully cloned scan rules repository");
         }
         
         // Get current commit hash and count rules
@@ -345,7 +332,7 @@ impl RuleManager {
             performance_score: None,
         };
         
-        let rules_repo_path = self.cache_path.join("ast-grep-essentials");
+        let rules_repo_path = self.cache_path.join("scan-rules");
         let rules_dir = rules_repo_path.join("rules");
         
         if !rules_dir.exists() {

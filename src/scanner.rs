@@ -155,9 +155,13 @@ impl LocalScanner {
                 }
                 parent = p.parent();
             }
-            parent.unwrap_or_else(|| std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials"))
+            // Use config-based default instead of hardcoded path
+            parent.unwrap_or_else(|| {
+                std::path::Path::new(&self.config.scan.rule_manager.path)
+            })
         } else {
-            std::path::Path::new("/Users/huchen/.config/gitai/scan-rules/ast-grep-essentials")
+            // Use config-based default instead of hardcoded path
+            std::path::Path::new(&self.config.scan.rule_manager.path)
         };
         
         tracing::info!("Using rules directory: {}", rules_dir.display());
@@ -672,9 +676,12 @@ impl LocalScanner {
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
             match extension.to_lowercase().as_str() {
                 // Programming languages
-                "rs" | "py" | "js" | "ts" | "java" | "c" | "cpp" | "cc" | "cxx" |
-                "go" | "rb" | "php" | "cs" | "swift" | "kt" | "scala" | "m" | "mm" |
-                "dart" | "lua" | "perl" | "pl" | "r" | "jl" | "f90" | "f95" | "f03" |
+                "rs" | "py" | "pyw" | "js" | "mjs" | "ts" | "java" | "c" | "h" | "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hxx" | "h++" |
+                "go" | "rb" | "php" | "cs" | "swift" | "kt" | "kts" | "scala" | "m" | "mm" |
+                "dart" | "lua" | "perl" | "pl" | "r" | "jl" | "f" | "f90" | "f95" | "f03" | "f08" |
+                "hs" | "lhs" | "ml" | "mli" | "ex" | "exs" | "erl" | "hrl" | "clj" | "cljs" | "cljc" |
+                "elm" | "nim" | "zig" | "v" | "pas" | "pp" | "ada" | "adb" | "ads" | "d" | "cr" | "vala" |
+                "groovy" | "gvy" | "gy" | "gsh" |
                 
                 // Web technologies
                 "html" | "htm" | "css" | "scss" | "sass" | "less" | "vue" | "svelte" |
@@ -868,38 +875,114 @@ impl LocalScanner {
     }
 
     fn detect_language(&self, file_path: &Path) -> Option<String> {
+        // First try to detect by file extension
+        if let Some(lang) = self.detect_language_by_extension(file_path) {
+            return Some(lang);
+        }
+        
+        // Fallback: try to detect by filename for special cases
+        self.detect_language_by_filename(file_path)
+    }
+    
+    fn detect_language_by_extension(&self, file_path: &Path) -> Option<String> {
         file_path.extension()
             .and_then(|ext| ext.to_str())
-            .and_then(|ext| match ext {
+            .and_then(|ext| match ext.to_lowercase().as_str() {
+                // Core programming languages
                 "rs" => Some("rust"),
-                "py" => Some("python"),
-                "js" => Some("javascript"),
+                "py" | "pyw" => Some("python"),
+                "js" | "mjs" => Some("javascript"),
                 "ts" => Some("typescript"),
+                "jsx" => Some("javascript"), // JSX is essentially JavaScript
+                "tsx" => Some("typescript"), // TSX is essentially TypeScript
                 "java" => Some("java"),
-                "c" => Some("c"),
-                "cpp" | "cc" | "cxx" => Some("cpp"),
+                "c" | "h" => Some("c"),
+                "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hxx" | "h++" => Some("cpp"),
                 "go" => Some("go"),
+                
+                // Web and markup languages
+                "html" | "htm" => Some("html"),
+                "css" => Some("css"),
+                "scss" | "sass" => Some("scss"),
+                "less" => Some("less"),
+                "vue" => Some("vue"),
+                "svelte" => Some("svelte"),
+                
+                // Other programming languages
                 "rb" => Some("ruby"),
                 "php" => Some("php"),
                 "cs" => Some("csharp"),
                 "swift" => Some("swift"),
-                "kt" => Some("kotlin"),
+                "kt" | "kts" => Some("kotlin"),
                 "scala" => Some("scala"),
-                "html" => Some("html"),
-                "css" => Some("css"),
-                "scss" => Some("scss"),
-                "less" => Some("less"),
-                "vue" => Some("vue"),
-                "jsx" => Some("jsx"),
-                "tsx" => Some("tsx"),
+                "dart" => Some("dart"),
+                "lua" => Some("lua"),
+                "pl" | "perl" => Some("perl"),
+                "r" => Some("r"),
+                "jl" => Some("julia"),
+                "f" | "f90" | "f95" | "f03" | "f08" => Some("fortran"),
+                "m" | "mm" => Some("objc"),
+                "hs" | "lhs" => Some("haskell"),
+                "ml" | "mli" => Some("ocaml"),
+                "ex" | "exs" => Some("elixir"),
+                "erl" | "hrl" => Some("erlang"),
+                "clj" | "cljs" | "cljc" => Some("clojure"),
+                "elm" => Some("elm"),
+                "nim" => Some("nim"),
+                "zig" => Some("zig"),
+                "v" => Some("vlang"),
+                "pas" | "pp" => Some("pascal"),
+                "ada" | "adb" | "ads" => Some("ada"),
+                "d" => Some("dlang"),
+                "cr" => Some("crystal"),
+                "vala" => Some("vala"),
+                "groovy" | "gvy" | "gy" | "gsh" => Some("groovy"),
+                
+                // Configuration and data languages
                 "json" => Some("json"),
                 "yaml" | "yml" => Some("yaml"),
+                "toml" => Some("toml"),
                 "xml" => Some("xml"),
-                "sql" => Some("sql"),
+                "md" | "markdown" => Some("markdown"),
+                "tex" => Some("latex"),
+                
+                // Shell and scripting languages
                 "sh" | "bash" => Some("bash"),
+                "zsh" => Some("zsh"),
+                "fish" => Some("fish"),
+                "ps1" => Some("powershell"),
+                "bat" | "cmd" => Some("batch"),
+                
+                // Query and database languages
+                "sql" | "mysql" | "pgsql" | "sqlite" => Some("sql"),
+                
+                // Infrastructure and DevOps languages
+                "tf" | "hcl" => Some("hcl"),
+                "proto" => Some("protobuf"),
+                "thrift" => Some("thrift"),
+                "graphql" | "gql" => Some("graphql"),
+                
                 _ => None,
             })
             .map(|s| s.to_string())
+    }
+    
+    fn detect_language_by_filename(&self, file_path: &Path) -> Option<String> {
+        if let Some(filename) = file_path.file_name().and_then(|n| n.to_str()) {
+            match filename.to_lowercase().as_str() {
+                "dockerfile" | "dockerfile.dev" | "dockerfile.prod" => Some("dockerfile".to_string()),
+                "makefile" | "makefile.am" | "makefile.in" => Some("makefile".to_string()),
+                "cmakelists.txt" => Some("cmake".to_string()),
+                "rakefile" => Some("ruby".to_string()),
+                "gemfile" | "gemfile.lock" => Some("ruby".to_string()),
+                "cargo.toml" | "cargo.lock" => Some("toml".to_string()),
+                "package.json" | "package-lock.json" => Some("json".to_string()),
+                "composer.json" | "composer.lock" => Some("json".to_string()),
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 
     fn get_supported_language(&self, language: &str) -> Option<SupportedLanguage> {
@@ -915,7 +998,7 @@ impl LocalScanner {
     }
 
     fn supports_ast_grep(&self, language: &str) -> bool {
-        matches!(language, "rust" | "javascript" | "typescript" | "python" | "java" | "c" | "cpp" | "go" | "html" | "css" | "json" | "yaml")
+        crate::ast_grep_integration::SupportedLanguage::from_str(language).is_some()
     }
 
     fn apply_ast_grep_matching(
