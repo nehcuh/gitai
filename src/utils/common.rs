@@ -223,7 +223,8 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  \x1b[1mquery-status\x1b[0m           显示查询文件状态\n");
     help.push_str("  \x1b[1mupdate-scan-rules\x1b[0m      更新代码扫描规则\n");
     help.push_str("  \x1b[1minstall-ast-grep\x1b[0m       自动安装 ast-grep 可执行文件\n");
-    help.push_str("  \x1b[1mcheck-ast-grep\x1b[0m         检查 ast-grep 安装状态\n\n");
+    help.push_str("  \x1b[1mcheck-ast-grep\x1b[0m         检查 ast-grep 安装状态\n");
+    help.push_str("  \x1b[1mstart-mcp\x1b[0m              启动 GitAI MCP 服务 (Model Context Protocol)\n\n");
 
     // Usage Examples Section
     help.push_str("📚 \x1b[1;37m使用示例\x1b[0m\n");
@@ -242,6 +243,10 @@ pub fn generate_gitai_help() -> String {
     help.push_str("  \x1b[32m# ast-grep 工具管理\x1b[0m\n");
     help.push_str("  gitai check-ast-grep           # 检查 ast-grep 安装状态\n");
     help.push_str("  gitai install-ast-grep         # 自动安装 ast-grep\n\n");
+    
+    help.push_str("  \x1b[32m# MCP 服务管理\x1b[0m\n");
+    help.push_str("  gitai start-mcp                # 启动 GitAI MCP 服务\n");
+    help.push_str("                                 # 使 GitAI 功能通过 MCP 协议可用\n\n");
     
     help.push_str("  \x1b[32m# 标准 Git 操作 (带智能错误提示)\x1b[0m\n");
     help.push_str("  gitai status                   # 查看状态\n");

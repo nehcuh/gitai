@@ -45,7 +45,11 @@
       "Bash(python3:*)",
       "Bash(cargo clean:*)",
       "Bash(git clone:*)",
-      "Bash(sg scan:*)"
+      "Bash(sg scan:*)",
+      "Bash(timeout:*)",
+      "Bash(true)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

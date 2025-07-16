@@ -9,6 +9,7 @@ mod ast_grep_installer;
 mod tree_sitter_analyzer;
 mod types;
 mod utils;
+mod mcp;
 
 use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
@@ -204,6 +205,11 @@ async fn main() -> Result<(), AppError> {
                 handle_check_ast_grep().await?;
                 return Ok(());
             }
+            "start-mcp" => {
+                tracing::info!("🚀 启动 GitAI MCP 服务");
+                handle_start_mcp_services(&config).await?;
+                return Ok(());
+            }
             _ => {
                 // Continue to git proxy handling
             }
@@ -317,5 +323,68 @@ async fn handle_check_ast_grep() -> Result<(), AppError> {
         println!("{}", "💡 使用 'gitai install-ast-grep' 命令进行安装".yellow());
     }
     
+    Ok(())
+}
+
+/// Handle MCP services startup command
+async fn handle_start_mcp_services(config: &AppConfig) -> Result<(), AppError> {
+    use crate::mcp::{init_gitai_mcp_manager, GitAiMcpConfig};
+    use crate::mcp::services::{GitService, GitServiceHandler};
+    use std::sync::Arc;
+    use std::path::PathBuf;
+
+    println!("{}", "🚀 GitAI MCP 服务启动器".bright_blue().bold());
+    
+    // 初始化 MCP 管理器
+    let mcp_config = GitAiMcpConfig::default();
+    let mut manager = match init_gitai_mcp_manager(Some(mcp_config)).await {
+        Ok(manager) => {
+            println!("{}", "✅ MCP 服务管理器初始化成功".green());
+            manager
+        }
+        Err(e) => {
+            println!("{}", format!("❌ MCP 服务管理器初始化失败: {:?}", e).red());
+            return Err(AppError::Generic(format!("MCP 管理器初始化失败: {:?}", e)));
+        }
+    };
+
+    // 注册 Git 服务 (作为 GitAI 的核心功能)
+    let config_arc = Arc::new(config.clone());
+    let current_dir = std::env::current_dir().ok();
+    let git_service = Box::new(GitService::new(current_dir, config_arc.clone()));
+    
+    if let Err(e) = manager.register_service(git_service).await {
+        println!("{}", format!("❌ Git 服务注册失败: {:?}", e).red());
+        return Err(AppError::Generic(format!("Git 服务注册失败: {:?}", e)));
+    }
+
+    println!("{}", "✅ GitAI Git 服务注册成功".green());
+    println!("{}", "🔧 GitAI 现在作为 Git 的上位替代，提供以下增强功能:".cyan());
+    println!("  • {} - 智能提交信息生成", "git commit".bold());
+    println!("  • {} - AI 驱动代码评审", "git review".bold());
+    println!("  • {} - Tree-sitter 代码分析", "增强分析".bold());
+    println!("  • {} - 其他标准 Git 功能", "原生支持".bold());
+
+    // 启动所有注册的服务
+    if let Err(e) = manager.start_all_services().await {
+        println!("{}", format!("❌ 服务启动失败: {:?}", e).red());
+        return Err(AppError::Generic(format!("服务启动失败: {:?}", e)));
+    }
+
+    // 显示服务状态
+    let active_services = manager.list_active_services();
+    println!("{}", format!("🎉 成功启动 {} 个 MCP 服务:", active_services.len()).green());
+    for service in active_services {
+        println!("  • {}", service.green());
+    }
+
+    // 健康检查
+    let health_results = manager.health_check_all();
+    let healthy_count = health_results.values().filter(|&&h| h).count();
+    println!("{}", format!("💚 健康检查: {}/{} 服务正常运行", healthy_count, health_results.len()).green());
+
+    println!("{}", "🚀 GitAI MCP 服务已启动，现在可以通过 MCP 协议使用 GitAI 功能了！".bold().green());
+    println!("{}", "💡 提示：使用支持 MCP 的客户端（如 Claude Desktop）来连接和使用这些服务".blue());
+
     Ok(())
 }

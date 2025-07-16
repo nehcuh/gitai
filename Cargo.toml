@@ -45,6 +45,8 @@ shellexpand = "3.1.1"
 which = "6.0.1"
 rmcp = { version = "0.2.1", features = ["server", "transport-io", "macros"] }
 async-trait = "0.1.83"
+warp = "0.3"
+async-stream = "0.3"
 
 [dev-dependencies]
 tempfile = "3.20.0"
