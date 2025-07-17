@@ -102,20 +102,24 @@ impl RuleManager {
     }
 
     pub async fn get_rule_paths(&mut self, force_update: bool) -> Result<Vec<PathBuf>, AppError> {
-        // Since build.rs handles downloading, we just need to read the existing rules
-        // force_update is ignored since build.rs handles updates
-
         let mut rule_paths = Vec::new();
         
-        // Look for rules in the rules directory (build.rs already downloaded them)
-        let rules_dir = self.cache_path.join("rules");
+        // Look for rules in the scan-rules directory (downloaded by build.rs or runtime)
+        let rules_repo_dir = self.cache_path.join("scan-rules").join("rules");
         
-        if rules_dir.exists() {
-            // Recursively find all .yml files in the rules directory
-            self.collect_rule_files(&rules_dir, &mut rule_paths)?;
+        // If force_update is requested or rules don't exist, try to download/update them
+        if force_update || !rules_repo_dir.exists() || self.count_rules(&self.cache_path.join("scan-rules"))? == 0 {
+            tracing::info!("Updating scan rules...");
+            if let Err(e) = self.update_rules().await {
+                tracing::warn!("Failed to update rules: {}. Using existing rules if available.", e);
+            }
+        }
+        
+        // Look for rules in the scan-rules/rules directory
+        if rules_repo_dir.exists() {
+            self.collect_rule_files(&rules_repo_dir, &mut rule_paths)?;
         } else {
-            // If rules directory doesn't exist, the build.rs download might have failed
-            tracing::warn!("Rules directory not found at: {:?}. Rules may not have been downloaded properly during build.", rules_dir);
+            tracing::warn!("Rules directory not found at: {:?}. Rules may not have been downloaded properly.", rules_repo_dir);
         }
         
         // Also check for any .yml files in the cache root (for backward compatibility)
@@ -127,6 +131,12 @@ impl RuleManager {
                 rule_paths.push(path);
             }
         }
+        
+        // If still no rules found, show helpful message
+        if rule_paths.is_empty() {
+            tracing::warn!("No scan rules found. Please check your network connection or try running with --update-rules flag.");
+        }
+        
         Ok(rule_paths)
     }
 
@@ -150,7 +160,11 @@ impl RuleManager {
     
     /// Get current commit hash from remote repository
     async fn get_remote_commit_hash(&self) -> Result<String, AppError> {
-        let git_url = self.config.url.replace("/contents", ".git");
+        let git_url = if self.config.url.ends_with(".git") {
+            self.config.url.clone()
+        } else {
+            format!("{}.git", self.config.url)
+        };
         let output = Command::new("git")
             .args(&["ls-remote", &git_url, "HEAD"])
             .output()
@@ -246,7 +260,11 @@ impl RuleManager {
                     .map_err(|e| AppError::FileWrite(rules_repo_path.to_string_lossy().to_string(), e))?;
             }
             
-            let git_url = self.config.url.replace("/contents", ".git");
+            let git_url = if self.config.url.ends_with(".git") {
+                self.config.url.clone()
+            } else {
+                format!("{}.git", self.config.url)
+            };
             let output = Command::new("git")
                 .args(&["clone", &git_url, "scan-rules"])
                 .current_dir(&self.cache_path)

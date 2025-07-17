@@ -112,7 +112,7 @@ fn default_scan_results_path() -> String {
 }
 
 fn default_rules_url() -> String {
-    "https://github.com/coderabbitai/ast-grep-essentials.git".to_string()
+    "https://github.com/coderabbitai/ast-grep-essentials".to_string()
 }
 
 fn default_cache_path() -> String {

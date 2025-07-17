@@ -371,32 +371,34 @@ fn download_scan_rules(scan_rules_dir: &Path) -> Result<(), Box<dyn std::error::
                 println!("cargo:warning=扫描规则已是最新版本");
             }
         } else {
-            println!("cargo:warning=克隆扫描规则仓库...");
-            // 如果目录存在但不是git仓库，先删除
-            if scan_rules_dir.exists() {
-                let _ = fs::remove_dir_all(scan_rules_dir);
-            }
+            println!("cargo:warning=fetch 失败，使用现有规则");
+        }
+    } else {
+        println!("cargo:warning=克隆扫描规则仓库...");
+        // 如果目录存在但不是git仓库，先删除
+        if scan_rules_dir.exists() {
+            let _ = fs::remove_dir_all(scan_rules_dir);
+        }
 
-            // 使用浅克隆减少下载量
-            let parent_dir = scan_rules_dir
-                .parent()
-                .ok_or("Invalid scan rules directory path")?;
+        // 使用浅克隆减少下载量
+        let parent_dir = scan_rules_dir
+            .parent()
+            .ok_or("Invalid scan rules directory path")?;
 
-            let status = Command::new("git")
-                .arg("clone")
-                .arg("--depth=1")
-                .arg("--branch=main")
-                .arg(AST_GREP_SCAN_RULES)
-                .arg(scan_rules_dir.file_name().unwrap())
-                .current_dir(parent_dir)
-                .status()?;
+        let status = Command::new("git")
+            .arg("clone")
+            .arg("--depth=1")
+            .arg("--branch=main")
+            .arg(AST_GREP_SCAN_RULES)
+            .arg(scan_rules_dir.file_name().unwrap())
+            .current_dir(parent_dir)
+            .status()?;
 
-            if status.success() {
-                println!("cargo:warning=扫描规则克隆成功");
-            } else {
-                println!("cargo:warning=扫描规则克隆失败，创建基础结构");
-                fs::create_dir_all(scan_rules_dir.join("rules"))?;
-            }
+        if status.success() {
+            println!("cargo:warning=扫描规则克隆成功");
+        } else {
+            println!("cargo:warning=扫描规则克隆失败，创建基础结构");
+            fs::create_dir_all(scan_rules_dir.join("rules"))?;
         }
     }
     Ok(())
