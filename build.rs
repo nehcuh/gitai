@@ -13,7 +13,10 @@ use tokio::sync::Semaphore;
 const CACHE_EXPIRATION: Duration = Duration::from_secs(864000);
 
 // 开源 ast-grep 代码扫描规则
-const AST_GREP_SCAN_RULES: &str = "https://github.com/coderabbitai/ast-grep-essentials.git";
+const SCAN_RULES_URL: &str = "https://github.com/coderabbitai/ast-grep-essentials.git";
+
+// 开源 tree-sitter-lang 规则下载
+const TREE_SITTER_URL: &str = "https://raw.githubusercontent.com/REPO/master/queries/FILE";
 
 #[derive(Debug)]
 pub enum DownloadError {
@@ -117,11 +120,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
 
-            let url = format!(
-                "https://raw.githubusercontent.com/{repo}/master/queries/{file}",
-                repo = repo,
-                file = file
-            );
+            // let url = format!(
+            //     "https://raw.githubusercontent.com/{repo}/master/queries/{file}",
+            //     repo = repo,
+            //     file = file
+            // );
+            let url = TREE_SITTER_URL.replace("REPO", repo).replace("FILE", file);
 
             tasks.push(DownloadTask {
                 lang: lang.to_string(),
@@ -233,13 +237,6 @@ fn should_update_file(path: &Path) -> bool {
         }
     }
 
-    // 检查文件大小 (空文件需要更新)
-    if let Ok(size) = fs::metadata(path).map(|m| m.len()) {
-        if size == 0 {
-            return true;
-        }
-    }
-
     false
 }
 
@@ -336,7 +333,7 @@ fn download_scan_rules(scan_rules_dir: &Path) -> Result<(), Box<dyn std::error::
             .arg("clone")
             .arg("--depth=1")
             .arg("--branch=main")
-            .arg(AST_GREP_SCAN_RULES)
+            .arg(SCAN_RULES_URL)
             .arg(scan_rules_dir.file_name().unwrap())
             .current_dir(parent_dir)
             .status()?;
