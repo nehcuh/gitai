@@ -49,7 +49,11 @@
       "Bash(timeout:*)",
       "Bash(true)",
       "Bash(curl:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(cargo bench:*)",
+      "Bash(./target/release/deps/core_benchmark-*)",
+      "Bash(git pull:*)",
+      "Bash(git remote:*)"
     ],
     "deny": []
   }
