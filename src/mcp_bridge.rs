@@ -943,7 +943,11 @@ mod tests {
     #[tokio::test]
     async fn test_bridge_creation() {
         // 创建一个默认配置用于测试
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let _bridge = GitAiMcpBridge::new(config);
         // 构造函数现在总是成功的
         assert!(true);
@@ -951,21 +955,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_bridge_functionality() {
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let bridge = GitAiMcpBridge::new(config);
         
         // 测试获取状态功能
-        let result = bridge.gitai_status(Some(false)).await;
+        let result = bridge.gitai_status(Some(false), None).await;
         assert!(result.is_ok());
         
         // 测试差异功能
-        let result = bridge.gitai_diff(Some(true), None).await;
+        let result = bridge.gitai_diff(Some(true), None, None).await;
         assert!(result.is_ok());
     }
     
     #[tokio::test]
     async fn test_get_tools() {
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let bridge = GitAiMcpBridge::new(config);
         
         let tools = bridge.get_tools();

@@ -1,15 +1,15 @@
+use crate::errors::ConfigError;
 use serde::Deserialize;
 use std::{collections::HashMap, env, path::PathBuf};
-use crate::errors::ConfigError;
 
 use super::{
-    ai_config::{AIConfig, PartialAIConfig},
+    ai_config::AIConfig,
     devops_config::{AccountConfig, PartialAccountConfig},
-    tree_sitter_config::{TreeSitterConfig, PartialTreeSitterConfig},
-    review_config::{ReviewConfig, PartialReviewConfig},
-    scan_config::{ScanConfig, PartialScanConfig},
     language_config::LanguageConfig,
     loader::ConfigLoader,
+    review_config::{PartialReviewConfig, ReviewConfig},
+    scan_config::{PartialScanConfig, ScanConfig},
+    tree_sitter_config::{PartialTreeSitterConfig, TreeSitterConfig},
 };
 
 // Configuration location constants
@@ -52,7 +52,7 @@ pub struct AppConfig {
 /// Partial Application Configuration for loading from files
 #[derive(Deserialize, Debug, Default)]
 pub struct PartialAppConfig {
-    ai: Option<PartialAIConfig>,
+    ai: Option<AIConfig>,
     tree_sitter: Option<PartialTreeSitterConfig>,
     review: Option<PartialReviewConfig>,
     account: Option<PartialAccountConfig>,
@@ -115,28 +115,40 @@ impl AppConfig {
     }
 
     /// Get language-specific prompt content
-    pub fn get_language_prompt_content(&self, prompt_key: &str, language: &str) -> Result<String, crate::errors::ConfigError> {
+    pub fn get_language_prompt_content(
+        &self,
+        prompt_key: &str,
+        language: &str,
+    ) -> Result<String, crate::errors::ConfigError> {
         // First try to get language-specific version
         let lang_specific_key = format!("{}_{}", prompt_key, language);
         if let Some(content) = self.prompts.get(&lang_specific_key) {
             return Ok(content.clone());
         }
-        
+
         // Fall back to default language version
-        self.prompts.get(prompt_key)
+        self.prompts
+            .get(prompt_key)
             .cloned()
             .ok_or_else(|| crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string()))
     }
 
     /// Get prompt file path (for backward compatibility)
-    pub fn get_prompt_path(&self, prompt_key: &str) -> Result<std::path::PathBuf, crate::errors::ConfigError> {
+    pub fn get_prompt_path(
+        &self,
+        prompt_key: &str,
+    ) -> Result<std::path::PathBuf, crate::errors::ConfigError> {
         let prompt_file = match prompt_key {
             "translator" => TRANSLATOR_PROMPT,
             "helper" => HELPER_PROMPT,
             "commit_generator" => COMMIT_GENERATOR_PROMPT,
             "commit_deviation" => COMMIT_DIVIATION_PROMPT,
             "review" => REVIEW_PROMPT,
-            _ => return Err(crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string())),
+            _ => {
+                return Err(crate::errors::ConfigError::PromptFileMissing(
+                    prompt_key.to_string(),
+                ));
+            }
         };
         Ok(std::path::PathBuf::from(USER_PROMPT_PATH).join(prompt_file))
     }

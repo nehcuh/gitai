@@ -140,27 +140,35 @@ impl DevOpsWorkItemFetcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::git::{DefectList, StoryList, TaskList};
+    use crate::types::git::{CommaSeparatedU32List};
 
     fn create_test_args() -> ReviewArgs {
         ReviewArgs {
-            files: None,
-            commits: None,
-            range: None,
-            depth: None,
-            format: None,
-            output: None,
+            path: None,
+            depth: "medium".to_string(),
+            focus: None,
             language: None,
-            stories: Some(StoryList(vec![1, 2, 3])),
-            tasks: Some(TaskList(vec![4, 5])),
-            defects: Some(DefectList(vec![6])),
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            commit1: None,
+            commit2: None,
+            stories: Some(CommaSeparatedU32List(vec![1, 2, 3])),
+            tasks: Some(CommaSeparatedU32List(vec![4, 5])),
+            defects: Some(CommaSeparatedU32List(vec![6])),
             space_id: Some(12345),
+            scan_results: None,
+            passthrough_args: vec![],
         }
     }
 
     #[test]
     fn test_validate_work_item_args_valid() {
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let fetcher = DevOpsWorkItemFetcher::new(&config);
         let args = create_test_args();
 
@@ -169,7 +177,11 @@ mod tests {
 
     #[test]
     fn test_validate_work_item_args_missing_space_id() {
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let fetcher = DevOpsWorkItemFetcher::new(&config);
         let mut args = create_test_args();
         args.space_id = None;
@@ -179,20 +191,28 @@ mod tests {
 
     #[test]
     fn test_validate_work_item_args_no_work_items() {
-        let config = AppConfig::default();
+        let config = AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap();
         let fetcher = DevOpsWorkItemFetcher::new(&config);
         let args = ReviewArgs {
-            files: None,
-            commits: None,
-            range: None,
-            depth: None,
-            format: None,
-            output: None,
+            path: None,
+            depth: "medium".to_string(),
+            focus: None,
             language: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            commit1: None,
+            commit2: None,
             stories: None,
             tasks: None,
             defects: None,
             space_id: None,
+            scan_results: None,
+            passthrough_args: vec![],
         };
 
         assert!(fetcher.validate_work_item_args(&args).is_ok());

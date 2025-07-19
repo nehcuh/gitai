@@ -385,8 +385,10 @@ mod tests {
 
     #[test]
     fn test_collect_env_vars() {
-        env::set_var("GITAI_AI_API_URL", "http://test.com");
-        env::set_var("GITAI_AI_MODEL", "test-model");
+        unsafe {
+            env::set_var("GITAI_AI_API_URL", "http://test.com");
+            env::set_var("GITAI_AI_MODEL", "test-model");
+        }
         
         let loader = ConfigLoader::new();
         let env_map = loader.collect_env_vars();
@@ -395,7 +397,9 @@ mod tests {
         assert_eq!(env_map.get("GITAI_AI_MODEL"), Some(&"test-model".to_string()));
         
         // Clean up
-        env::remove_var("GITAI_AI_API_URL");
-        env::remove_var("GITAI_AI_MODEL");
+        unsafe {
+            env::remove_var("GITAI_AI_API_URL");
+            env::remove_var("GITAI_AI_MODEL");
+        }
     }
 }

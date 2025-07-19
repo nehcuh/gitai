@@ -245,8 +245,8 @@ mod tests {
         let rmcp_error: RmcpServiceError = compat_error.into();
         
         match rmcp_error {
-            RmcpServiceError::InvalidParams => {
-                // 成功转换
+            RmcpServiceError::McpError(_) => {
+                // 成功转换为 McpError
             }
             _ => panic!("ServiceError 转换失败"),
         }

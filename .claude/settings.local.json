@@ -53,7 +53,24 @@
       "Bash(cargo bench:*)",
       "Bash(./target/release/deps/core_benchmark-*)",
       "Bash(git pull:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(RUST_LOG=off cargo check)",
+      "Bash(RUST_LOG=off cargo check --quiet)",
+      "Bash(RUST_LOG=off cargo build --bin gitai)",
+      "Bash(RUST_LOG=off cargo test)",
+      "Bash(RUST_LOG=off cargo test --lib)",
+      "Bash(RUST_LOG=off cargo check --lib)",
+      "Bash(RUST_LOG=off cargo check --message-format=short)",
+      "Bash(RUST_LOG=off RUST_BACKTRACE=0 cargo check --lib --message-format=short)",
+      "Bash(RUST_LOG=off RUST_BACKTRACE=0 cargo check --lib)",
+      "Bash(RUST_LOG=off cargo test --test integration_tests)",
+      "Bash(RUST_LOG=off cargo check --example error_handling_demo)",
+      "Bash(RUST_LOG=off cargo check --test integration_commit_test)",
+      "Bash(RUST_LOG=off cargo check --test query_manager_test)",
+      "Bash(RUST_LOG=off cargo test --lib --no-run)",
+      "Bash(RUST_LOG=off cargo test --test integration_commit_test)",
+      "Bash(RUST_LOG=off cargo test --test query_manager_test)",
+      "Bash(RUST_LOG=off cargo run --example error_handling_demo)"
     ],
     "deny": []
   }

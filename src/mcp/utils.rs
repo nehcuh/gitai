@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_format_error_message() {
-        let error = ServiceError::InvalidParams;
+        let error = ServiceError::InvalidParams("test error".to_string());
         
         let formatted = McpUtils::format_error_message(&error);
         assert!(formatted.contains("MCP"));
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_create_error_response() {
-        let error = ServiceError::InvalidParams;
+        let error = ServiceError::InvalidParams("test error".to_string());
         
         let response = McpUtils::create_error_response(&error);
         assert_eq!(response["success"], false);
@@ -243,8 +243,8 @@ mod tests {
         );
         
         assert_eq!(tool.name, "test_tool");
-        assert_eq!(tool.description, Some("测试工具".to_string()));
-        assert!(tool.input_schema.is_object());
+        assert_eq!(tool.description, Some("测试工具".into()));
+        assert!(!tool.input_schema.is_empty()); // 检查不为空而非is_object
     }
 
     #[test]

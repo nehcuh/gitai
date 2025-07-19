@@ -139,6 +139,8 @@ mod tests {
                 path: Some("/custom/rules".to_string()),
                 auto_update: Some(false),
                 ttl_hours: None, // Should use default
+                url: None, // Should use default
+                cache_path: None, // Should use default
             }),
             remote_scan: Some(PartialRemoteScanConfig {
                 url: Some("https://api.example.com".to_string()),

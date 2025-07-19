@@ -273,8 +273,12 @@ mod tests {
 
     #[test]
     fn test_generate_standard_prompt() {
-        let config = Arc::new(AppConfig::default());
-        let ai_engine = Arc::new(AIAnalysisEngine::new(Default::default()));
+        let config = Arc::new(AppConfig::from_partial_and_env(
+            None, 
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap());
+        let ai_engine = Arc::new(AIAnalysisEngine::new(config.clone()));
         let engine = AIReviewEngine::new(config, ai_engine);
 
         let request = create_test_request();
@@ -289,8 +293,12 @@ mod tests {
 
     #[test]
     fn test_generate_fallback_review() {
-        let config = Arc::new(AppConfig::default());
-        let ai_engine = Arc::new(AIAnalysisEngine::new(Default::default()));
+        let config = Arc::new(AppConfig::from_partial_and_env(
+            None, 
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap());
+        let ai_engine = Arc::new(AIAnalysisEngine::new(config.clone()));
         let engine = AIReviewEngine::new(config, ai_engine);
 
         let request = create_test_request();

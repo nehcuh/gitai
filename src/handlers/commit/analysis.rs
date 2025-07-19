@@ -234,6 +234,7 @@ mod tests {
             analysis_depth: "medium".to_string(),
             cache_enabled: true,
             languages: vec!["rust".to_string(), "javascript".to_string()],
+            query_manager_config: Default::default(),
         }
     }
 

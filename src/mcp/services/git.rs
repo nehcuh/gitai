@@ -508,6 +508,7 @@ mod tests {
                 analysis_depth: "medium".to_string(),
                 cache_enabled: true,
                 languages: vec!["rust".to_string(), "javascript".to_string()],
+                query_manager_config: Default::default(),
             },
             review: ReviewConfig {
                 auto_save: true,
@@ -594,11 +595,11 @@ mod tests {
         let handler = GitServiceHandler::new(Some(repo_path), config);
         
         // 测试列出工具
-        let tools = handler.list_tools().await.unwrap();
+        let tools = handler.list_tools();
         assert!(!tools.is_empty());
         
         // 测试列出资源
-        let resources = handler.list_resources().await.unwrap();
+        let resources = handler.list_resources();
         assert!(resources.is_empty()); // Git 服务不提供资源
     }
 }

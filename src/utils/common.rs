@@ -688,6 +688,7 @@ mod tests {
     fn test_construct_review_args_default() {
         let args = make_args(vec!["gitai", "review"]);
         let expected = ReviewArgs {
+            path: None,
             depth: "medium".to_string(),
             focus: None,
             language: None,
@@ -725,6 +726,7 @@ mod tests {
             "--", "--extra", "flag"
         ]);
         let expected = ReviewArgs {
+            path: None,
             depth: "deep".to_string(),
             focus: Some("performance".to_string()),
             language: Some("Rust".to_string()),
@@ -738,6 +740,7 @@ mod tests {
             tasks: Some(CommaSeparatedU32List(vec![4, 5])),
             defects: Some(CommaSeparatedU32List(vec![6])),
             space_id: Some(12345),
+            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -746,6 +749,7 @@ mod tests {
     fn test_construct_review_args_alias_rv() {
         let args = make_args(vec!["gitai", "rv", "--depth=shallow"]);
         let expected = ReviewArgs {
+            path: None,
             depth: "shallow".to_string(),
             focus: None,
             language: None,
@@ -772,6 +776,7 @@ mod tests {
             "--space-id=98765",
         ]);
         let expected = ReviewArgs {
+            path: None,
             depth: "medium".to_string(),
             focus: None,
             language: None,
@@ -785,6 +790,7 @@ mod tests {
             tasks: None,
             defects: None,
             space_id: Some(98765),
+            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -799,6 +805,7 @@ mod tests {
             "--space-id=123",
         ]);
         let expected = ReviewArgs {
+            path: None,
             depth: "medium".to_string(),
             focus: None,
             language: None,
@@ -812,6 +819,7 @@ mod tests {
             tasks: Some(CommaSeparatedU32List(vec![])),
             defects: Some(CommaSeparatedU32List(vec![])),
             space_id: Some(123),
+            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }

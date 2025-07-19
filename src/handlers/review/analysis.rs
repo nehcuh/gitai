@@ -200,22 +200,24 @@ impl DiffAnalyzer {
 mod tests {
     use super::*;
     use crate::types::git::{ChangedFile, ChangeType};
+    use crate::config::AppConfig;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::collections::HashMap;
 
     fn create_test_diff() -> GitDiff {
         GitDiff {
             changed_files: vec![
                 ChangedFile {
-                    path: "src/main.rs".to_string(),
+                    path: PathBuf::from("src/main.rs"),
                     change_type: ChangeType::Modified,
-                    additions: Some(10),
-                    deletions: Some(5),
+                    hunks: vec![], // Empty hunks for test
                     file_mode_change: None,
                 },
                 ChangedFile {
-                    path: "src/lib.rs".to_string(),
+                    path: PathBuf::from("src/lib.rs"),
                     change_type: ChangeType::Added,
-                    additions: Some(20),
-                    deletions: Some(0),
+                    hunks: vec![], // Empty hunks for test
                     file_mode_change: None,
                 },
             ],
@@ -226,7 +228,12 @@ mod tests {
     #[test]
     fn test_extract_language_info() {
         let tree_sitter_config = TreeSitterConfig::default();
-        let ai_engine = Arc::new(AIAnalysisEngine::new(Default::default()));
+        let test_config = Arc::new(AppConfig::from_partial_and_env(
+            None, 
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap());
+        let ai_engine = Arc::new(AIAnalysisEngine::new(test_config));
         let analyzer = DiffAnalyzer::new(tree_sitter_config, ai_engine);
 
         let diff = create_test_diff();
@@ -239,7 +246,12 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_diff_simple() {
         let tree_sitter_config = TreeSitterConfig::default();
-        let ai_engine = Arc::new(AIAnalysisEngine::new(Default::default()));
+        let test_config = Arc::new(AppConfig::from_partial_and_env(
+            None, 
+            HashMap::new(),
+            HashMap::new()
+        ).unwrap());
+        let ai_engine = Arc::new(AIAnalysisEngine::new(test_config));
         let analyzer = DiffAnalyzer::new(tree_sitter_config, ai_engine);
 
         let diff_text = r#"

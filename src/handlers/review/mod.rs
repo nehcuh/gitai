@@ -279,25 +279,33 @@ pub async fn handle_review_with_output_in_dir(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::git::{DefectList, StoryList, TaskList};
+    use crate::types::git::{CommaSeparatedU32List};
 
     fn create_test_config() -> Arc<AppConfig> {
-        Arc::new(AppConfig::default())
+        Arc::new(AppConfig::from_partial_and_env(
+            None,
+            std::collections::HashMap::new(),
+            std::collections::HashMap::new()
+        ).unwrap())
     }
 
     fn create_test_args() -> ReviewArgs {
         ReviewArgs {
-            files: None,
-            commits: None,
-            range: None,
-            depth: None,
-            format: None,
-            output: None,
+            path: None,
+            depth: "medium".to_string(),
+            focus: None,
             language: None,
-            stories: Some(StoryList(vec![1, 2])),
-            tasks: Some(TaskList(vec![3])),
-            defects: Some(DefectList(vec![])),
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            commit1: None,
+            commit2: None,
+            stories: Some(CommaSeparatedU32List(vec![1, 2])),
+            tasks: Some(CommaSeparatedU32List(vec![3])),
+            defects: Some(CommaSeparatedU32List(vec![])),
             space_id: Some(12345),
+            scan_results: None,
+            passthrough_args: vec![],
         }
     }
 
