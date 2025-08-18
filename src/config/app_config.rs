@@ -8,7 +8,6 @@ use super::{
     tree_sitter_config::{TreeSitterConfig, PartialTreeSitterConfig},
     review_config::{ReviewConfig, PartialReviewConfig},
     scan_config::{ScanConfig, PartialScanConfig},
-    language_config::LanguageConfig,
     loader::ConfigLoader,
 };
 
@@ -44,7 +43,6 @@ pub struct AppConfig {
     pub tree_sitter: TreeSitterConfig,
     pub review: ReviewConfig,
     pub account: Option<AccountConfig>,
-    pub language: LanguageConfig,
     pub prompts: HashMap<String, String>,
     pub scan: ScanConfig,
 }
@@ -56,7 +54,6 @@ pub struct PartialAppConfig {
     tree_sitter: Option<PartialTreeSitterConfig>,
     review: Option<PartialReviewConfig>,
     account: Option<PartialAccountConfig>,
-    language: Option<LanguageConfig>,
     scan: Option<PartialScanConfig>,
 }
 
@@ -91,43 +88,18 @@ impl AppConfig {
         let tree_sitter = TreeSitterConfig::from_partial(partial.tree_sitter);
         let review = ReviewConfig::from_partial(partial.review);
         let scan = ScanConfig::from_partial(partial.scan);
-        let language = partial.language.unwrap_or_default();
-
+        
         Ok(AppConfig {
             ai,
             tree_sitter,
             review,
             account,
-            language,
             prompts,
             scan,
         })
     }
 
-    /// Get the effective language for output
-    pub fn get_effective_language(&self, override_lang: Option<&str>) -> String {
-        self.language.get_effective_language(override_lang)
-    }
-
-    /// Get the output language (alias for get_effective_language)
-    pub fn get_output_language(&self, override_lang: Option<&str>) -> String {
-        self.get_effective_language(override_lang)
-    }
-
-    /// Get language-specific prompt content
-    pub fn get_language_prompt_content(&self, prompt_key: &str, language: &str) -> Result<String, crate::errors::ConfigError> {
-        // First try to get language-specific version
-        let lang_specific_key = format!("{}_{}", prompt_key, language);
-        if let Some(content) = self.prompts.get(&lang_specific_key) {
-            return Ok(content.clone());
-        }
-        
-        // Fall back to default language version
-        self.prompts.get(prompt_key)
-            .cloned()
-            .ok_or_else(|| crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string()))
-    }
-
+    
     /// Get prompt file path (for backward compatibility)
     pub fn get_prompt_path(&self, prompt_key: &str) -> Result<std::path::PathBuf, crate::errors::ConfigError> {
         let prompt_file = match prompt_key {
@@ -148,15 +120,7 @@ impl AppConfig {
             account.validate()?;
         }
 
-        // Validate language settings
-        let effective_lang = self.get_effective_language(None);
-        if !LanguageConfig::is_supported_language(&effective_lang) {
-            return Err(ConfigError::Other(format!(
-                "Unsupported language: {}",
-                effective_lang
-            )));
-        }
-
+        
         Ok(())
     }
 }
@@ -194,21 +158,5 @@ mod tests {
         assert_eq!(templates.len(), 6);
         assert!(templates.contains_key("config"));
         assert!(templates.contains_key("helper"));
-    }
-
-    #[test]
-    fn test_language_override() {
-        let config = AppConfig {
-            ai: AIConfig::default(),
-            tree_sitter: TreeSitterConfig::default(),
-            review: ReviewConfig::default(),
-            account: None,
-            language: LanguageConfig::default(),
-            prompts: HashMap::new(),
-            scan: ScanConfig::default(),
-        };
-
-        assert_eq!(config.get_effective_language(Some("us")), "us");
-        assert_eq!(config.get_effective_language(None), "cn"); // default primary
     }
 }

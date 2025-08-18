@@ -44,7 +44,7 @@ impl AIReviewEngine {
 
         let prompt = self.generate_enhanced_prompt(&prompt_request)?;
 
-        match self.send_to_ai(&prompt, request.args.language.as_deref()).await {
+        match self.send_to_ai(&prompt).await {
             Ok(content) => Ok(AIAnalysisResult {
                 content,
                 is_fallback: false,
@@ -80,7 +80,7 @@ impl AIReviewEngine {
 
         let prompt = self.generate_standard_prompt(&prompt_request)?;
 
-        match self.send_to_ai(&prompt, None).await {
+        match self.send_to_ai(&prompt).await {
             Ok(content) => Ok(AIAnalysisResult {
                 content,
                 is_fallback: false,
@@ -100,34 +100,19 @@ impl AIReviewEngine {
     }
 
     /// Send request to AI service
-    pub async fn send_to_ai(&self, prompt: &str, language: Option<&str>) -> Result<String, AIError> {
+    pub async fn send_to_ai(&self, prompt: &str) -> Result<String, AIError> {
         tracing::debug!("发送请求到 AI 服务");
 
-        // Get effective language for prompt selection
-        let effective_language_string = match language {
-            Some(lang) => {
-                let lang_str = lang.to_string();
-                self.config.get_output_language(Some(&lang_str))
-            }
-            None => self.config.get_output_language(None)
-        };
-        let effective_language = effective_language_string.as_str();
-        
-        // Load language-specific system prompt from configuration
-        let system_prompt = self.config
-            .get_language_prompt_content("review", &effective_language)
-            .unwrap_or_else(|e| {
-                tracing::warn!("获取{}语言的review prompt失败: {}，尝试使用默认prompt", effective_language, e);
-                self.config.prompts
-                    .get("review")
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        tracing::warn!("未找到默认review prompt，使用内置prompt");
-                        "你是一个专业的代码审查助手，请提供详细的代码审查反馈。".to_string()
-                    })
+        // Load system prompt from configuration
+        let system_prompt = self.config.prompts
+            .get("review")
+            .cloned()
+            .unwrap_or_else(|| {
+                tracing::warn!("未找到默认review prompt，使用内置prompt");
+                "你是一个专业的代码审查助手，请提供详细的代码审查反馈。".to_string()
             });
 
-        match execute_review_request_with_language(&self.config, &system_prompt, prompt, language).await {
+        match execute_review_request_with_language(&self.config, &system_prompt, prompt).await {
             Ok(response) => {
                 tracing::info!("AI 分析完成");
                 Ok(response)

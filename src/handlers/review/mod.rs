@@ -76,7 +76,6 @@ impl ReviewOrchestrator {
     pub async fn handle_review(
         &mut self,
         args: ReviewArgs,
-        _language: Option<&str>,
     ) -> Result<(), AppError> {
         let start_time = Instant::now();
 
@@ -153,16 +152,14 @@ impl ReviewOrchestrator {
     pub async fn handle_review_with_output(
         &mut self,
         args: ReviewArgs,
-        _language: Option<&str>,
     ) -> Result<String, AppError> {
-        self.handle_review_with_output_in_dir(args, _language, None).await
+        self.handle_review_with_output_in_dir(args, None).await
     }
 
     /// Handle review and return formatted output for specified directory
     pub async fn handle_review_with_output_in_dir(
         &mut self,
         args: ReviewArgs,
-        _language: Option<&str>,
         dir: Option<&str>,
     ) -> Result<String, AppError> {
         let start_time = Instant::now();
@@ -246,34 +243,31 @@ impl ReviewOrchestrator {
 pub async fn handle_review(
     config: &mut AppConfig,
     review_args: ReviewArgs,
-    language: Option<&str>,
 ) -> Result<(), AppError> {
     let config_arc = Arc::new(config.clone());
     let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
-    orchestrator.handle_review(review_args, language).await
+    orchestrator.handle_review(review_args).await
 }
 
 /// Handle review and return the formatted output for MCP clients
 pub async fn handle_review_with_output(
     config: &mut AppConfig,
     review_args: ReviewArgs,
-    language: Option<&str>,
 ) -> Result<String, AppError> {
     let config_arc = Arc::new(config.clone());
     let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
-    orchestrator.handle_review_with_output(review_args, language).await
+    orchestrator.handle_review_with_output(review_args).await
 }
 
 /// Handle review and return the formatted output for MCP clients in specified directory
 pub async fn handle_review_with_output_in_dir(
     config: &mut AppConfig,
     review_args: ReviewArgs,
-    language: Option<&str>,
     dir: Option<&str>,
 ) -> Result<String, AppError> {
     let config_arc = Arc::new(config.clone());
     let mut orchestrator = ReviewOrchestrator::new(config_arc)?;
-    orchestrator.handle_review_with_output_in_dir(review_args, language, dir).await
+    orchestrator.handle_review_with_output_in_dir(review_args, dir).await
 }
 
 #[cfg(test)]

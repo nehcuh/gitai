@@ -238,7 +238,7 @@ impl GitAiMcpBridge {
 
         // 调用带输出的 review 处理器
         let mut config = self.config.lock().await.clone();
-        match handlers::review::handle_review_with_output_in_dir(&mut config, review_args, None, path.as_deref()).await {
+        match handlers::review::handle_review_with_output_in_dir(&mut config, review_args, path.as_deref()).await {
             Ok(review_content) => {
                 // 准备最终输出，包含状态信息
                 let status_header = crate::utils::format_workspace_status_header(&workspace_status);

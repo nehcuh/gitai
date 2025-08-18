@@ -48,11 +48,9 @@ impl ConfigLoader {
     pub fn initialize_config(&self) -> Result<(PathBuf, HashMap<String, PathBuf>), ConfigError> {
         let user_config_path = self.extract_file_path(USER_CONFIG_PATH, CONFIG_FILE_NAME)?;
 
-        // Build prompt file paths for all languages
+        // Build prompt file paths
         let mut user_prompt_paths = HashMap::new();
         
-        // Supported languages
-        let languages = ["cn", "en"];
         let prompt_types = [
             ("commit_generator", COMMIT_GENERATOR_PROMPT),
             ("commit_deviation", COMMIT_DIVIATION_PROMPT),
@@ -61,20 +59,10 @@ impl ConfigLoader {
             ("review", REVIEW_PROMPT),
         ];
 
-        // Add default prompts (fallback)
+        // Add prompts
         for (key, filename) in &prompt_types {
             let path = self.extract_file_path(USER_PROMPT_PATH, filename)?;
             user_prompt_paths.insert(key.to_string(), path);
-        }
-
-        // Add language-specific prompts
-        for lang in &languages {
-            for (key, _) in &prompt_types {
-                let lang_filename = format!("{}.{}.md", key.replace("_", "-"), lang);
-                let path = self.extract_file_path(USER_PROMPT_PATH, &lang_filename)?;
-                let lang_key = format!("{}_{}", key, lang);
-                user_prompt_paths.insert(lang_key, path);
-            }
         }
 
         // Check existing files
@@ -184,7 +172,7 @@ impl ConfigLoader {
         }
 
         // Initialize prompt files for all languages
-        self.initialize_prompt_files_for_all_languages(prompt_paths, &templates)?;
+        self.initialize_prompt_files(prompt_paths, &templates)?;
 
         Ok(())
     }
@@ -204,14 +192,12 @@ impl ConfigLoader {
         Ok(())
     }
 
-    /// Initialize prompt files for all languages
-    fn initialize_prompt_files_for_all_languages(
+    /// Initialize prompt files
+    fn initialize_prompt_files(
         &self,
         prompt_paths: &HashMap<String, PathBuf>,
         templates: &HashMap<&str, &str>
     ) -> Result<(), ConfigError> {
-        // Initialize language-specific prompts
-        let languages = ["cn", "en"];
         let prompt_types = [
             ("commit_generator", "commit-generator"),
             ("commit_deviation", "commit-deviation"),
@@ -220,25 +206,12 @@ impl ConfigLoader {
             ("review", "review"),
         ];
 
-        // Initialize default prompts first (fallback)
+        // Initialize prompts
         for (key, template_key) in &prompt_types {
             if let Some(path) = prompt_paths.get(*key) {
                 if !path.exists() {
                     tracing::info!("提示词文件 {:?} 不存在，正在初始化", path.file_name());
-                    self.initialize_prompt_file_from_assets(path, template_key, "cn")?;
-                }
-            }
-        }
-
-        // Initialize language-specific prompts
-        for lang in &languages {
-            for (key, template_key) in &prompt_types {
-                let lang_key = format!("{}_{}", key, lang);
-                if let Some(path) = prompt_paths.get(&lang_key) {
-                    if !path.exists() {
-                        tracing::info!("语言特定提示词文件 {:?} 不存在，正在初始化", path.file_name());
-                        self.initialize_prompt_file_from_assets(path, template_key, lang)?;
-                    }
+                    self.initialize_prompt_file_from_assets(path, template_key)?;
                 }
             }
         }
@@ -262,8 +235,8 @@ impl ConfigLoader {
     }
 
     /// Initialize a prompt file from assets directory with language support
-    fn initialize_prompt_file_from_assets(&self, target_path: &PathBuf, template_key: &str, language: &str) -> Result<(), ConfigError> {
-        let template_path = format!("assets/prompts/{}/{}.md", language, template_key.replace("_", "-"));
+    fn initialize_prompt_file_from_assets(&self, target_path: &PathBuf, template_key: &str) -> Result<(), ConfigError> {
+        let template_path = format!("assets/prompts/cn/{}.md", template_key.replace("_", "-"));
         let template_full_path = abs_template_path(&template_path);
         
         let content = if template_full_path.exists() {
@@ -284,7 +257,7 @@ impl ConfigLoader {
             ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
         })?;
 
-        tracing::info!("已初始化{}语言提示词文件: {:?}", language, target_path);
+        tracing::info!("已初始化提示词文件: {:?}", target_path);
         Ok(())
     }
 

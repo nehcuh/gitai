@@ -12,14 +12,13 @@ pub async fn explain_git_command_output(
     config: &AppConfig,
     command_output: &str,
 ) -> Result<String, AIError> {
-    explain_git_command_output_with_language(config, command_output, None).await
+    explain_git_command_output_with_language(config, command_output).await
 }
 
-/// Takes the raw output from a Git command with language support
+/// Takes the raw output from a Git command
 pub async fn explain_git_command_output_with_language(
     config: &AppConfig,
     command_output: &str,
-    language: Option<&str>,
 ) -> Result<String, AIError> {
     if command_output.trim().is_empty() {
         // This is not an error, but a valid case where there's nothing to explain
@@ -38,24 +37,13 @@ pub async fn explain_git_command_output_with_language(
     // let contains_gitai_help = command_output.contains("gitai: Git with AI assistance")
     //     || command_output.contains("Gitai 特有命令");
 
-    // Get language-specific prompt content
-    let effective_language_string = match language {
-        Some(lang) => lang.to_string(),
-        None => config.get_output_language(None)
-    };
-    let effective_language = effective_language_string.as_str();
-    
-    let system_prompt_content = config
-        .get_language_prompt_content("general-helper", effective_language)
-        .unwrap_or_else(|e| {
-            tracing::warn!("获取{}语言的general-helper prompt失败: {}，尝试使用默认prompt", effective_language, e);
-            config.prompts
-                .get("general-helper")
-                .cloned()
-                .unwrap_or_else(|| {
-                    tracing::warn!("在配置中未找到默认Git AI helper提示词，使用空字符串");
-                    "".to_string()
-                })
+    // Get system prompt content
+    let system_prompt_content = config.prompts
+        .get("general-helper")
+        .cloned()
+        .unwrap_or_else(|| {
+            tracing::warn!("在配置中未找到默认Git AI helper提示词，使用空字符串");
+            "".to_string()
         });
 
     // Add gitai-specified instructions if needed
@@ -87,16 +75,15 @@ pub async fn execute_ai_request_generic(
     log_prefix: &str,
     clean_output: bool,
 ) -> Result<String, AIError> {
-    execute_ai_request_with_language(config, messages, log_prefix, clean_output, None).await
+    execute_ai_request_with_language(config, messages, log_prefix, clean_output).await
 }
 
-/// Generic function to execute AI request with language support
+/// Generic function to execute AI request
 pub async fn execute_ai_request_with_language(
     config: &AppConfig,
     messages: Vec<ChatMessage>,
     log_prefix: &str,
     clean_output: bool,
-    _language: Option<&str>, // Language parameter for future use
 ) -> Result<String, AIError> {
     let request_payload = OpenAIChatRequest {
         model: config.ai.model_name.clone(),
@@ -193,15 +180,14 @@ pub async fn execute_review_request(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, AIError> {
-    execute_review_request_with_language(config, system_prompt, user_prompt, None).await
+    execute_review_request_with_language(config, system_prompt, user_prompt).await
 }
 
-/// Execute review request with language support
+/// Execute review request
 pub async fn execute_review_request_with_language(
     config: &AppConfig,
     system_prompt: &str,
     user_prompt: &str,
-    language: Option<&str>,
 ) -> Result<String, AIError> {
     let messages = vec![
         ChatMessage {
@@ -214,11 +200,7 @@ pub async fn execute_review_request_with_language(
         },
     ];
 
-    let log_prefix = match language {
-        Some("us") => "review",
-        _ => "评审"
-    };
-    execute_ai_request_with_language(config, messages, log_prefix, false, language).await
+    execute_ai_request_with_language(config, messages, "评审", false).await
 }
 
 /// Dedicated function for explanation requests  

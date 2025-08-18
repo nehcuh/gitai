@@ -178,7 +178,7 @@ impl GitService {
 
         // 调用 GitAI review 功能，直接返回输出
         let mut config = (*self.config).clone();
-        let result = handle_review_with_output_in_dir(&mut config, review_args, None, working_dir).await;
+        let result = handle_review_with_output_in_dir(&mut config, review_args, working_dir).await;
         
         // 恢复原始目录
         if let Some(original) = original_dir {
