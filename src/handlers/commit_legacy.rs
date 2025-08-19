@@ -65,7 +65,7 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     // Get changes for commit
     let diff = get_changes_for_commit().await?;
     if diff.trim().is_empty() {
-        return Err(AppError::Git("没有暂存的更改"));
+        return Err(git_error("没有暂存的更改"));
     }
     
     // Generate commit message using AI with optional Tree-sitter analysis and review context
@@ -114,7 +114,7 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
 /// Check if current directory is a git repository
 fn check_repository_status() -> Result<(), AppError> {
     if !git::is_git_repository()? {
-        return Err(AppError::Git("不是Git仓库"));
+        return Err(git_error("不是Git仓库"));
     }
     Ok(())
 }
@@ -237,19 +237,19 @@ async fn analyze_diff_with_tree_sitter(
         
         let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
             tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
 
         // Parse the diff to get structured representation
         let git_diff = parse_git_diff(&diff_owned).map_err(|e| {
             tracing::error!("解析Git差异失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
 
         // Generate analysis using TreeSitter
         let analysis = analyzer.analyze_diff(&diff_owned).map_err(|e| {
             tracing::error!("执行差异分析失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
         
         tracing::debug!("差异分析结果: {:?}", analysis);
@@ -629,8 +629,8 @@ mod tests {
             Err(e) => {
                 // Expected in test environment
                 match e {
-                    AppError::Git("不是Git仓库") => assert!(true),
-                    AppError::Git("没有暂存的更改") => assert!(true),
+                    git_error("不是Git仓库") => assert!(true),
+                    git_error("没有暂存的更改") => assert!(true),
                     AppError::Generic(msg) => {
                         assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败"));
                     }
@@ -661,8 +661,8 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Git("不是Git仓库") => assert!(true),
-                    AppError::Git("Git命令失败" { .. }) => assert!(true),
+                    git_error("不是Git仓库") => assert!(true),
+                    git_error("Git命令失败" { .. }) => assert!(true),
                     AppError::Generic(_) => assert!(true),
                     _ => assert!(true),
                 }
@@ -695,7 +695,7 @@ mod tests {
             Err(e) => {
                 // Expected error types in test environment
                 match e {
-                    AppError::Git("Git命令失败" { .. }) => assert!(true),
+                    git_error("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
@@ -717,7 +717,7 @@ mod tests {
                     AppError::Generic(msg) => {
                         assert!(msg.contains("没有检测到任何变更") || msg.contains("没有已暂存的变更"));
                     }
-                    AppError::Git("Git命令失败" { .. }) => assert!(true),
+                    git_error("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
@@ -737,7 +737,7 @@ mod tests {
             Err(e) => {
                 // Expected in test environment
                 match e {
-                    AppError::Git("Git命令失败" { command, .. }) => {
+                    git_error("Git命令失败" { command, .. }) => {
                         assert!(command.contains("git commit"));
                     }
                     _ => assert!(true),
@@ -770,7 +770,7 @@ mod tests {
             Err(e) => {
                 // Expected in test environments without tree-sitter support
                 match e {
-                    AppError::TreeSitter(_) => assert!(true),
+                    tree_sitter_error(_) => assert!(true),
                     _ => assert!(true),
                 }
             }
@@ -988,7 +988,7 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Git("不是Git仓库") => assert!(true),
+                    git_error("不是Git仓库") => assert!(true),
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
                     _ => assert!(true),
                 }
@@ -1002,7 +1002,7 @@ mod tests {
             }
             Err(e) => {
                 match e {
-                    AppError::Git("不是Git仓库") => assert!(true),
+                    git_error("不是Git仓库") => assert!(true),
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
                     _ => assert!(true),
                 }
@@ -1071,7 +1071,7 @@ mod tests {
                 // Expected errors in test environment
                 match e {
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
-                    AppError::Git("Git命令失败" { .. }) => assert!(true),
+                    git_error("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }

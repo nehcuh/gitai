@@ -75,16 +75,27 @@ impl AppConfig {
 
         // 加载并解析AI配置
         let ai_config = partial.ai.unwrap_or_default();
-        let ai = ai_config.merge_with_env(&env_map)?;
+        let ai = ai_config.clone().merge_with_env(&env_map)?;
+        
+        // 验证AI配置
+        ai_config.validate()?;
 
         // 加载并解析DevOps账户配置（可选）
         let account_config = partial.account.unwrap_or_default();
         let account = account_config.merge_with_env(&env_map).resolve();
 
         // 加载并解析其他配置
-        let tree_sitter = partial.tree_sitter.unwrap_or_default().resolve();
+        let tree_sitter = partial.tree_sitter.unwrap_or_default();
         let review = partial.review.unwrap_or_default().resolve();
         let scan = partial.scan.unwrap_or_default().resolve();
+        
+        // 验证必要的配置
+        if ai.api_url.trim().is_empty() {
+            return Err(config_error("AI API URL 不能为空"));
+        }
+        if ai.model_name.trim().is_empty() {
+            return Err(config_error("AI 模型名称不能为空"));
+        }
         
         Ok(AppConfig {
             ai,

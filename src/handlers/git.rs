@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use crate::{
-    errors::AppError,
+    errors::{AppError, git_error},
     types::{general::CommandOutput, git::ReviewArgs},
 };
 
@@ -10,7 +10,7 @@ pub fn passthrough_to_git(args: &[String]) -> Result<(), AppError> {
 
     // 检查状态以保持原始行为一致
     if !result.status.success() {
-        return Err(AppError::Git(format!("Command failed: git {} - Exit code: {:?}", args.join(" "), result.status.code())));
+        return Err(git_error(format!("Command failed: git {} - Exit code: {:?}", args.join(" "), result.status.code())));
     }
 
     Ok(())
@@ -33,7 +33,7 @@ pub fn passthrough_to_git_with_error_handling(
         .args(&command_to_run)
         .output()
         .map_err(|e| {
-            AppError::Git(format!("执行系统 git 命令失败: git {}: {}", cmd_str_log, e))
+            git_error(format!("执行系统 git 命令失败: git {}: {}", cmd_str_log, e))
         })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -55,7 +55,7 @@ pub fn passthrough_to_git_with_error_handling(
 
         // 只有当不需要错误处理时才返回错误
         if !handle_error {
-            return Err(AppError::Git(format!("Command failed: git {} - Exit code: {:?}", cmd_str_log, output.status.code())));
+            return Err(git_error(format!("Command failed: git {} - Exit code: {:?}", cmd_str_log, output.status.code())));
         }
         // 当handle_error为true时，我们将继续执行并返回Ok结果
     }
@@ -121,7 +121,7 @@ pub async fn get_formatted_repository_status_in_dir(dir: Option<&str>) -> Result
     // 首先检查指定目录是否是 git 仓库
     if !is_git_repository_in_dir(dir)? {
         let path_desc = dir.unwrap_or("当前目录");
-        return Err(AppError::Git(format!("Not a git repository: {}", path_desc)));
+        return Err(git_error(format!("Not a git repository: {}", path_desc)));
     }
     
     let status_output = get_repository_status_in_dir(dir).await?;
@@ -280,7 +280,7 @@ pub async fn auto_stage_tracked_files_in_dir(dir: Option<&str>) -> Result<(), Ap
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {
-        return Err(AppError::Git(format!("Command failed: git add -u - Exit code: {:?}\nStdout: {}\nStderr: {}", result.status.code(), result.stdout, result.stderr)));
+        return Err(git_error(format!("Command failed: git add -u - Exit code: {:?}\nStdout: {}\nStderr: {}", result.status.code(), result.stdout, result.stderr)));
     }
     
     Ok(())
@@ -301,7 +301,7 @@ pub async fn execute_commit_with_message_in_dir(message: &str, dir: Option<&str>
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {
-        return Err(AppError::Git(format!("Command failed: git commit -m \"{}\" - Exit code: {:?}\nStdout: {}\nStderr: {}", message, result.status.code(), result.stdout, result.stderr)));
+        return Err(git_error(format!("Command failed: git commit -m \"{}\" - Exit code: {:?}\nStdout: {}\nStderr: {}", message, result.status.code(), result.stdout, result.stderr)));
     }
     
     Ok(())

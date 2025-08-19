@@ -476,7 +476,7 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Git(_) => assert!(true),
+                    git_error(_) => assert!(true),
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
                     _ => assert!(true),
                 }

@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig,
-    errors::AppError,
+    errors::{AppError, ai_error},
     types::ai::{ChatMessage, OpenAIChatCompletionResponse, OpenAIChatRequest},
 };
 use lazy_static::lazy_static;
@@ -115,7 +115,7 @@ pub async fn execute_ai_request_with_language(
         .await
         .map_err(|e| {
             tracing::error!("发送 AI {}请求失败: {}", log_prefix, e);
-            AppError::AI(format!("请求失败: {}", e))
+            ai_error(format!("请求失败: {}", e))
         })?;
 
     if !openai_response.status().is_success() {
@@ -125,7 +125,7 @@ pub async fn execute_ai_request_with_language(
             .await
             .unwrap_or_else(|_| "Failed to read error body from AI response".to_string());
         tracing::error!("AI {} API 请求失败，状态码: {}: {}", log_prefix, status_code, body);
-        return Err(AppError::AI(format!("API响应错误: {} - {}", status_code, body)));
+        return Err(ai_error(format!("API响应错误: {} - {}", status_code, body)));
     }
 
     // Successfully received a response, now parse it.
@@ -135,7 +135,7 @@ pub async fn execute_ai_request_with_language(
                 let original_content = &choice.message.content;
                 if original_content.trim().is_empty() {
                     tracing::warn!("AI {}返回了空的消息内容。", log_prefix);
-                    Err(AppError::AI("返回了空的消息内容".to_string()))
+                    Err(ai_error("返回了空的消息内容".to_string()))
                 } else {
                     let final_content = if clean_output {
                         clean_ai_output(original_content)
@@ -154,12 +154,12 @@ pub async fn execute_ai_request_with_language(
                 }
             } else {
                 tracing::warn!("在 AI {}响应中未找到选项。", log_prefix);
-                Err(AppError::AI("响应中未找到选项".to_string()))
+                Err(ai_error("响应中未找到选项".to_string()))
             }
         }
         Err(e) => {
             tracing::error!("解析来自 AI {}的 JSON 响应失败: {}", log_prefix, e);
-            Err(AppError::AI(format!("响应解析失败: {}", e)))
+            Err(ai_error(format!("响应解析失败: {}", e)))
         }
     }
 }

@@ -7,6 +7,8 @@ pub mod app_config;
 pub mod loader;
 
 // Re-export commonly used types
+pub use ai_config::{AIConfig, ResolvedAIConfig};
+pub use crate::tree_sitter_analyzer::types::LanguageConfig;
 pub use tree_sitter_config::TreeSitterConfig;
 pub use scan_config::RuleManagerConfig;
 pub use review_config::ReviewConfig;

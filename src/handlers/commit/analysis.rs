@@ -1,6 +1,6 @@
 use crate::{
     config::TreeSitterConfig,
-    errors::AppError,
+    errors::{AppError, tree_sitter_error},
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
         core::{parse_git_diff, DiffAnalysis},
@@ -45,19 +45,19 @@ impl CommitAnalyzer {
             
             let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
                 tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-                AppError::TreeSitter(e.to_string())
+                tree_sitter_error(e.to_string())
             })?;
 
             // Parse the diff to get structured representation
             let git_diff = parse_git_diff(&diff_owned).map_err(|e| {
                 tracing::error!("解析Git差异失败: {:?}", e);
-                AppError::TreeSitter(e.to_string())
+                tree_sitter_error(e.to_string())
             })?;
 
             // Generate analysis using TreeSitter
             let analysis = analyzer.analyze_diff(&diff_owned).map_err(|e| {
                 tracing::error!("执行差异分析失败: {:?}", e);
-                AppError::TreeSitter(e.to_string())
+                tree_sitter_error(e.to_string())
             })?;
             
             tracing::debug!("差异分析结果: {:?}", analysis);

@@ -1,4 +1,4 @@
-use crate::errors::AppError;
+use crate::errors::{AppError, devops_error, DevOpsError};
 use crate::types::devops::{DevOpsResponse, WorkItem};
 use futures::future::join_all;
 use reqwest::{header, Client, StatusCode};
@@ -86,7 +86,7 @@ impl DevOpsClient {
                 }
             }
         }
-        Err(AppError::DevOps(last_error.unwrap_or_else(|| "Request failed after multiple retries".to_string())))
+        Err(devops_error(last_error.unwrap_or_else(|| "Request failed after multiple retries".to_string())))
     }
 
     pub async fn get_work_item(
@@ -100,20 +100,20 @@ impl DevOpsClient {
         );
 
         match self.make_request_with_retry(&url).await {
-            Err(AppError::DevOps(msg)) if msg.contains("404") => {
+            Err(AppError::DevOps(DevOpsError::BuildFailed(msg))) if msg.contains("404") => {
                 // Refine 404 from make_request_with_retry to WorkItemNotFound
-                Err(AppError::DevOps(format!("Work item not found: {}", item_id)))
+                Err(devops_error(format!("Work item not found: {}", item_id)))
             }
             Err(e) => Err(e), // Propagate other errors
             Ok(response) => {
                 if response.code != 0 {
-                    Err(AppError::DevOps(format!("API logical error: code={}, message={}", 
+                    Err(devops_error(format!("API logical error: code={}, message={}", 
                         response.code, 
                         response.msg.unwrap_or_else(|| "No message provided".to_string()))))
                 } else {
                     match response.data {
                         Some(work_item) => Ok(work_item),
-                        None => Err(AppError::DevOps(
+                        None => Err(devops_error(
                             "WorkItem data is missing in API response when code is 0".to_string(),
                         )),
                     }
@@ -147,7 +147,7 @@ impl DevOpsClient {
 
         // If all requests failed, return an error
         if work_items.is_empty() && !errors.is_empty() {
-            return Err(AppError::DevOps(format!(
+            return Err(devops_error(format!(
                 "Failed to fetch any work items. First error: {}",
                 errors[0]
             )));

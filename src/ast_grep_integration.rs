@@ -2,7 +2,7 @@
 // Provides correct API usage for ast-grep-core 0.38.6
 #![allow(dead_code)]
 
-use crate::errors::AppError;
+use crate::errors::{AppError, config_error};
 use ast_grep_config::SerializableRuleCore;
 use serde_yaml;
 use std::collections::HashMap;
@@ -303,14 +303,14 @@ impl AstGrepEngine {
     pub fn add_rule(&mut self, rule_yaml: &str) -> Result<String, AppError> {
         // Early validation - check if YAML is empty or malformed
         if rule_yaml.trim().is_empty() {
-            return Err(AppError::Config(
+            return Err(config_error(
                 "Rule YAML cannot be empty".to_string()
             ));
         }
         
         // Parse the full rule configuration with better error context
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(rule_yaml)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to parse rule YAML at line {}: {}", 
                        e.location().map(|l| l.line()).unwrap_or(0), e)
             ))?;
@@ -327,7 +327,7 @@ impl AstGrepEngine {
             .get("language")
             .and_then(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
-            .ok_or_else(|| AppError::Config(
+            .ok_or_else(|| config_error(
                 "Rule must specify a valid 'language' field".to_string()
             ))?
             .to_string();
@@ -368,7 +368,7 @@ impl AstGrepEngine {
 
         // Parse the rule core
         let rule_core: SerializableRuleCore = serde_yaml::from_str(rule_yaml)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to parse rule core: {}", e)
             ))?;
 
@@ -432,12 +432,12 @@ impl AstGrepEngine {
     fn extract_pattern_from_rule(&self, rule: &AstGrepRule) -> Result<Option<String>, AppError> {
         // Try to extract pattern from the rule_core
         let yaml_str = serde_yaml::to_string(&rule.rule_core)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to serialize rule core: {}", e)
             ))?;
         
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(&yaml_str)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to parse rule core YAML: {}", e)
             ))?;
         

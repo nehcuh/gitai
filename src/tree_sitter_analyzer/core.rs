@@ -1,11 +1,14 @@
 use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
-use super::analyzer::NodeAnalysisConfig;
+use super::{
+    analyzer::NodeAnalysisConfig,
+    query_provider::{QueryProvider, QueryType},
+};
 use crate::{
-    errors::AppError,
+    errors::{AppError, tree_sitter_error},
     types::git::{ChangeType, ChangedFile, DiffHunk, GitDiff, HunkRange},
 };
-use tree_sitter::{Language, Tree};
+use tree_sitter::{Language, Tree, Query};
 
 /// 分析深度
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -153,12 +156,27 @@ impl LanguageConfig {
         (self.language_fn)()
     }
 
-    pub fn get_full_queries(&self) -> (String, String, String) {
-        (
-            load_query_file(self.name, "highlights"),
-            load_query_file(self.name, "injections"),
-            load_query_file(self.name, "locals"),
-        )
+    pub fn get_highlights_query(&self, provider: &QueryProvider) -> Result<Option<Query>, AppError> {
+        provider.get_query_content(self.name, QueryType::Highlights)
+            .map(|content| Query::new(&self.get_language(), content))
+            .transpose()
+            .map_err(|e| tree_sitter_error(format!("Failed to compile highlights query: {}", e)))
+    }
+
+    pub fn get_injections_query(&self, provider: &QueryProvider) -> Result<Option<Query>, AppError> {
+        provider.get_query_content(self.name, QueryType::Injections)
+            .filter(|content| !content.is_empty())
+            .map(|content| Query::new(&self.get_language(), content))
+            .transpose()
+            .map_err(|e| tree_sitter_error(format!("Failed to compile injections query: {}", e)))
+    }
+
+    pub fn get_locals_query(&self, provider: &QueryProvider) -> Result<Option<Query>, AppError> {
+        provider.get_query_content(self.name, QueryType::Locals)
+            .filter(|content| !content.is_empty())
+            .map(|content| Query::new(&self.get_language(), content))
+            .transpose()
+            .map_err(|e| tree_sitter_error(format!("Failed to compile locals query: {}", e)))
     }
 
     pub fn supports_extension(&self, ext: &str) -> bool {
@@ -208,38 +226,6 @@ impl Default for LanguageRegistry {
     }
 }
 
-// 动态查询加载器
-use std::fs;
-use std::sync::OnceLock;
-
-static QUERY_CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
-
-/// 获取查询缓存目录
-fn get_query_cache_dir() -> &'static PathBuf {
-    QUERY_CACHE_DIR.get_or_init(|| {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".cache")
-            .join("gitai")
-            .join("queries")
-    })
-}
-
-/// 加载查询文件内容，如果文件不存在则返回fallback
-pub fn load_query_file(language: &str, query_type: &str) -> String {
-    let cache_dir = get_query_cache_dir();
-    let query_path = cache_dir.join(language).join(format!("{}.scm", query_type));
-    
-    if let Ok(content) = fs::read_to_string(&query_path) {
-        content
-    } else {
-        // 提供基础的fallback查询
-        match (language, query_type) {
-            (_, "injections") | (_, "locals") => String::new(),
-            _ => "(identifier) @variable".to_string(),
-        }
-    }
-}
 
 macro_rules! define_ts_langs {
     ($( $fn_name:ident => $module:ident => $doc:expr ),* $(,)?) => {
@@ -268,131 +254,6 @@ pub fn get_tree_sitter_typescript() -> Language {
     tree_sitter_javascript::LANGUAGE.into()
 }
 
-// 获取各语言的查询模式
-pub fn get_rust_query_pattern() -> String {
-    load_query_file("rust", "highlights")
-}
-
-pub fn get_java_query_pattern() -> String {
-    load_query_file("java", "highlights")
-}
-
-pub fn get_python_query_pattern() -> String {
-    load_query_file("python", "highlights")
-}
-
-pub fn get_go_query_pattern() -> String {
-    load_query_file("go", "highlights")
-}
-
-pub fn get_js_query_pattern() -> String {
-    load_query_file("javascript", "highlights")
-}
-
-pub fn get_c_query_pattern() -> String {
-    load_query_file("c", "highlights")
-}
-
-pub fn get_cpp_query_pattern() -> String {
-    load_query_file("cpp", "highlights")
-}
-
-pub fn get_typescript_query_pattern() -> String {
-    load_query_file("typescript", "highlights")
-}
-
-// 获取所有查询模式的组合版本（用于更复杂的分析）
-pub fn get_rust_full_queries() -> (String, String, String) {
-    (
-        load_query_file("rust", "highlights"),
-        load_query_file("rust", "injections"),
-        load_query_file("rust", "locals")
-    )
-}
-
-pub fn get_java_full_queries() -> (String, String, String) {
-    (
-        load_query_file("java", "highlights"),
-        load_query_file("java", "injections"),
-        load_query_file("java", "locals")
-    )
-}
-
-pub fn get_python_full_queries() -> (String, String, String) {
-    (
-        load_query_file("python", "highlights"),
-        load_query_file("python", "injections"),
-        load_query_file("python", "locals")
-    )
-}
-
-pub fn get_go_full_queries() -> (String, String, String) {
-    (
-        load_query_file("go", "highlights"),
-        load_query_file("go", "injections"),
-        load_query_file("go", "locals")
-    )
-}
-
-pub fn get_js_full_queries() -> (String, String, String) {
-    (
-        load_query_file("javascript", "highlights"),
-        load_query_file("javascript", "injections"),
-        load_query_file("javascript", "locals")
-    )
-}
-
-pub fn get_c_full_queries() -> (String, String, String) {
-    (
-        load_query_file("c", "highlights"),
-        load_query_file("c", "injections"),
-        load_query_file("c", "locals")
-    )
-}
-
-pub fn get_cpp_full_queries() -> (String, String, String) {
-    (
-        load_query_file("cpp", "highlights"),
-        load_query_file("cpp", "injections"),
-        load_query_file("cpp", "locals")
-    )
-}
-
-pub fn get_typescript_full_queries() -> (String, String, String) {
-    (
-        load_query_file("typescript", "highlights"),
-        load_query_file("typescript", "injections"),
-        load_query_file("typescript", "locals")
-    )
-}
-
-// 通用查询模式获取函数
-pub fn get_query_pattern_for_language(language: &str) -> Option<String> {
-    let normalized = normalize_language_name(language);
-    match normalized.as_str() {
-        "rust" | "java" | "python" | "go" | "javascript" | "typescript" | "c" | "cpp" => {
-            Some(load_query_file(&normalized, "highlights"))
-        }
-        _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
-    }
-}
-
-// 获取语言的完整查询集合
-pub fn get_full_queries_for_language(
-    language: &str,
-) -> Option<(String, String, String)> {
-    let normalized = normalize_language_name(language);
-    match normalized.as_str() {
-        "rust" | "java" | "python" | "go" | "javascript" | "typescript" | "c" | "cpp" => {
-            Some((
-                load_query_file(&normalized, "highlights"),
-                load_query_file(&normalized, "injections"),
-                load_query_file(&normalized, "locals")
-            ))
-        }
-        _ => None, // 对于其他语言，返回 None，可以通过 AST-grep 处理
-    }
-}
 
 // 语言检测优化
 pub fn detect_language_from_extension(extension: &str) -> Option<&'static str> {
@@ -767,18 +628,8 @@ mod tests {
         assert_eq!(detect_language_from_extension("unknown"), None);
     }
 
-    #[test]
-    fn test_get_query_pattern_for_language() {
-        assert!(get_query_pattern_for_language("rust").is_some());
-        assert!(get_query_pattern_for_language("invalid").is_none());
-    }
-
-    #[test]
-    fn test_get_full_queries_for_language() {
-        assert!(get_full_queries_for_language("python").is_some());
-        assert!(get_full_queries_for_language("invalid").is_none());
-    }
-
+  
+    
     #[test]
     fn test_language_support_helpers() {
         let langs = get_supported_languages();

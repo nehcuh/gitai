@@ -1,0 +1,1 @@
+pub use crate::tree_sitter_analyzer::core::LanguageConfig;

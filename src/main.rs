@@ -13,6 +13,7 @@ mod mcp;
 
 use handlers::commit::handle_commit;
 use handlers::git::passthrough_to_git;
+use errors::config_error;
 use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::query_update::{handle_query_update, handle_query_cleanup, handle_query_status};
 use handlers::review::handle_review;
@@ -23,7 +24,7 @@ use ast_grep_installer::AstGrepInstaller;
 use colored::Colorize;
 
 use crate::config::AppConfig;
-use crate::errors::AppError;
+use crate::errors::{AppError, git_error};
 use crate::handlers::help::handle_help;
 use crate::utils::generate_gitai_help;
 
@@ -37,7 +38,7 @@ async fn main() -> Result<(), AppError> {
     let mut config = match AppConfig::load() {
         // Prefix with underscore to mark as unused
         Ok(config) => config,
-        Err(e) => return Err(AppError::Config(e.to_string())),
+        Err(e) => return Err(config_error(e.to_string())),
     };
 
     // Handling cmd args
@@ -211,7 +212,7 @@ async fn main() -> Result<(), AppError> {
         Ok(_) => {
             tracing::debug!("✅ Git 命令执行成功");
         },
-        Err(AppError::Git(error_msg)) => {
+        Err(errors::AppError::Git(errors::GitError::OperationFailed(error_msg))) => {
             tracing::debug!("❌ Git 命令执行失败: {}", error_msg);
             // Extract exit code from error message if possible, otherwise use 1
             let exit_code = error_msg

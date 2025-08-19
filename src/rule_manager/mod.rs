@@ -1,5 +1,5 @@
 use crate::config::RuleManagerConfig;
-use crate::errors::AppError;
+use crate::errors::{AppError, git_error, config_error};
 use shellexpand;
 use std::path::{PathBuf};
 use std::time::SystemTime;
@@ -77,7 +77,7 @@ impl RuleManager {
             for error in &validation_result.errors {
                 println!("  - {}", error);
             }
-            return Err(AppError::Config(
+            return Err(config_error(
                 "Rule validation failed, update aborted".to_string()
             ));
         }
@@ -165,15 +165,15 @@ impl RuleManager {
                 format!("{}.git", url)
             }
         } else {
-            return Err(AppError::Config("规则仓库URL未配置".to_string()));
+            return Err(config_error("规则仓库URL未配置".to_string()));
         };
         let output = Command::new("git")
             .args(&["ls-remote", &git_url, "HEAD"])
             .output()
-            .map_err(|e| AppError::Git(format!("Failed to get remote commit hash: {}", e)))?;
+            .map_err(|e| git_error(format!("Failed to get remote commit hash: {}", e)))?;
         
         if !output.status.success() {
-            return Err(AppError::Git(format!(
+            return Err(git_error(format!(
                 "Failed to get remote commit hash: {}", 
                 String::from_utf8_lossy(&output.stderr)
             )));
@@ -184,7 +184,7 @@ impl RuleManager {
             .lines()
             .next()
             .and_then(|line| line.split_whitespace().next())
-            .ok_or_else(|| AppError::Git(
+            .ok_or_else(|| git_error(
                 "Failed to parse remote commit hash".to_string()
             ))?;
         
@@ -238,10 +238,10 @@ impl RuleManager {
                 .args(&["pull", "origin", "main"])
                 .current_dir(&rules_repo_path)
                 .output()
-                .map_err(|e| AppError::Git(format!("Failed to execute git pull: {}", e)))?;
+                .map_err(|e| git_error(format!("Failed to execute git pull: {}", e)))?;
             
             if !output.status.success() {
-                return Err(AppError::Git(format!(
+                return Err(git_error(format!(
                     "Git pull failed: {}", 
                     String::from_utf8_lossy(&output.stderr)
                 )));
@@ -263,16 +263,16 @@ impl RuleManager {
                     format!("{}.git", url)
                 }
             } else {
-                return Err(AppError::Config("规则仓库URL未配置".to_string()));
+                return Err(config_error("规则仓库URL未配置".to_string()));
             };
             let output = Command::new("git")
                 .args(&["clone", &git_url, "scan-rules"])
                 .current_dir(&self.cache_path)
                 .output()
-                .map_err(|e| AppError::Git(format!("Failed to execute git clone: {}", e)))?;
+                .map_err(|e| git_error(format!("Failed to execute git clone: {}", e)))?;
             
             if !output.status.success() {
-                return Err(AppError::Git(format!(
+                return Err(git_error(format!(
                     "Git clone failed: {}", 
                     String::from_utf8_lossy(&output.stderr)
                 )));
@@ -315,10 +315,10 @@ impl RuleManager {
             .args(&["rev-parse", "HEAD"])
             .current_dir(repo_path)
             .output()
-            .map_err(|e| AppError::Git(format!("Failed to get local commit hash: {}", e)))?;
+            .map_err(|e| git_error(format!("Failed to get local commit hash: {}", e)))?;
         
         if !output.status.success() {
-            return Err(AppError::Git(format!(
+            return Err(git_error(format!(
                 "Failed to get local commit hash: {}", 
                 String::from_utf8_lossy(&output.stderr)
             )));
@@ -435,7 +435,7 @@ impl RuleManager {
             .map_err(|e| AppError::IO(e))?;
         
         serde_json::from_str(&content)
-            .map_err(|e| AppError::Config(format!("Failed to parse version info: {}", e)))
+            .map_err(|e| config_error(format!("Failed to parse version info: {}", e)))
     }
     
     /// Save version information to cache
@@ -443,7 +443,7 @@ impl RuleManager {
         if let Some(version) = &self.version_info {
             let version_path = self.cache_path.join(".version.json");
             let content = serde_json::to_string_pretty(version)
-                .map_err(|e| AppError::Config(format!("Failed to serialize version info: {}", e)))?;
+                .map_err(|e| config_error(format!("Failed to serialize version info: {}", e)))?;
             
             fs::write(&version_path, content)
                 .map_err(|e| AppError::IO(e))?;

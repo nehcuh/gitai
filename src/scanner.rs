@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::errors::AppError;
+use crate::errors::{AppError, git_error, config_error, file_error};
 use crate::types::git::ScanArgs;
 use crate::ast_grep_integration::{AstGrepEngine, SupportedLanguage};
 use crate::ast_grep_installer::AstGrepInstaller;
@@ -408,7 +408,7 @@ impl LocalScanner {
             
             // Validate that the path exists
             if !path.exists() {
-                return Err(AppError::File(format!(
+                return Err(file_error(format!(
                     "Path does not exist: {}",
                     path.display()
                 )));
@@ -455,11 +455,11 @@ impl LocalScanner {
                     .join(scan_path)
             };
             repo_owned = Repository::open(&repo_path)
-                .map_err(|e| AppError::Git(format!("无法打开仓库 {}: {}", repo_path.display(), e)))?;
+                .map_err(|e| git_error(format!("无法打开仓库 {}: {}", repo_path.display(), e)))?;
             &repo_owned
         } else {
             // Fallback to the instance repo if no path specified
-            self.repo.as_ref().ok_or_else(|| AppError::Git("NotARepository".to_string()))?
+            self.repo.as_ref().ok_or_else(|| git_error("NotARepository".to_string()))?
         };
 
         let mut diff_options = DiffOptions::new();
@@ -472,7 +472,7 @@ impl LocalScanner {
             if let Ok(head_tree) = head.peel_to_tree() {
                 // Normal case: repository has commits, use diff
                 let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut diff_options))
-                    .map_err(|e| AppError::Git(e.to_string()))?;
+                    .map_err(|e| git_error(e.to_string()))?;
 
                 diff.foreach(
                     &mut |delta, _| {
@@ -484,7 +484,7 @@ impl LocalScanner {
                     None,
                     None,
                     None,
-                ).map_err(|e| AppError::Git(e.to_string()))?;
+                ).map_err(|e| git_error(e.to_string()))?;
             } else {
                 // HEAD exists but no tree (empty repository), get all untracked files
                 tracing::info!("仓库为空（无提交历史），扫描所有未跟踪文件");
@@ -500,7 +500,7 @@ impl LocalScanner {
 
         // Get repository root directory
         let repo_workdir = repo.workdir()
-            .ok_or_else(|| AppError::Git("Repository has no working directory".to_string()))?;
+            .ok_or_else(|| git_error("Repository has no working directory".to_string()))?;
 
         // Filter by scan path if specified
         let filtered_files: Vec<PathBuf> = if let Some(scan_path_str) = path {
@@ -508,7 +508,7 @@ impl LocalScanner {
             
             // Validate that the scan path exists
             if !scan_path.exists() {
-                return Err(AppError::File(format!(
+                return Err(file_error(format!(
                     "Scan path does not exist: {}",
                     scan_path.display()
                 )));
@@ -573,7 +573,7 @@ impl LocalScanner {
         status_options.include_ignored(false);
         
         let statuses = repo.statuses(Some(&mut status_options))
-            .map_err(|e| AppError::Git(e.to_string()))?;
+            .map_err(|e| git_error(e.to_string()))?;
         
         let mut files = Vec::new();
         for entry in statuses.iter() {
@@ -755,7 +755,7 @@ impl LocalScanner {
             }
             
             let yaml_value: Value = serde_yaml::from_str(&content)
-                .map_err(|e| AppError::Config(format!("Failed to parse rule file {}: {}", 
+                .map_err(|e| config_error(format!("Failed to parse rule file {}: {}", 
                                                     rule_path.display(), e)))?;
             
             // Parse ast-grep rule format for compatibility
@@ -783,7 +783,7 @@ impl LocalScanner {
             
             let language = rule_map.get("language")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| AppError::Config(
+                .ok_or_else(|| config_error(
                     format!("Rule {} missing required 'language' field", id)
                 ))?
                 .to_string();
@@ -825,7 +825,7 @@ impl LocalScanner {
                 if let Some(pattern_str) = rule_map.get("pattern").and_then(|v| v.as_str()) {
                     AstGrepRuleConfig::Pattern(pattern_str.to_string())
                 } else {
-                    return Err(AppError::Config(
+                    return Err(config_error(
                         format!("Rule {} missing 'rule' section", id)
                     ));
                 }
@@ -1159,7 +1159,7 @@ impl LocalScanner {
 
         // Create ast-grep source
         let source = ts_lang.ast_grep(content).map_err(|e| {
-            AppError::Config(
+            config_error(
                 format!("Failed to parse source with ast-grep: {:?}", e)
             ))
         })?;
@@ -1167,13 +1167,13 @@ impl LocalScanner {
         // Create a simple pattern rule
         let pattern_rule = format!("pattern: |\n  {}", pattern);
         let rule_core: SerializableRuleCore = serde_yaml::from_str(&pattern_rule)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to parse pattern into SerializableRuleCore: {}", e)
             )))?;
 
         // Create rule config
         let rule_config = ast_grep_config::RuleConfig::try_from(rule_core)
-            .map_err(|e| AppError::Config(
+            .map_err(|e| config_error(
                 format!("Failed to create RuleConfig: {:?}", e)
             )))?;
 
@@ -1275,12 +1275,12 @@ impl LocalScanner {
             .file_name()
             .and_then(|name| name.to_str())
             .map(|name| name.to_string())
-            .ok_or_else(|| AppError::Config("Could not determine repository name".to_string()))
+            .ok_or_else(|| config_error("Could not determine repository name".to_string()))
     }
 
     fn get_current_commit_id(&self) -> Result<String, AppError> {
         if let Some(repo) = &self.repo {
-            let head = repo.head().map_err(|e| AppError::Git(e.to_string()))?;
+            let head = repo.head().map_err(|e| git_error(e.to_string()))?;
             if let Some(oid) = head.target() {
                 return Ok(oid.to_string());
             }
@@ -1317,7 +1317,7 @@ impl LocalScanner {
         };
         
         let json_content = serde_json::to_string_pretty(result)
-            .map_err(|e| AppError::Config(format!("Failed to serialize scan result: {}", e)))?;
+            .map_err(|e| config_error(format!("Failed to serialize scan result: {}", e)))?;
         
         std::fs::write(&results_path, json_content)
             .map_err(|e| AppError::IO(e))?;
@@ -1358,19 +1358,19 @@ impl DefaultRemoteScanner {
 
 impl RemoteScanner for DefaultRemoteScanner {
     async fn scan_remote(&self, _args: &ScanArgs, _rules: &[AstGrepRule]) -> Result<ScanResult, AppError> {
-        Err(AppError::Config(
+        Err(config_error(
             "Remote scanning is not yet implemented".to_string()
         ))
     }
     
     async fn upload_files(&self, _files: &[PathBuf]) -> Result<String, AppError> {
-        Err(AppError::Config(
+        Err(config_error(
             "Remote file upload is not yet implemented".to_string()
         ))
     }
     
     async fn get_results(&self, _scan_id: &str) -> Result<ScanResult, AppError> {
-        Err(AppError::Config(
+        Err(config_error(
             "Remote result retrieval is not yet implemented".to_string()
         ))
     }

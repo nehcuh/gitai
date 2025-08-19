@@ -17,27 +17,26 @@ pub async fn handle_query_update() -> Result<(), AppError> {
     }
 
     // 创建分析器
-    let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
+    let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)?;
 
-    println!("{}", "正在强制更新所有查询文件...".cyan());
+    println!("{}", "正在重新初始化查询文件...".cyan());
     
-    // 强制更新所有查询
+    // 重新初始化查询（现在是内置的，不需要下载）
     match analyzer.update_queries().await {
         Ok(_) => {
-            println!("{}", "✓ 查询文件更新成功".green());
+            println!("{}", "✓ 查询文件重新初始化成功".green());
             
             // 显示支持的语言
             let supported_languages = analyzer.get_query_supported_languages();
             if !supported_languages.is_empty() {
-                println!("\n{}", "已下载查询的语言:".blue());
+                println!("\n{}", "支持的语言:".blue());
                 for language in supported_languages {
-                    println!("  • {}", language.green());
+                    println!("  • {}", language);
                 }
             }
         }
         Err(e) => {
-            eprintln!("{}", format!("✗ 查询文件更新失败: {}", e).red());
+            eprintln!("{}", format!("✗ 查询文件重新初始化失败: {}", e).red());
             process::exit(1);
         }
     }
@@ -58,13 +57,12 @@ pub fn handle_query_cleanup() -> Result<(), AppError> {
     }
 
     // 创建分析器
-    let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
+    let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)?;
 
-    // 清理缓存
+    // 清理缓存（现在是no-op）
     match analyzer.cleanup_query_cache() {
         Ok(_) => {
-            println!("{}", "✓ 查询缓存清理成功".green());
+            println!("{}", "✓ 查询缓存清理成功（内置查询，无需清理）".green());
         }
         Err(e) => {
             eprintln!("{}", format!("✗ 查询缓存清理失败: {}", e).red());
@@ -91,45 +89,23 @@ pub fn handle_query_status() -> Result<(), AppError> {
     println!("分析深度: {}", config.tree_sitter.analysis_depth.as_deref().unwrap_or("未设置").cyan());
     println!("缓存启用: {}", if config.tree_sitter.cache_enabled == Some(true) { "是".green() } else { "否".red() });
     
-    // 在创建分析器之前先保存需要的配置信息
-    let supported_languages_builtin = config.tree_sitter.get_languages();
-    let query_config = config.tree_sitter.query_manager_config.clone();
-    
     // 创建分析器
-    let analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
+    let analyzer = TreeSitterAnalyzer::new(config.tree_sitter)?;
 
     // 显示支持的语言
     let supported_languages = analyzer.get_query_supported_languages();
     
     println!("\n{}", "内置支持的语言:".blue());
-    for language in supported_languages_builtin {
+    for language in supported_languages {
         println!("  • {}", language);
     }
 
-    if !supported_languages.is_empty() {
-        println!("\n{}", "已下载查询的语言:".blue());
-        for language in supported_languages {
-            println!("  • {}", language.cyan());
-        }
-    } else {
-        println!("\n{}", "暂无已下载的查询文件".yellow());
-        println!("{}", "提示: 运行 'gitai update-queries' 来下载最新的查询文件".dimmed());
-    }
-
-    // 显示查询管理器配置
-    println!("\n{}", "查询管理器配置:".blue());
-    println!("缓存目录: {}", query_config.cache_dir.display().to_string().cyan());
-    println!("缓存TTL: {} 小时", (query_config.cache_ttl / 3600).to_string().cyan());
-    println!("自动更新: {}", if query_config.auto_update { "是".green() } else { "否".red() });
-    println!("网络超时: {} 秒", query_config.network_timeout.to_string().cyan());
-
-    println!("\n{}", "可用的查询源:".blue());
-    for source in &query_config.sources {
-        let status = if source.enabled { "启用".green() } else { "禁用".red() };
-        println!("  • {} [{}] (优先级: {})", source.name.cyan(), status, source.priority);
-        println!("    URL: {}", source.base_url.dimmed());
-    }
+    // 显示查询系统信息
+    println!("\n{}", "查询系统信息:".blue());
+    println!("{}", "查询类型: 内置静态查询".green());
+    println!("{}", "网络依赖: 无".green());
+    println!("{}", "缓存机制: 无需缓存".green());
+    println!("{}", "更新方式: 重新编译程序".yellow());
 
     Ok(())
 }

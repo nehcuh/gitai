@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use serde_json::Value;
 use rmcp::{
-    model::{ServerInfo, Tool, Resource},
+    model::{ServerInfo, Tool, Resource, RawResource},
 };
 use crate::mcp::rmcp_compat::ServiceError;
 
@@ -74,10 +74,19 @@ impl McpUtils {
     }
 
     /// 生成资源描述
-    pub fn generate_resource_description(_uri: &str, _name: &str, _description: &str) -> Resource {
+    pub fn generate_resource_description(uri: &str, name: &str, description: &str) -> Resource {
         // rmcp 0.2.1 uses different Resource structure
-        // This is a placeholder - actual implementation depends on rmcp 0.2.1 API
-        unimplemented!("Resource generation needs to be updated for rmcp 0.2.1")
+        // Basic implementation for rmcp 0.2.1
+        Resource {
+            raw: RawResource {
+                uri: uri.to_string(),
+                name: name.to_string(),
+                description: Some(description.to_string()),
+                mime_type: None,
+                size: None,
+            },
+            annotations: None,
+        }
     }
 
     /// 检查服务健康状态

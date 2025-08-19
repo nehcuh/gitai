@@ -77,16 +77,42 @@ impl UserInteractionManager {
         }
     }
 
-    /// Ask user for confirmation
+    /// Ask user for confirmation with error recovery
     fn ask_confirmation(&self) -> Result<bool, AppError> {
-        print!("\n是否使用此提交信息? [Y/n] ");
-        io::stdout().flush()?;
+        let max_attempts = 3;
         
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        for attempt in 1..=max_attempts {
+            print!("\n是否使用此提交信息? [Y/n] ");
+            io::stdout().flush()?;
+            
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    let input = input.trim().to_lowercase();
+                    if input.is_empty() || input == "y" || input == "yes" || input == "是" {
+                        return Ok(true);
+                    } else if input == "n" || input == "no" || input == "否" {
+                        return Ok(false);
+                    } else {
+                        println!("无效输入，请输入 Y/n 或 留空确认");
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    if attempt == max_attempts {
+                        return Err(AppError::IO(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("读取用户输入失败: {}", e),
+                        )));
+                    }
+                    println!("读取输入失败，请重试 (尝试 {}/{})", attempt, max_attempts);
+                    continue;
+                }
+            }
+        }
         
-        let input = input.trim().to_lowercase();
-        Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
+        // 默认返回 true 以避免阻塞
+        Ok(true)
     }
 
     /// Analyze commit message quality
@@ -152,16 +178,42 @@ impl UserInteractionManager {
         }
     }
 
-    /// Show simple confirmation prompt
+    /// Show simple confirmation prompt with error recovery
     pub fn simple_confirm(&self, prompt: &str) -> Result<bool, AppError> {
-        print!("{} [Y/n] ", prompt);
-        io::stdout().flush()?;
+        let max_attempts = 3;
         
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
+        for attempt in 1..=max_attempts {
+            print!("{} [Y/n] ", prompt);
+            io::stdout().flush()?;
+            
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    let input = input.trim().to_lowercase();
+                    if input.is_empty() || input == "y" || input == "yes" || input == "是" {
+                        return Ok(true);
+                    } else if input == "n" || input == "no" || input == "否" {
+                        return Ok(false);
+                    } else {
+                        println!("无效输入，请输入 Y/n 或 留空确认");
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    if attempt == max_attempts {
+                        return Err(AppError::IO(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("读取用户输入失败: {}", e),
+                        )));
+                    }
+                    println!("读取输入失败，请重试 (尝试 {}/{})", attempt, max_attempts);
+                    continue;
+                }
+            }
+        }
         
-        let input = input.trim().to_lowercase();
-        Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
+        // 默认返回 true 以避免阻塞
+        Ok(true)
     }
 
     /// Show progress indicator
@@ -192,20 +244,39 @@ impl UserInteractionManager {
         }
     }
 
-    /// Get user input for custom message
+    /// Get user input for custom message with error recovery
     pub fn get_custom_message(&self) -> Result<Option<String>, AppError> {
-        print!("请输入自定义提交信息 (留空跳过): ");
-        io::stdout().flush()?;
+        let max_attempts = 3;
         
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        
-        let input = input.trim();
-        if input.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(input.to_string()))
+        for attempt in 1..=max_attempts {
+            print!("请输入自定义提交信息 (留空跳过): ");
+            io::stdout().flush()?;
+            
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(_) => {
+                    let input = input.trim();
+                    if input.is_empty() {
+                        return Ok(None);
+                    } else {
+                        return Ok(Some(input.to_string()));
+                    }
+                }
+                Err(e) => {
+                    if attempt == max_attempts {
+                        return Err(AppError::IO(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("读取用户输入失败: {}", e),
+                        )));
+                    }
+                    println!("读取输入失败，请重试 (尝试 {}/{})", attempt, max_attempts);
+                    continue;
+                }
+            }
         }
+        
+        // 默认返回 None 以避免阻塞
+        Ok(None)
     }
 
     /// Display commit statistics

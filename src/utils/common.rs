@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs, TranslateArgs};
-use crate::errors::AppError;
+use crate::errors::{AppError, file_error};
 use crate::scanner::{ScanResult, ScanMatch};
 
 pub fn construct_scan_args(args: &[String]) -> ScanArgs {
@@ -365,9 +365,9 @@ pub fn find_latest_review_file(storage_base_path: &str) -> Result<Option<PathBuf
     let mut review_files = Vec::new();
     
     for entry in std::fs::read_dir(&repo_dir)
-        .map_err(|e| AppError::File(format!("Failed to read review directory: {:?}: {}", repo_dir, e)))?
+        .map_err(|e| file_error(format!("Failed to read review directory: {:?}: {}", repo_dir, e)))?
     {
-        let entry = entry.map_err(|e| AppError::File(format!("Failed to read directory entry: {}", e)))?;
+        let entry = entry.map_err(|e| file_error(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
         
         if path.is_file() {
@@ -402,7 +402,7 @@ pub fn read_review_file(file_path: &Path) -> Result<String, AppError> {
     }
     
     std::fs::read_to_string(file_path)
-        .map_err(|e| AppError::File(format!("Failed to read review file: {:?}: {}", file_path, e)))
+        .map_err(|e| file_error(format!("Failed to read review file: {:?}: {}", file_path, e)))
 }
 
 /// Extract key insights from review content for commit message integration

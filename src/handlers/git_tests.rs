@@ -93,10 +93,10 @@ mod tests {
             Err(e) => {
                 // Expected in most test scenarios
                 match e {
-                    AppError::Git(GitError::CommandFailed { .. }) => {
+                    git_error(GitError::CommandFailed { .. }) => {
                         // Expected - no staged changes or not in git repo
                     }
-                    AppError::Git(GitError::NotARepository) => {
+                    git_error(GitError::NotARepository) => {
                         // Expected if not in git repo
                     }
                     _ => {
@@ -215,7 +215,7 @@ mod tests {
                     AppError::IO(_, _) => {
                         // Expected if git command not found
                     }
-                    AppError::Git(GitError::PassthroughFailed { .. }) => {
+                    git_error(GitError::PassthroughFailed { .. }) => {
                         // Also acceptable
                     }
                     _ => {

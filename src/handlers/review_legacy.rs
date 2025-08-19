@@ -252,19 +252,19 @@ async fn analyze_diff_with_tree_sitter(
         config.analysis_depth = depth.to_string();
         let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
             tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
 
         // Parse the diff to get structured representation
         let git_diff = parse_git_diff(&diff_text).map_err(|e| {
             tracing::error!("解析Git差异失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
 
         // Generate analysis using TreeSitter
         let analysis = analyzer.analyze_diff(&diff_text).map_err(|e| {
             tracing::error!("执行差异分析失败: {:?}", e);
-            AppError::TreeSitter(e)
+            tree_sitter_error(e)
         })?;
         tracing::debug!("差异分析结果: {:?}", analysis);
 
@@ -288,7 +288,7 @@ async fn analyze_diff_simple(
     ),
     AppError,
 > {
-    let git_diff = parse_git_diff(diff_text).map_err(|e| AppError::TreeSitter(e))?;
+    let git_diff = parse_git_diff(diff_text).map_err(|e| tree_sitter_error(e))?;
 
     let mut analysis_text = String::new();
     analysis_text.push_str("## 代码变更分析\n\n");
@@ -471,7 +471,7 @@ fn extract_language_info(
 mod tests {
     use super::*;
     use crate::config::{AIConfig, AppConfig, TreeSitterConfig, LanguageConfig}; // Removed AccountConfig
-    use crate::errors::AppError;
+    use crate::errors::{AppError, tree_sitter_error};
     use crate::types::git::{CommaSeparatedU32List, ReviewArgs};
     use std::collections::HashMap;
 

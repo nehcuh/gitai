@@ -6,27 +6,24 @@ use streaming_iterator::StreamingIterator;
 use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::config::TreeSitterConfig;
-use crate::errors::AppError;
+use crate::errors::{AppError, tree_sitter_error, tree_sitter_language_error, tree_sitter_parse_error, tree_sitter_file_parse_error, tree_sitter_query_compilation_error};
 use crate::types::git::{ChangeType, DiffHunk};
 
-use super::core::LanguageRegistry;
 use super::core::{
     AffectedNode, ChangeAnalysis, ChangePattern, ChangeScope, ChangeStats, DiffAnalysis,
-    FileAnalysis, FileAst, create_language_registry, get_node_analysis_config, is_node_public,
-    parse_git_diff, load_query_file,
+    FileAnalysis, FileAst, get_node_analysis_config, is_node_public, parse_git_diff,
 };
+use super::language_processor::LanguageProcessor;
+use super::query_provider::QueryType;
 use super::utils::calculate_hash;
-use super::query_manager::{QueryManager, QueryManagerConfig};
 
 
 
 pub struct TreeSitterAnalyzer {
     pub config: TreeSitterConfig,
     pub project_root: PathBuf,
-    language_registry: LanguageRegistry,
+    language_processor: LanguageProcessor,
     file_asts: HashMap<PathBuf, FileAst>,
-    structure_queries: HashMap<String, Query>,
-    query_manager: QueryManager,
 }
 
 // 节点分析配置
@@ -406,35 +403,18 @@ impl SummaryGenerator {
 
 impl TreeSitterAnalyzer {
     pub fn new(config: TreeSitterConfig) -> Result<Self, AppError> {
-        let query_manager = QueryManager::new(config.query_manager_config.clone()).map_err(|e| AppError::TreeSitter(format!("Failed to create query manager: {}", e)))?;
+        // 验证配置
+        let validated_config = config.resolve()?;
         
-        let mut analyzer = Self {
-            config,
-            project_root: PathBuf::new(),
-            language_registry: create_language_registry(),
-            file_asts: HashMap::new(),
-            structure_queries: HashMap::new(),
-            query_manager,
-        };
-
-        analyzer.initialize_queries()?;
-        Ok(analyzer)
-    }
-
-    pub fn new_with_query_config(config: TreeSitterConfig, query_config: QueryManagerConfig) -> Result<Self, AppError> {
-        let query_manager = QueryManager::new(query_config).map_err(|e| AppError::TreeSitter(format!("Failed to create query manager: {}", e)))?;
+        let mut language_processor = LanguageProcessor::new();
+        language_processor.initialize()?;
         
-        let mut analyzer = Self {
-            config,
+        Ok(Self {
+            config: validated_config,
             project_root: PathBuf::new(),
-            language_registry: create_language_registry(),
+            language_processor,
             file_asts: HashMap::new(),
-            structure_queries: HashMap::new(),
-            query_manager,
-        };
-
-        analyzer.initialize_queries()?;
-        Ok(analyzer)
+        })
     }
 
     pub fn set_project_root(&mut self, root: PathBuf) {
@@ -446,36 +426,24 @@ impl TreeSitterAnalyzer {
         self.config.analysis_depth = Some(depth);
     }
 
-    /// 强制更新所有查询
+    /// 强制更新所有查询 (no-op with new simplified provider)
     pub async fn update_queries(&mut self) -> Result<(), AppError> {
-        self.query_manager.force_update_all().await?;
-        self.structure_queries.clear();
-        self.initialize_queries()
+        // With simplified language processor, queries are built-in, no update needed
+        self.language_processor.initialize()
     }
 
-    /// 清理查询缓存
+    /// 清理查询缓存 (no-op with new simplified provider)
     pub fn cleanup_query_cache(&mut self) -> Result<(), AppError> {
-        self.query_manager.cleanup_cache()
+        // With simplified language processor, no cache cleanup needed
+        Ok(())
     }
 
     /// 获取查询管理器支持的语言
     pub fn get_query_supported_languages(&self) -> Vec<String> {
-        self.query_manager.get_supported_languages()
-    }
-
-    fn initialize_queries(&mut self) -> Result<(), AppError> {
-        for language in self.language_registry.get_all_languages() {
-            if let Some(config) = self.language_registry.get_config(language) {
-                // 尝试加载结构化查询文件，如果存在的话
-                let structure_query_content = load_query_file(language, "structure");
-                if !structure_query_content.is_empty() {
-                    let query = Query::new(&config.get_language(), &structure_query_content)
-                        .map_err(|e| AppError::TreeSitter(format!("{}: {}", language, e)))?;
-                    self.structure_queries.insert(language.to_string(), query);
-                }
-            }
-        }
-        Ok(())
+        self.language_processor.get_supported_languages()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     pub fn detect_language(
@@ -484,10 +452,7 @@ impl TreeSitterAnalyzer {
     ) -> Result<Option<String>, AppError> {
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-        if let Some(config) = self
-            .language_registry
-            .detect_language_by_extension(extension)
-        {
+        if let Some(config) = self.language_processor.detect_language_by_extension(extension) {
             Ok(Some(config.name.to_string()))
         } else {
             Ok(None)
@@ -495,16 +460,45 @@ impl TreeSitterAnalyzer {
     }
 
     pub fn parse_file(&mut self, file_path: &std::path::Path) -> Result<FileAst, AppError> {
+        // 验证文件路径
+        if !file_path.exists() {
+            return Err(crate::errors::file_not_found(file_path.display().to_string()));
+        }
+
+        // 验证文件扩展名
+        let extension = file_path.extension()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| tree_sitter_file_parse_error(
+                file_path.display().to_string(),
+                "No file extension"
+            ))?;
+
+        // 检测语言
         let lang_id = self.detect_language(file_path)?.ok_or_else(|| {
-            AppError::TreeSitter(format!("Unknown file type: {:?}", file_path))
+            tree_sitter_file_parse_error(
+                file_path.display().to_string(), 
+                format!("Unsupported file type: .{}", extension)
+            )
         })?;
 
-        let config = self
-            .language_registry
-            .get_config(&lang_id)
-            .ok_or_else(|| AppError::TreeSitter(format!("Unsupported language: {}", lang_id)))?;
+        // 获取语言配置
+        let config = self.language_processor.get_language_config(&lang_id)
+            .ok_or_else(|| tree_sitter_language_error(&lang_id))?;
 
-        let source_code = fs::read_to_string(file_path).map_err(AppError::IO)?;
+        // 读取源代码
+        let source_code = fs::read_to_string(file_path)
+            .map_err(|e| crate::errors::file_read_failed(
+                file_path.display().to_string(),
+                e
+            ))?;
+
+        // 验证源代码内容
+        if source_code.is_empty() {
+            return Err(tree_sitter_file_parse_error(
+                file_path.display().to_string(),
+                "Empty source file"
+            ));
+        }
 
         let current_hash = calculate_hash(&source_code);
 
@@ -515,14 +509,30 @@ impl TreeSitterAnalyzer {
             }
         }
 
+        // 创建并配置parser
         let mut parser = Parser::new();
+        let language = config.get_language();
+        
         parser
-            .set_language(&config.get_language())
-            .map_err(|e| AppError::TreeSitter(format!("Failed to set language: {}", e)))?;
+            .set_language(&language)
+            .map_err(|e| tree_sitter_query_compilation_error(
+                &lang_id, 
+                format!("Failed to set language: {}", e)
+            ))?;
 
+        // 解析源代码
         let tree = parser
             .parse(&source_code, None)
-            .ok_or_else(|| AppError::TreeSitter("Failed to parse file".to_string()))?;
+            .ok_or_else(|| tree_sitter_parse_error(&lang_id))?;
+
+        // 验证语法树的有效性
+        let tree_root = tree.root_node();
+        if tree_root.has_error() {
+            return Err(tree_sitter_file_parse_error(
+                file_path.display().to_string(),
+                "Syntax error in source code"
+            ));
+        }
 
         let file_ast = FileAst {
             path: file_path.to_path_buf(),
@@ -533,9 +543,21 @@ impl TreeSitterAnalyzer {
             language_id: lang_id,
         };
 
+        // 缓存管理
         if self.config.is_cache_enabled() {
-            self.file_asts
-                .insert(file_path.to_path_buf(), file_ast.clone());
+            // 限制缓存大小，防止内存泄漏
+            if self.file_asts.len() > 100 {
+                // 清理最旧的缓存项
+                let oldest_key = self.file_asts.iter()
+                    .min_by_key(|(_, ast)| ast.last_parsed)
+                    .map(|(path, _)| path.clone());
+                
+                if let Some(key) = oldest_key {
+                    self.file_asts.remove(&key);
+                }
+            }
+            
+            self.file_asts.insert(file_path.to_path_buf(), file_ast.clone());
         }
 
         Ok(file_ast)
@@ -546,6 +568,16 @@ impl TreeSitterAnalyzer {
         file_ast: &FileAst,
         hunks: &[DiffHunk],
     ) -> Result<Vec<AffectedNode>, AppError> {
+        // 验证输入参数
+        if hunks.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 检查语言支持
+        if !self.language_processor.is_language_supported(&file_ast.language_id) {
+            return Err(tree_sitter_language_error(&file_ast.language_id));
+        }
+
         let mut affected_nodes = self.analyze_generic_file_changes(file_ast, hunks)?;
 
         // 应用语言特定的增强
@@ -553,6 +585,12 @@ impl TreeSitterAnalyzer {
             for node in &mut affected_nodes {
                 enhancer.enhance_node(node);
             }
+        }
+
+        // 验证结果
+        if affected_nodes.is_empty() {
+            // 记录警告但不返回错误，因为可能确实没有结构变更
+            eprintln!("Warning: No affected nodes found for file: {}", file_ast.path.display());
         }
 
         Ok(affected_nodes)
@@ -565,19 +603,39 @@ impl TreeSitterAnalyzer {
     ) -> Result<Vec<AffectedNode>, AppError> {
         let mut affected_nodes = Vec::new();
 
-        let query = self
-            .structure_queries
-            .get(&file_ast.language_id)
-            .ok_or_else(|| AppError::TreeSitter(format!("Unsupported language: {}", file_ast.language_id)))?;
+        // 获取编译后的查询
+        let query = self.language_processor.get_compiled_query(&file_ast.language_id, QueryType::Highlights)
+            .ok_or_else(|| tree_sitter_error(format!("Unsupported language: {}", file_ast.language_id)))?;
+
+        // 验证源代码和语法树
+        if file_ast.source.is_empty() {
+            return Err(tree_sitter_file_parse_error(
+                file_ast.path.display().to_string(),
+                "Empty source code"
+            ));
+        }
 
         let source_bytes = file_ast.source.as_bytes();
         let tree_root = file_ast.tree.root_node();
+        
+        // 验证语法树根节点
+        if tree_root.kind().is_empty() {
+            return Err(tree_sitter_parse_error(&file_ast.language_id));
+        }
+
         let mut cursor = QueryCursor::new();
 
+        // 处理每个hunk
         for hunk in hunks {
+            // 验证hunk的有效性
+            if hunk.new_range.count == 0 && hunk.old_range.count == 0 {
+                continue; // 跳过空的hunk
+            }
+
             let hunk_start_line = hunk.new_range.start.saturating_sub(1);
             let hunk_end_line = hunk_start_line + hunk.new_range.count;
 
+            // 执行查询匹配
             let mut matches = cursor.matches(query, tree_root, source_bytes);
             while let Some(m) = matches.next() {
                 for capture in m.captures {
@@ -587,9 +645,14 @@ impl TreeSitterAnalyzer {
 
                     // 检查节点是否与hunk重叠
                     if node_start_line <= hunk_end_line && node_end_line >= hunk_start_line {
-                        let content = node.utf8_text(source_bytes).unwrap_or("").to_string();
+                        let content = node.utf8_text(source_bytes)
+                            .map_err(|e| tree_sitter_file_parse_error(
+                                file_ast.path.display().to_string(),
+                                format!("Failed to extract node text: {}", e)
+                            ))?
+                            .to_string();
+                        
                         let node_name = self.extract_node_name(&m, query, source_bytes);
-
                         let change_type = self.determine_change_type(hunk);
 
                         affected_nodes.push(AffectedNode {
@@ -608,9 +671,15 @@ impl TreeSitterAnalyzer {
             }
         }
 
-        // 去重
+        // 去重处理
         affected_nodes.sort_by_key(|n| (n.range.0, n.range.1, n.node_type.clone()));
         affected_nodes.dedup_by_key(|n| (n.range.0, n.range.1, n.node_type.clone()));
+
+        // 验证节点数量限制
+        if affected_nodes.len() > 1000 {
+            eprintln!("Warning: Large number of affected nodes ({}) for file: {}", 
+                affected_nodes.len(), file_ast.path.display());
+        }
 
         Ok(affected_nodes)
     }
@@ -677,7 +746,7 @@ impl TreeSitterAnalyzer {
         file_ast: &FileAst,
         affected_nodes: &[AffectedNode],
     ) -> String {
-        let config = self.language_registry.get_config(&file_ast.language_id);
+        let config = self.language_processor.get_language_config(&file_ast.language_id);
         let language_display_name = config.map(|c| c.display_name).unwrap_or("Unknown");
 
         let mut generator = SummaryGenerator::new(language_display_name.to_string());
@@ -691,7 +760,31 @@ impl TreeSitterAnalyzer {
 
     // 向后兼容的 analyze_diff 方法
     pub fn analyze_diff(&mut self, diff_text: &str) -> Result<DiffAnalysis, AppError> {
-        let git_diff = parse_git_diff(diff_text)?;
+        // 验证输入参数
+        if diff_text.trim().is_empty() {
+            return Err(tree_sitter_error("Empty diff text"));
+        }
+
+        // 解析git diff
+        let git_diff = parse_git_diff(diff_text)
+            .map_err(|e| tree_sitter_error(format!("Failed to parse git diff: {}", e)))?;
+
+        // 验证解析结果
+        if git_diff.changed_files.is_empty() {
+            return Ok(DiffAnalysis {
+                file_analyses: Vec::new(),
+                overall_summary: "没有检测到文件变更".to_string(),
+                change_analysis: ChangeAnalysis {
+                    function_changes: 0,
+                    type_changes: 0,
+                    method_changes: 0,
+                    interface_changes: 0,
+                    other_changes: 0,
+                    change_pattern: ChangePattern::MixedChange,
+                    change_scope: ChangeScope::Minor,
+                },
+            });
+        }
 
         let mut file_analyses = Vec::new();
         let mut total_affected_nodes = 0;
@@ -704,44 +797,86 @@ impl TreeSitterAnalyzer {
             match file_diff_info.change_type {
                 ChangeType::Added | ChangeType::Modified => {
                     let file_path = self.project_root.join(&file_diff_info.path);
+                    
+                    // 检查文件是否存在
                     if !file_path.exists() {
+                        eprintln!("Warning: File not found: {}", file_path.display());
                         continue;
                     }
 
-                    if let Ok(Some(lang_id)) = self.detect_language(&file_path) {
-                        *language_counts.entry(lang_id.clone()).or_insert(0) += 1;
+                    // 检测语言
+                    match self.detect_language(&file_path) {
+                        Ok(Some(lang_id)) => {
+                            *language_counts.entry(lang_id.clone()).or_insert(0) += 1;
 
-                        if let Ok(file_ast) = self.parse_file(&file_path) {
-                            let affected_nodes =
-                                self.analyze_file_changes(&file_ast, &file_diff_info.hunks)?;
-                            total_affected_nodes += affected_nodes.len();
+                            // 解析文件并分析变更
+                            match self.parse_file(&file_path) {
+                                Ok(file_ast) => {
+                                    match self.analyze_file_changes(&file_ast, &file_diff_info.hunks) {
+                                        Ok(affected_nodes) => {
+                                            total_affected_nodes += affected_nodes.len();
 
-                            for node in &affected_nodes {
-                                if let Some(change_type) = &node.change_type {
-                                    match change_type.as_str() {
-                                        "added" | "added_content" => total_additions += 1,
-                                        "deleted" => total_deletions += 1,
-                                        "modified" | "modified_with_deletion" => {
-                                            total_modifications += 1
+                                            // 统计变更类型
+                                            for node in &affected_nodes {
+                                                if let Some(change_type) = &node.change_type {
+                                                    match change_type.as_str() {
+                                                        "added" | "added_content" => total_additions += 1,
+                                                        "deleted" => total_deletions += 1,
+                                                        "modified" | "modified_with_deletion" => {
+                                                            total_modifications += 1
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                            }
+
+                                            let summary = self.generate_file_summary(&file_ast, &affected_nodes);
+
+                                            file_analyses.push(FileAnalysis {
+                                                path: file_ast.path.clone(),
+                                                language: file_ast.language_id.clone(),
+                                                change_type: file_diff_info.change_type.clone(),
+                                                affected_nodes: affected_nodes.clone(),
+                                                summary: Some(summary),
+                                            });
                                         }
-                                        _ => {}
+                                        Err(e) => {
+                                            eprintln!("Warning: Failed to analyze file changes for {}: {}", 
+                                                file_path.display(), e);
+                                            // 添加一个基本的分析结果
+                                            file_analyses.push(FileAnalysis {
+                                                path: file_path,
+                                                language: lang_id,
+                                                change_type: file_diff_info.change_type.clone(),
+                                                affected_nodes: Vec::new(),
+                                                summary: Some(format!("分析失败: {}", e)),
+                                            });
+                                        }
                                     }
                                 }
+                                Err(e) => {
+                                    eprintln!("Warning: Failed to parse file {}: {}", 
+                                        file_path.display(), e);
+                                    // 添加一个基本的分析结果
+                                    file_analyses.push(FileAnalysis {
+                                        path: file_path,
+                                        language: lang_id,
+                                        change_type: file_diff_info.change_type.clone(),
+                                        affected_nodes: Vec::new(),
+                                        summary: Some(format!("解析失败: {}", e)),
+                                    });
+                                }
                             }
-
-                            let summary = self.generate_file_summary(&file_ast, &affected_nodes);
-
-                            file_analyses.push(FileAnalysis {
-                                path: file_ast.path.clone(),
-                                language: file_ast.language_id.clone(),
-                                change_type: file_diff_info.change_type.clone(),
-                                affected_nodes: affected_nodes.clone(),
-                                summary: Some(summary),
-                            });
+                        }
+                        Ok(None) => {
+                            eprintln!("Warning: Could not detect language for file: {}", file_path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Language detection failed for {}: {}", file_path.display(), e);
                         }
                     }
                 }
-                _ => {
+                ChangeType::Deleted | ChangeType::Renamed => {
                     file_analyses.push(FileAnalysis {
                         path: file_diff_info.path.clone(),
                         language: "unknown".to_string(),
@@ -750,10 +885,20 @@ impl TreeSitterAnalyzer {
                         summary: Some("文件被删除或重命名".to_string()),
                     });
                 }
+                ChangeType::Copied | ChangeType::TypeChanged => {
+                    file_analyses.push(FileAnalysis {
+                        path: file_diff_info.path.clone(),
+                        language: "unknown".to_string(),
+                        change_type: file_diff_info.change_type.clone(),
+                        affected_nodes: Vec::new(),
+                        summary: Some("文件被复制或类型变更".to_string()),
+                    });
+                }
             }
         }
 
-        let change_pattern = ChangePattern::MixedChange; // 简化的模式检测
+        // 计算变更范围
+        let change_pattern = ChangePattern::MixedChange;
         
         // 根据分析深度动态调整阈值
         let (major_threshold, moderate_threshold) = match self.config.get_analysis_depth().as_str() {
