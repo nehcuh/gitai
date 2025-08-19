@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig,
-    errors::AIError,
+    errors::AppError,
     types::ai::{ChatMessage, OpenAIChatCompletionResponse, OpenAIChatRequest},
 };
 use lazy_static::lazy_static;
@@ -11,7 +11,7 @@ use regex::Regex;
 pub async fn explain_git_command_output(
     config: &AppConfig,
     command_output: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     explain_git_command_output_with_language(config, command_output).await
 }
 
@@ -19,7 +19,7 @@ pub async fn explain_git_command_output(
 pub async fn explain_git_command_output_with_language(
     config: &AppConfig,
     command_output: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     if command_output.trim().is_empty() {
         // This is not an error, but a valid case where there's nothing to explain
         return Ok("该命令没有产生输出供 AI 解释。\
@@ -74,7 +74,7 @@ pub async fn execute_ai_request_generic(
     messages: Vec<ChatMessage>,
     log_prefix: &str,
     clean_output: bool,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     execute_ai_request_with_language(config, messages, log_prefix, clean_output).await
 }
 
@@ -84,7 +84,7 @@ pub async fn execute_ai_request_with_language(
     messages: Vec<ChatMessage>,
     log_prefix: &str,
     clean_output: bool,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     let request_payload = OpenAIChatRequest {
         model: config.ai.model_name.clone(),
         messages,
@@ -115,7 +115,7 @@ pub async fn execute_ai_request_with_language(
         .await
         .map_err(|e| {
             tracing::error!("发送 AI {}请求失败: {}", log_prefix, e);
-            AIError::RequestFailed(e)
+            AppError::AI(format!("请求失败: {}", e))
         })?;
 
     if !openai_response.status().is_success() {
@@ -125,7 +125,7 @@ pub async fn execute_ai_request_with_language(
             .await
             .unwrap_or_else(|_| "Failed to read error body from AI response".to_string());
         tracing::error!("AI {} API 请求失败，状态码: {}: {}", log_prefix, status_code, body);
-        return Err(AIError::ApiResponseError(status_code, body));
+        return Err(AppError::AI(format!("API响应错误: {} - {}", status_code, body)));
     }
 
     // Successfully received a response, now parse it.
@@ -135,7 +135,7 @@ pub async fn execute_ai_request_with_language(
                 let original_content = &choice.message.content;
                 if original_content.trim().is_empty() {
                     tracing::warn!("AI {}返回了空的消息内容。", log_prefix);
-                    Err(AIError::EmptyMessage)
+                    Err(AppError::AI("返回了空的消息内容".to_string()))
                 } else {
                     let final_content = if clean_output {
                         clean_ai_output(original_content)
@@ -154,12 +154,12 @@ pub async fn execute_ai_request_with_language(
                 }
             } else {
                 tracing::warn!("在 AI {}响应中未找到选项。", log_prefix);
-                Err(AIError::NoChoiceInResponse)
+                Err(AppError::AI("响应中未找到选项".to_string()))
             }
         }
         Err(e) => {
             tracing::error!("解析来自 AI {}的 JSON 响应失败: {}", log_prefix, e);
-            Err(AIError::ResponseParseFailed(e))
+            Err(AppError::AI(format!("响应解析失败: {}", e)))
         }
     }
 }
@@ -179,7 +179,7 @@ pub async fn execute_review_request(
     config: &AppConfig,
     system_prompt: &str,
     user_prompt: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     execute_review_request_with_language(config, system_prompt, user_prompt).await
 }
 
@@ -188,7 +188,7 @@ pub async fn execute_review_request_with_language(
     config: &AppConfig,
     system_prompt: &str,
     user_prompt: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -209,7 +209,7 @@ pub async fn execute_explain_request(
     config: &AppConfig,
     system_prompt: &str,
     user_prompt: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -230,7 +230,7 @@ pub async fn execute_translation_request(
     config: &AppConfig,
     content: &str,
     target_language: &str,
-) -> Result<String, AIError> {
+) -> Result<String, AppError> {
     // Get translator prompt content
     let translator_prompt = config.prompts
         .get("translator")

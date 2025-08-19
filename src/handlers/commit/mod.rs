@@ -47,7 +47,7 @@ impl CommitOrchestrator {
         let repository_manager = RepositoryManager::new();
         
         // Initialize commit analyzer if Tree-sitter is enabled
-        let commit_analyzer = if config.tree_sitter.enabled {
+        let commit_analyzer = if config.tree_sitter.enabled.unwrap_or(false) {
             Some(CommitAnalyzer::new(config.tree_sitter.clone()))
         } else {
             None

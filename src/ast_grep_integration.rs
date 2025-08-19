@@ -303,17 +303,17 @@ impl AstGrepEngine {
     pub fn add_rule(&mut self, rule_yaml: &str) -> Result<String, AppError> {
         // Early validation - check if YAML is empty or malformed
         if rule_yaml.trim().is_empty() {
-            return Err(AppError::Config(crate::errors::ConfigError::Other(
+            return Err(AppError::Config(
                 "Rule YAML cannot be empty".to_string()
-            )));
+            ));
         }
         
         // Parse the full rule configuration with better error context
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(rule_yaml)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to parse rule YAML at line {}: {}", 
                        e.location().map(|l| l.line()).unwrap_or(0), e)
-            )))?;
+            ))?;
 
         // Extract metadata with validation
         let rule_id = yaml_value
@@ -327,9 +327,9 @@ impl AstGrepEngine {
             .get("language")
             .and_then(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
-            .ok_or_else(|| AppError::Config(crate::errors::ConfigError::Other(
+            .ok_or_else(|| AppError::Config(
                 "Rule must specify a valid 'language' field".to_string()
-            )))?
+            ))?
             .to_string();
 
         // For unsupported languages, issue a warning but still add the rule for fallback matching
@@ -368,9 +368,9 @@ impl AstGrepEngine {
 
         // Parse the rule core
         let rule_core: SerializableRuleCore = serde_yaml::from_str(rule_yaml)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to parse rule core: {}", e)
-            )))?;
+            ))?;
 
         let ast_grep_rule = AstGrepRule {
             id: rule_id.clone(),
@@ -432,14 +432,14 @@ impl AstGrepEngine {
     fn extract_pattern_from_rule(&self, rule: &AstGrepRule) -> Result<Option<String>, AppError> {
         // Try to extract pattern from the rule_core
         let yaml_str = serde_yaml::to_string(&rule.rule_core)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to serialize rule core: {}", e)
-            )))?;
+            ))?;
         
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(&yaml_str)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to parse rule core YAML: {}", e)
-            )))?;
+            ))?;
         
         // Look for pattern in rule section
         if let Some(rule_section) = yaml_value.get("rule") {

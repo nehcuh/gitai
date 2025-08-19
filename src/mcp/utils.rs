@@ -10,7 +10,7 @@ pub struct McpUtils;
 
 impl McpUtils {
     /// 验证工具参数
-    pub fn validate_tool_args(args: &Value, schema: &Value) -> Result<(), ServiceError> {
+    pub fn validate_tool_args(args: &Value, _schema: &Value) -> Result<(), ServiceError> {
         // 简化的参数验证逻辑
         if args.is_null() {
             return Err(ServiceError::invalid_params("工具参数不能为空".to_string()));
@@ -74,7 +74,7 @@ impl McpUtils {
     }
 
     /// 生成资源描述
-    pub fn generate_resource_description(uri: &str, name: &str, description: &str) -> Resource {
+    pub fn generate_resource_description(_uri: &str, _name: &str, _description: &str) -> Resource {
         // rmcp 0.2.1 uses different Resource structure
         // This is a placeholder - actual implementation depends on rmcp 0.2.1 API
         unimplemented!("Resource generation needs to be updated for rmcp 0.2.1")

@@ -17,10 +17,9 @@ use serde::{Deserialize, Serialize};
 
 // 重新导出 rmcp 的核心类型
 pub use rmcp::{
-    handler::server::ServerHandler,
     service::ServiceError,
-    model::{Tool, Resource, ServerInfo, InitializeResult},
-    transport,
+    model::Tool,
+    handler::server::ServerHandler,
 };
 
 // 类型别名
@@ -237,7 +236,7 @@ impl Default for GitAiMcpConfig {
 
 /// 创建 MCP 服务
 pub async fn create_mcp_service<H: ServerHandler + 'static>(
-    handler: H,
+    _handler: H,
     transport_type: &str,
 ) -> RmcpResult<()> {
     match transport_type {
@@ -257,7 +256,7 @@ pub async fn create_mcp_service<H: ServerHandler + 'static>(
 /// 初始化 GitAI MCP 服务管理器
 pub async fn init_gitai_mcp_manager(config: Option<GitAiMcpConfig>) -> RmcpResult<GitAiMcpManager> {
     let config = config.unwrap_or_default();
-    let mut manager = GitAiMcpManager::new(config);
+    let manager = GitAiMcpManager::new(config);
 
     // 注册默认服务
     // 注意：这里需要具体的服务实现，我们稍后会创建

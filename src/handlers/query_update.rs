@@ -9,16 +9,16 @@ pub async fn handle_query_update() -> Result<(), AppError> {
     println!("{}", "正在更新 Tree-sitter 查询文件...".blue());
 
     // 加载配置
-    let config = AppConfig::load().map_err(AppError::Config)?;
+    let config = AppConfig::load()?;
     
-    if !config.tree_sitter.enabled {
+    if config.tree_sitter.enabled != Some(true) {
         println!("{}", "Tree-sitter 分析未启用，跳过查询更新".yellow());
         return Ok(());
     }
 
     // 创建分析器
     let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(AppError::TreeSitter)?;
+        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
 
     println!("{}", "正在强制更新所有查询文件...".cyan());
     
@@ -50,16 +50,16 @@ pub fn handle_query_cleanup() -> Result<(), AppError> {
     println!("{}", "正在清理查询缓存...".blue());
 
     // 加载配置
-    let config = AppConfig::load().map_err(AppError::Config)?;
+    let config = AppConfig::load()?;
     
-    if !config.tree_sitter.enabled {
+    if config.tree_sitter.enabled != Some(true) {
         println!("{}", "Tree-sitter 分析未启用，跳过缓存清理".yellow());
         return Ok(());
     }
 
     // 创建分析器
     let mut analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(AppError::TreeSitter)?;
+        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
 
     // 清理缓存
     match analyzer.cleanup_query_cache() {
@@ -80,31 +80,31 @@ pub fn handle_query_status() -> Result<(), AppError> {
     println!("{}", "查询系统状态:".blue());
 
     // 加载配置
-    let config = AppConfig::load().map_err(AppError::Config)?;
+    let config = AppConfig::load()?;
     
-    if !config.tree_sitter.enabled {
+    if config.tree_sitter.enabled != Some(true) {
         println!("{}", "Tree-sitter 分析: 未启用".yellow());
         return Ok(());
     }
 
     println!("{}", "Tree-sitter 分析: 已启用".green());
-    println!("分析深度: {}", config.tree_sitter.analysis_depth.cyan());
-    println!("缓存启用: {}", if config.tree_sitter.cache_enabled { "是".green() } else { "否".red() });
+    println!("分析深度: {}", config.tree_sitter.analysis_depth.as_deref().unwrap_or("未设置").cyan());
+    println!("缓存启用: {}", if config.tree_sitter.cache_enabled == Some(true) { "是".green() } else { "否".red() });
     
     // 在创建分析器之前先保存需要的配置信息
-    let supported_languages_builtin = config.tree_sitter.languages.clone();
+    let supported_languages_builtin = config.tree_sitter.get_languages();
     let query_config = config.tree_sitter.query_manager_config.clone();
     
     // 创建分析器
     let analyzer = TreeSitterAnalyzer::new(config.tree_sitter)
-        .map_err(AppError::TreeSitter)?;
+        .map_err(|e| AppError::TreeSitter(e.to_string()))?;
 
     // 显示支持的语言
     let supported_languages = analyzer.get_query_supported_languages();
     
     println!("\n{}", "内置支持的语言:".blue());
-    for language in &supported_languages_builtin {
-        println!("  • {}", language.green());
+    for language in supported_languages_builtin {
+        println!("  • {}", language);
     }
 
     if !supported_languages.is_empty() {

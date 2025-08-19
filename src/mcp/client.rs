@@ -1,5 +1,5 @@
 use rmcp::{
-    model::{ServerInfo, Tool, Resource, InitializeResult, Implementation, ServerCapabilities, ProtocolVersion},
+    model::{Tool, Resource, Implementation, ServerCapabilities, ProtocolVersion, InitializeResult},
 };
 use crate::mcp::rmcp_compat::ServiceError;
 use std::collections::HashMap;

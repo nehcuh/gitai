@@ -1,67 +1,55 @@
 use serde::Deserialize;
 
-/// Configuration for review functionality
-#[derive(Deserialize, Debug, Clone)]
+/// 代码审查配置 - 简化版本，直接使用Option字段
+#[derive(Deserialize, Debug, Clone, Default)]
 pub struct ReviewConfig {
-    /// Whether to automatically save review results to local files
-    #[serde(default = "default_auto_save")]
-    pub auto_save: bool,
-
-    /// Base path for storing review results (supports ~ expansion)
-    #[serde(default = "default_storage_path")]
-    pub storage_path: String,
-
-    /// Default format for saved review files
-    #[serde(default = "default_review_format")]
-    pub format: String,
-
-    /// Maximum age in hours to keep review results
-    #[serde(default = "default_max_age_hours")]
-    #[allow(dead_code)]
-    pub max_age_hours: u32,
-
-    /// Whether to include review results in commit message generation
-    #[serde(default = "default_include_in_commit")]
-    pub include_in_commit: bool,
-}
-
-/// Partial Review Configuration for loading from files
-#[derive(Deserialize, Debug, Default)]
-pub struct PartialReviewConfig {
+    /// 是否自动保存审查结果到本地文件
     pub auto_save: Option<bool>,
+
+    /// 存储审查结果的基础路径（支持 ~ 展开）
     pub storage_path: Option<String>,
+
+    /// 保存审查文件的默认格式
     pub format: Option<String>,
-    #[serde(default)]
+
+    /// 保留审查结果的最大小时数
     pub max_age_hours: Option<u32>,
-    #[serde(default)]
+
+    /// 是否在提交消息生成中包含审查结果
     pub include_in_commit: Option<bool>,
 }
 
-impl Default for ReviewConfig {
-    fn default() -> Self {
-        Self {
-            auto_save: default_auto_save(),
-            storage_path: default_storage_path(),
-            format: default_review_format(),
-            max_age_hours: default_max_age_hours(),
-            include_in_commit: default_include_in_commit(),
-        }
-    }
-}
-
 impl ReviewConfig {
-    /// Create ReviewConfig from partial config with defaults
-    pub fn from_partial(partial: Option<PartialReviewConfig>) -> Self {
-        let partial = partial.unwrap_or_default();
-        
+    /// 解析配置，应用默认值
+    pub fn resolve(self) -> Self {
         Self {
-            auto_save: partial.auto_save.unwrap_or_else(default_auto_save),
-            storage_path: partial.storage_path.unwrap_or_else(default_storage_path),
-            format: partial.format.unwrap_or_else(default_review_format),
-            max_age_hours: partial.max_age_hours.unwrap_or_else(default_max_age_hours),
-            include_in_commit: partial.include_in_commit.unwrap_or_else(default_include_in_commit),
+            auto_save: Some(self.auto_save.unwrap_or_else(default_auto_save)),
+            storage_path: Some(self.storage_path.unwrap_or_else(default_storage_path)),
+            format: Some(self.format.unwrap_or_else(default_review_format)),
+            max_age_hours: Some(self.max_age_hours.unwrap_or_else(default_max_age_hours)),
+            include_in_commit: Some(self.include_in_commit.unwrap_or_else(default_include_in_commit)),
         }
     }
+
+    /// 获取自动保存状态
+    pub fn is_auto_save_enabled(&self) -> bool {
+        self.auto_save.unwrap_or_else(default_auto_save)
+    }
+
+    /// 获取存储路径
+    pub fn get_storage_path(&self) -> String {
+        self.storage_path.as_ref()
+            .unwrap_or(&default_storage_path())
+            .clone()
+    }
+
+    /// 获取格式
+    pub fn get_format(&self) -> String {
+        self.format.as_ref()
+            .unwrap_or(&default_review_format())
+            .clone()
+    }
+
 }
 
 // Default functions
@@ -92,16 +80,16 @@ mod tests {
     #[test]
     fn test_default_review_config() {
         let config = ReviewConfig::default();
-        assert!(config.auto_save);
-        assert_eq!(config.storage_path, "~/.gitai/review_results");
-        assert_eq!(config.format, "markdown");
-        assert_eq!(config.max_age_hours, 168);
-        assert!(config.include_in_commit);
+        assert!(config.is_auto_save_enabled());
+        assert_eq!(config.get_storage_path(), "~/.gitai/review_results");
+        assert_eq!(config.get_format(), "markdown");
+        assert_eq!(config.max_age_hours.unwrap(), 168);
+        assert!(config.include_in_commit.unwrap());
     }
 
     #[test]
-    fn test_from_partial_config() {
-        let partial = PartialReviewConfig {
+    fn test_resolve_config() {
+        let config = ReviewConfig {
             auto_save: Some(false),
             storage_path: Some("/custom/path".to_string()),
             format: Some("json".to_string()),
@@ -109,21 +97,28 @@ mod tests {
             include_in_commit: None, // Should use default
         };
 
-        let config = ReviewConfig::from_partial(Some(partial));
-        assert!(!config.auto_save); // from partial
-        assert_eq!(config.storage_path, "/custom/path"); // from partial
-        assert_eq!(config.format, "json"); // from partial
-        assert_eq!(config.max_age_hours, 72); // from partial
-        assert!(config.include_in_commit); // default
+        let resolved = config.resolve();
+        assert!(!resolved.auto_save.unwrap()); // from config
+        assert_eq!(resolved.storage_path.unwrap(), "/custom/path"); // from config
+        assert_eq!(resolved.format.unwrap(), "json"); // from config
+        assert_eq!(resolved.max_age_hours.unwrap(), 72); // from config
+        assert!(resolved.include_in_commit.unwrap()); // default
     }
 
     #[test]
-    fn test_from_none_partial() {
-        let config = ReviewConfig::from_partial(None);
-        assert!(config.auto_save);
-        assert_eq!(config.storage_path, "~/.gitai/review_results");
-        assert_eq!(config.format, "markdown");
-        assert_eq!(config.max_age_hours, 168);
-        assert!(config.include_in_commit);
+    fn test_getter_methods() {
+        let config = ReviewConfig {
+            auto_save: Some(false),
+            storage_path: Some("/custom/path".to_string()),
+            format: Some("json".to_string()),
+            max_age_hours: Some(72),
+            include_in_commit: None,
+        };
+
+        assert!(!config.is_auto_save_enabled()); // from config
+        assert_eq!(config.get_storage_path(), "/custom/path"); // from config
+        assert_eq!(config.get_format(), "json"); // from config
+        assert_eq!(config.max_age_hours.unwrap(), 72); // from config
+        assert!(config.include_in_commit.unwrap()); // default
     }
 }

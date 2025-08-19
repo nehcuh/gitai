@@ -13,7 +13,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::borrow::Cow;
-use std::future::Future;
 
 /// 兼容性 ServiceError，提供简化的错误处理
 #[derive(Debug, Clone)]

@@ -80,10 +80,10 @@ impl UserInteractionManager {
     /// Ask user for confirmation
     fn ask_confirmation(&self) -> Result<bool, AppError> {
         print!("\n是否使用此提交信息? [Y/n] ");
-        io::stdout().flush().map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
+        io::stdout().flush()?;
         
         let mut input = String::new();
-        io::stdin().read_line(&mut input).map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
+        io::stdin().read_line(&mut input)?;
         
         let input = input.trim().to_lowercase();
         Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
@@ -155,10 +155,10 @@ impl UserInteractionManager {
     /// Show simple confirmation prompt
     pub fn simple_confirm(&self, prompt: &str) -> Result<bool, AppError> {
         print!("{} [Y/n] ", prompt);
-        io::stdout().flush().map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
+        io::stdout().flush()?;
         
         let mut input = String::new();
-        io::stdin().read_line(&mut input).map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
+        io::stdin().read_line(&mut input)?;
         
         let input = input.trim().to_lowercase();
         Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
@@ -195,10 +195,10 @@ impl UserInteractionManager {
     /// Get user input for custom message
     pub fn get_custom_message(&self) -> Result<Option<String>, AppError> {
         print!("请输入自定义提交信息 (留空跳过): ");
-        io::stdout().flush().map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
+        io::stdout().flush()?;
         
         let mut input = String::new();
-        io::stdin().read_line(&mut input).map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
+        io::stdin().read_line(&mut input)?;
         
         let input = input.trim();
         if input.is_empty() {

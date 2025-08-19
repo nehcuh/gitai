@@ -1,5 +1,5 @@
 use crate::{
-    errors::{AppError, GitError},
+    errors::AppError,
     handlers::git::*,
     types::{git::ReviewArgs, general::CommandOutput},
 };

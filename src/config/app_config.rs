@@ -1,13 +1,13 @@
 use serde::Deserialize;
 use std::{collections::HashMap, env, path::PathBuf};
-use crate::errors::ConfigError;
+use crate::errors::{AppError, config_error};
 
 use super::{
-    ai_config::{AIConfig, PartialAIConfig},
-    devops_config::{AccountConfig, PartialAccountConfig},
-    tree_sitter_config::{TreeSitterConfig, PartialTreeSitterConfig},
-    review_config::{ReviewConfig, PartialReviewConfig},
-    scan_config::{ScanConfig, PartialScanConfig},
+    ai_config::{AIConfig, ResolvedAIConfig},
+    devops_config::{AccountConfig, ResolvedAccountConfig},
+    tree_sitter_config::TreeSitterConfig,
+    review_config::ReviewConfig,
+    scan_config::ScanConfig,
     loader::ConfigLoader,
 };
 
@@ -36,58 +36,55 @@ const TEMPLATE_REVIEW: &str = "assets/review.md";
 // 1 config file + 5 default prompts + 5 cn prompts + 5 en prompts = 16 files
 pub const TOTAL_CONFIG_FILE_COUNT: u32 = 16;
 
-/// Main Application Configuration
+/// 主应用配置 - 使用解析后的配置
 #[derive(Debug, Clone)]
 pub struct AppConfig {
-    pub ai: AIConfig,
+    pub ai: ResolvedAIConfig,
     pub tree_sitter: TreeSitterConfig,
     pub review: ReviewConfig,
-    pub account: Option<AccountConfig>,
+    pub account: Option<ResolvedAccountConfig>,
     pub prompts: HashMap<String, String>,
     pub scan: ScanConfig,
 }
 
-/// Partial Application Configuration for loading from files
+/// 应用配置 - 简化版本，直接使用Option字段
 #[derive(Deserialize, Debug, Default)]
 pub struct PartialAppConfig {
-    ai: Option<PartialAIConfig>,
-    tree_sitter: Option<PartialTreeSitterConfig>,
-    review: Option<PartialReviewConfig>,
-    account: Option<PartialAccountConfig>,
-    scan: Option<PartialScanConfig>,
+    pub ai: Option<AIConfig>,
+    pub tree_sitter: Option<TreeSitterConfig>,
+    pub review: Option<ReviewConfig>,
+    pub account: Option<AccountConfig>,
+    pub scan: Option<ScanConfig>,
 }
 
 impl AppConfig {
     /// Load configuration from file and environment
-    pub fn load() -> Result<Self, ConfigError> {
+    pub fn load() -> Result<Self, AppError> {
         let loader = ConfigLoader::new();
         loader.load_config()
     }
 
-    /// Load configuration with custom base path (for testing)
-    pub fn load_with_base_path(base_path: PathBuf) -> Result<Self, ConfigError> {
-        let loader = ConfigLoader::with_base_path(base_path);
-        loader.load_config()
-    }
 
-    /// Create AppConfig from partial config and environment
+    /// 从部分配置和环境变量创建AppConfig
     pub fn from_partial_and_env(
         partial: Option<PartialAppConfig>,
         env_map: HashMap<String, String>,
         prompts: HashMap<String, String>,
-    ) -> Result<Self, ConfigError> {
+    ) -> Result<Self, AppError> {
         let partial = partial.unwrap_or_default();
 
-        // Load AI config
-        let ai = AIConfig::from_env_or_file(partial.ai, &env_map)?;
+        // 加载并解析AI配置
+        let ai_config = partial.ai.unwrap_or_default();
+        let ai = ai_config.merge_with_env(&env_map)?;
 
-        // Load DevOps account config (optional)
-        let account = AccountConfig::from_env_or_file(partial.account, &env_map)?;
+        // 加载并解析DevOps账户配置（可选）
+        let account_config = partial.account.unwrap_or_default();
+        let account = account_config.merge_with_env(&env_map).resolve();
 
-        // Load other configs
-        let tree_sitter = TreeSitterConfig::from_partial(partial.tree_sitter);
-        let review = ReviewConfig::from_partial(partial.review);
-        let scan = ScanConfig::from_partial(partial.scan);
+        // 加载并解析其他配置
+        let tree_sitter = partial.tree_sitter.unwrap_or_default().resolve();
+        let review = partial.review.unwrap_or_default().resolve();
+        let scan = partial.scan.unwrap_or_default().resolve();
         
         Ok(AppConfig {
             ai,
@@ -101,28 +98,18 @@ impl AppConfig {
 
     
     /// Get prompt file path (for backward compatibility)
-    pub fn get_prompt_path(&self, prompt_key: &str) -> Result<std::path::PathBuf, crate::errors::ConfigError> {
+    pub fn get_prompt_path(&self, prompt_key: &str) -> Result<std::path::PathBuf, AppError> {
         let prompt_file = match prompt_key {
             "translator" => TRANSLATOR_PROMPT,
             "helper" => HELPER_PROMPT,
             "commit_generator" => COMMIT_GENERATOR_PROMPT,
             "commit_deviation" => COMMIT_DIVIATION_PROMPT,
             "review" => REVIEW_PROMPT,
-            _ => return Err(crate::errors::ConfigError::PromptFileMissing(prompt_key.to_string())),
+            _ => return Err(config_error(format!("未知的提示词类型: {}", prompt_key))),
         };
         Ok(std::path::PathBuf::from(USER_PROMPT_PATH).join(prompt_file))
     }
 
-    /// Validate the configuration
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validate DevOps account if present
-        if let Some(account) = &self.account {
-            account.validate()?;
-        }
-
-        
-        Ok(())
-    }
 }
 
 /// Get the absolute path of a template file based on project root

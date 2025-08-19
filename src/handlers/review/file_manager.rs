@@ -17,9 +17,9 @@ impl FileManager {
     /// Create a new file manager
     pub fn new(review_config: &ReviewConfig, output_formatter: OutputFormatter) -> Self {
         let save_config = SaveConfig {
-            auto_save: review_config.auto_save,
-            format: review_config.format.clone(),
-            base_path: review_config.storage_path.clone(),
+            auto_save: review_config.is_auto_save_enabled(),
+            format: review_config.get_format(),
+            base_path: review_config.get_storage_path(),
         };
 
         Self {
@@ -63,9 +63,7 @@ impl FileManager {
 
         // Create directory if it doesn't exist
         if let Some(parent) = base_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                AppError::FileWrite(parent.to_string_lossy().to_string(), e)
-            })?;
+            fs::create_dir_all(parent)?;
         }
 
         // Generate file name with timestamp
@@ -81,23 +79,15 @@ impl FileManager {
     async fn write_to_file(&self, file_path: &PathBuf, content: &str) -> Result<(), AppError> {
         // Create parent directories if they don't exist
         if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                AppError::FileWrite(parent.to_string_lossy().to_string(), e)
-            })?;
+            fs::create_dir_all(parent)?;
         }
 
         // Write content to file
-        let mut file = fs::File::create(file_path).map_err(|e| {
-            AppError::FileWrite(file_path.to_string_lossy().to_string(), e)
-        })?;
+        let mut file = fs::File::create(file_path)?;
 
-        file.write_all(content.as_bytes()).map_err(|e| {
-            AppError::FileWrite(file_path.to_string_lossy().to_string(), e)
-        })?;
+        file.write_all(content.as_bytes())?;
 
-        file.flush().map_err(|e| {
-            AppError::FileWrite(file_path.to_string_lossy().to_string(), e)
-        })?;
+        file.flush()?;
 
         Ok(())
     }
@@ -149,12 +139,12 @@ impl FileManager {
         let mut review_files = Vec::new();
         
         let entries = fs::read_dir(&base_path).map_err(|e| {
-            AppError::FileRead(base_path.to_string_lossy().to_string(), e)
+            AppError::IO(e)
         })?;
 
         for entry in entries {
             let entry = entry.map_err(|e| {
-                AppError::FileRead(base_path.to_string_lossy().to_string(), e)
+                AppError::IO(e)
             })?;
 
             let path = entry.path();

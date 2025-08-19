@@ -93,7 +93,7 @@ impl DiffAnalyzer {
         tracing::info!("执行 TreeSitter 分析");
 
         // Initialize TreeSitter analyzer
-        let mut analyzer = TreeSitterAnalyzer::new(self.tree_sitter_config.clone())?;
+        let _analyzer = TreeSitterAnalyzer::new(self.tree_sitter_config.clone())?;
 
         // Perform analysis request
         let analysis_request = AnalysisRequest {

@@ -1,63 +1,56 @@
 use serde::Deserialize;
 use crate::tree_sitter_analyzer::query_manager::QueryManagerConfig;
 
-/// Tree-sitter Configuration
-#[derive(Deserialize, Debug, Clone)]
+/// Tree-sitter 配置 - 简化版本，直接使用Option字段
+#[derive(Deserialize, Debug, Clone, Default)]
 pub struct TreeSitterConfig {
-    /// Represents if enable AST analysis
-    #[serde(default)]
-    pub enabled: bool,
+    /// 是否启用AST分析
+    pub enabled: Option<bool>,
 
-    /// Analysis depth: "shallow", "medium", "deep"
-    #[serde(default = "default_analysis_depth")]
-    pub analysis_depth: String,
+    /// 分析深度: "shallow", "medium", "deep"
+    pub analysis_depth: Option<String>,
 
-    /// Is cache enabled
-    #[serde(default = "default_cache_enabled")]
-    pub cache_enabled: bool,
+    /// 是否启用缓存
+    pub cache_enabled: Option<bool>,
 
-    /// List of supported languages
-    #[serde(default = "default_languages")]
-    pub languages: Vec<String>,
+    /// 支持的语言列表
+    pub languages: Option<Vec<String>>,
 
-    /// Query manager configuration
+    /// 查询管理器配置
     #[serde(skip)]
     pub query_manager_config: QueryManagerConfig,
 }
 
-/// Partial Tree-sitter Configuration for loading from files
-#[derive(Deserialize, Debug, Default)]
-pub struct PartialTreeSitterConfig {
-    pub enabled: Option<bool>,
-    pub analysis_depth: Option<String>,
-    pub cache_enabled: Option<bool>,
-    pub languages: Option<Vec<String>>,
-}
-
-impl Default for TreeSitterConfig {
-    fn default() -> Self {
+impl TreeSitterConfig {
+    /// 解析配置，应用默认值
+    pub fn resolve(self) -> Self {
         Self {
-            enabled: default_enabled(),
-            analysis_depth: default_analysis_depth(),
-            cache_enabled: default_cache_enabled(),
-            languages: default_languages(),
+            enabled: Some(self.enabled.unwrap_or_else(default_enabled)),
+            analysis_depth: Some(self.analysis_depth.unwrap_or_else(default_analysis_depth)),
+            cache_enabled: Some(self.cache_enabled.unwrap_or_else(default_cache_enabled)),
+            languages: Some(self.languages.unwrap_or_else(default_languages)),
             query_manager_config: QueryManagerConfig::default(),
         }
     }
-}
 
-impl TreeSitterConfig {
-    /// Create TreeSitterConfig from partial config with defaults
-    pub fn from_partial(partial: Option<PartialTreeSitterConfig>) -> Self {
-        let partial = partial.unwrap_or_default();
-        
-        Self {
-            enabled: partial.enabled.unwrap_or_else(default_enabled),
-            analysis_depth: partial.analysis_depth.unwrap_or_else(default_analysis_depth),
-            cache_enabled: partial.cache_enabled.unwrap_or_else(default_cache_enabled),
-            languages: partial.languages.unwrap_or_else(default_languages),
-            query_manager_config: QueryManagerConfig::default(),
-        }
+
+    /// 获取分析深度
+    pub fn get_analysis_depth(&self) -> String {
+        self.analysis_depth.as_ref()
+            .unwrap_or(&default_analysis_depth())
+            .clone()
+    }
+
+    /// 获取缓存状态
+    pub fn is_cache_enabled(&self) -> bool {
+        self.cache_enabled.unwrap_or_else(default_cache_enabled)
+    }
+
+    /// 获取支持的语言
+    pub fn get_languages(&self) -> Vec<String> {
+        self.languages.as_ref()
+            .unwrap_or(&default_languages())
+            .clone()
     }
 }
 
@@ -94,34 +87,41 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = TreeSitterConfig::default();
-        assert!(config.enabled);
-        assert_eq!(config.analysis_depth, "medium");
-        assert!(config.cache_enabled);
-        assert_eq!(config.languages.len(), 8);
+        assert_eq!(config.get_analysis_depth(), "medium");
+        assert!(config.is_cache_enabled());
+        assert_eq!(config.get_languages().len(), 8);
     }
 
     #[test]
-    fn test_from_partial_config() {
-        let partial = PartialTreeSitterConfig {
+    fn test_resolve_config() {
+        let config = TreeSitterConfig {
             enabled: Some(false),
             analysis_depth: Some("deep".to_string()),
             cache_enabled: None, // Should use default
             languages: Some(vec!["rust".to_string(), "python".to_string()]),
+            query_manager_config: QueryManagerConfig::default(),
         };
 
-        let config = TreeSitterConfig::from_partial(Some(partial));
-        assert!(!config.enabled); // from partial
-        assert_eq!(config.analysis_depth, "deep"); // from partial
-        assert!(config.cache_enabled); // default
-        assert_eq!(config.languages.len(), 2); // from partial
+        let resolved = config.resolve();
+        assert!(!resolved.enabled.unwrap()); // from config
+        assert_eq!(resolved.analysis_depth.unwrap(), "deep"); // from config
+        assert!(resolved.cache_enabled.unwrap()); // default
+        assert_eq!(resolved.languages.unwrap().len(), 2); // from config
     }
 
     #[test]
-    fn test_from_none_partial() {
-        let config = TreeSitterConfig::from_partial(None);
-        assert!(config.enabled);
-        assert_eq!(config.analysis_depth, "medium");
-        assert!(config.cache_enabled);
-        assert_eq!(config.languages.len(), 8);
+    fn test_getter_methods() {
+        let config = TreeSitterConfig {
+            enabled: Some(false),
+            analysis_depth: Some("deep".to_string()),
+            cache_enabled: None,
+            languages: None,
+            query_manager_config: QueryManagerConfig::default(),
+        };
+
+        assert!(!config.enabled.unwrap()); // from config
+        assert_eq!(config.get_analysis_depth(), "deep"); // from config
+        assert!(config.is_cache_enabled()); // default
+        assert_eq!(config.get_languages().len(), 8); // default
     }
 }

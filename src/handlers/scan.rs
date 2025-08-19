@@ -3,9 +3,7 @@ use crate::errors::AppError;
 use crate::rule_manager::RuleManager;
 use crate::scanner::LocalScanner;
 use crate::types::git::ScanArgs;
-use colored::Colorize;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn handle_scan(
     config: &AppConfig,
@@ -88,7 +86,7 @@ pub async fn handle_scan_with_output(
     
     // Save results (create a new scanner instance for saving)
     {
-        let mut save_scanner = LocalScanner::new(config.clone())?;
+        let save_scanner = LocalScanner::new(config.clone())?;
         save_scanner.save_results(&scan_result, args.output.as_deref())?;
     }
     
@@ -113,7 +111,7 @@ pub async fn handle_update_scan_rules(
 async fn get_language_specific_rules(
     rule_manager: &mut RuleManager,
     args: &ScanArgs,
-    config: &AppConfig,
+    _config: &AppConfig,
 ) -> Result<Vec<PathBuf>, AppError> {
     // Get default rules
     let default_paths = rule_manager.get_rule_paths(args.update_rules).await?;

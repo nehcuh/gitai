@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 use super::analyzer::NodeAnalysisConfig;
 use crate::{
-    errors::TreeSitterError,
+    errors::AppError,
     types::git::{ChangeType, ChangedFile, DiffHunk, GitDiff, HunkRange},
 };
 use tree_sitter::{Language, Tree};
@@ -671,7 +671,7 @@ pub fn is_node_public(node: &tree_sitter::Node, file_ast: &FileAst) -> bool {
 }
 
 // 解析 Git diff 文本
-pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, TreeSitterError> {
+pub fn parse_git_diff(diff_text: &str) -> Result<GitDiff, AppError> {
     let mut changed_files = Vec::new();
     let lines: Vec<&str> = diff_text.lines().collect();
     let mut i = 0;

@@ -91,37 +91,22 @@ impl DevOpsWorkItemFetcher {
                 all_work_item_ids
             );
 
-            let results = self.client.get_work_items(space_id, &all_work_item_ids).await;
+            let results = self.client.get_work_items(space_id, &all_work_item_ids).await?;
 
             let mut fetched_work_items = Vec::new();
-            let mut fetch_errors = Vec::new();
 
-            for result in results {
-                match result {
-                    Ok(work_item) => {
-                        tracing::info!("Successfully fetched work item: {}", work_item.id);
-                        fetched_work_items.push(work_item);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to fetch work item: {:?}", e);
-                        fetch_errors.push(e);
-                    }
-                }
+            for work_item in results {
+                tracing::info!("Successfully fetched work item: {}", work_item.id);
+                fetched_work_items.push(work_item);
             }
 
-            if !fetch_errors.is_empty() {
-                tracing::warn!(
-                    "Failed to fetch {} out of {} work items",
-                    fetch_errors.len(),
-                    all_work_item_ids.len()
-                );
-            }
+            // All work items were successfully fetched
+            tracing::info!("Successfully fetched {} work items", fetched_work_items.len());
 
-            if fetched_work_items.is_empty() && !fetch_errors.is_empty() {
-                return Err(AppError::Generic(format!(
-                    "Failed to fetch any work items. Errors: {:?}",
-                    fetch_errors
-                )));
+            if fetched_work_items.is_empty() {
+                return Err(AppError::Generic(
+                    "Failed to fetch any work items".to_string()
+                ));
             }
 
             Ok(fetched_work_items)

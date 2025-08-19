@@ -6,7 +6,7 @@ use streaming_iterator::StreamingIterator;
 use tree_sitter::{Parser, Query, QueryCursor};
 
 use crate::config::TreeSitterConfig;
-use crate::errors::TreeSitterError;
+use crate::errors::AppError;
 use crate::types::git::{ChangeType, DiffHunk};
 
 use super::core::LanguageRegistry;
@@ -405,8 +405,8 @@ impl SummaryGenerator {
 }
 
 impl TreeSitterAnalyzer {
-    pub fn new(config: TreeSitterConfig) -> Result<Self, TreeSitterError> {
-        let query_manager = QueryManager::new(config.query_manager_config.clone())?;
+    pub fn new(config: TreeSitterConfig) -> Result<Self, AppError> {
+        let query_manager = QueryManager::new(config.query_manager_config.clone()).map_err(|e| AppError::TreeSitter(format!("Failed to create query manager: {}", e)))?;
         
         let mut analyzer = Self {
             config,
@@ -421,8 +421,8 @@ impl TreeSitterAnalyzer {
         Ok(analyzer)
     }
 
-    pub fn new_with_query_config(config: TreeSitterConfig, query_config: QueryManagerConfig) -> Result<Self, TreeSitterError> {
-        let query_manager = QueryManager::new(query_config)?;
+    pub fn new_with_query_config(config: TreeSitterConfig, query_config: QueryManagerConfig) -> Result<Self, AppError> {
+        let query_manager = QueryManager::new(query_config).map_err(|e| AppError::TreeSitter(format!("Failed to create query manager: {}", e)))?;
         
         let mut analyzer = Self {
             config,
@@ -443,18 +443,18 @@ impl TreeSitterAnalyzer {
     }
 
     pub fn set_analysis_depth(&mut self, depth: String) {
-        self.config.analysis_depth = depth;
+        self.config.analysis_depth = Some(depth);
     }
 
     /// 强制更新所有查询
-    pub async fn update_queries(&mut self) -> Result<(), TreeSitterError> {
+    pub async fn update_queries(&mut self) -> Result<(), AppError> {
         self.query_manager.force_update_all().await?;
         self.structure_queries.clear();
         self.initialize_queries()
     }
 
     /// 清理查询缓存
-    pub fn cleanup_query_cache(&mut self) -> Result<(), TreeSitterError> {
+    pub fn cleanup_query_cache(&mut self) -> Result<(), AppError> {
         self.query_manager.cleanup_cache()
     }
 
@@ -463,14 +463,14 @@ impl TreeSitterAnalyzer {
         self.query_manager.get_supported_languages()
     }
 
-    fn initialize_queries(&mut self) -> Result<(), TreeSitterError> {
+    fn initialize_queries(&mut self) -> Result<(), AppError> {
         for language in self.language_registry.get_all_languages() {
             if let Some(config) = self.language_registry.get_config(language) {
                 // 尝试加载结构化查询文件，如果存在的话
                 let structure_query_content = load_query_file(language, "structure");
                 if !structure_query_content.is_empty() {
                     let query = Query::new(&config.get_language(), &structure_query_content)
-                        .map_err(|e| TreeSitterError::QueryError(format!("{}: {}", language, e)))?;
+                        .map_err(|e| AppError::TreeSitter(format!("{}: {}", language, e)))?;
                     self.structure_queries.insert(language.to_string(), query);
                 }
             }
@@ -481,7 +481,7 @@ impl TreeSitterAnalyzer {
     pub fn detect_language(
         &self,
         path: &std::path::Path,
-    ) -> Result<Option<String>, TreeSitterError> {
+    ) -> Result<Option<String>, AppError> {
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
         if let Some(config) = self
@@ -494,17 +494,17 @@ impl TreeSitterAnalyzer {
         }
     }
 
-    pub fn parse_file(&mut self, file_path: &std::path::Path) -> Result<FileAst, TreeSitterError> {
+    pub fn parse_file(&mut self, file_path: &std::path::Path) -> Result<FileAst, AppError> {
         let lang_id = self.detect_language(file_path)?.ok_or_else(|| {
-            TreeSitterError::UnsupportedLanguage(format!("Unknown file type: {:?}", file_path))
+            AppError::TreeSitter(format!("Unknown file type: {:?}", file_path))
         })?;
 
         let config = self
             .language_registry
             .get_config(&lang_id)
-            .ok_or_else(|| TreeSitterError::UnsupportedLanguage(lang_id.clone()))?;
+            .ok_or_else(|| AppError::TreeSitter(format!("Unsupported language: {}", lang_id)))?;
 
-        let source_code = fs::read_to_string(file_path).map_err(TreeSitterError::IOError)?;
+        let source_code = fs::read_to_string(file_path).map_err(AppError::IO)?;
 
         let current_hash = calculate_hash(&source_code);
 
@@ -518,11 +518,11 @@ impl TreeSitterAnalyzer {
         let mut parser = Parser::new();
         parser
             .set_language(&config.get_language())
-            .map_err(|e| TreeSitterError::ParseError(format!("Failed to set language: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(format!("Failed to set language: {}", e)))?;
 
         let tree = parser
             .parse(&source_code, None)
-            .ok_or_else(|| TreeSitterError::ParseError("Failed to parse file".to_string()))?;
+            .ok_or_else(|| AppError::TreeSitter("Failed to parse file".to_string()))?;
 
         let file_ast = FileAst {
             path: file_path.to_path_buf(),
@@ -533,7 +533,7 @@ impl TreeSitterAnalyzer {
             language_id: lang_id,
         };
 
-        if self.config.cache_enabled {
+        if self.config.is_cache_enabled() {
             self.file_asts
                 .insert(file_path.to_path_buf(), file_ast.clone());
         }
@@ -545,7 +545,7 @@ impl TreeSitterAnalyzer {
         &self,
         file_ast: &FileAst,
         hunks: &[DiffHunk],
-    ) -> Result<Vec<AffectedNode>, TreeSitterError> {
+    ) -> Result<Vec<AffectedNode>, AppError> {
         let mut affected_nodes = self.analyze_generic_file_changes(file_ast, hunks)?;
 
         // 应用语言特定的增强
@@ -562,13 +562,13 @@ impl TreeSitterAnalyzer {
         &self,
         file_ast: &FileAst,
         hunks: &[DiffHunk],
-    ) -> Result<Vec<AffectedNode>, TreeSitterError> {
+    ) -> Result<Vec<AffectedNode>, AppError> {
         let mut affected_nodes = Vec::new();
 
         let query = self
             .structure_queries
             .get(&file_ast.language_id)
-            .ok_or_else(|| TreeSitterError::UnsupportedLanguage(file_ast.language_id.clone()))?;
+            .ok_or_else(|| AppError::TreeSitter(format!("Unsupported language: {}", file_ast.language_id)))?;
 
         let source_bytes = file_ast.source.as_bytes();
         let tree_root = file_ast.tree.root_node();
@@ -690,7 +690,7 @@ impl TreeSitterAnalyzer {
     }
 
     // 向后兼容的 analyze_diff 方法
-    pub fn analyze_diff(&mut self, diff_text: &str) -> Result<DiffAnalysis, TreeSitterError> {
+    pub fn analyze_diff(&mut self, diff_text: &str) -> Result<DiffAnalysis, AppError> {
         let git_diff = parse_git_diff(diff_text)?;
 
         let mut file_analyses = Vec::new();
@@ -756,7 +756,7 @@ impl TreeSitterAnalyzer {
         let change_pattern = ChangePattern::MixedChange; // 简化的模式检测
         
         // 根据分析深度动态调整阈值
-        let (major_threshold, moderate_threshold) = match self.config.analysis_depth.as_str() {
+        let (major_threshold, moderate_threshold) = match self.config.get_analysis_depth().as_str() {
             "shallow" | "basic" => (30, 10),  // 较高阈值，更容易归类为minor
             "deep" => (10, 3),                // 较低阈值，更敏感地检测变更
             _ => (20, 5),                     // 默认medium深度

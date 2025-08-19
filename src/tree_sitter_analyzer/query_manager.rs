@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
-use crate::errors::TreeSitterError;
+use crate::errors::AppError;
 
 /// 查询源配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,15 +107,15 @@ pub struct QueryManager {
 
 impl QueryManager {
     /// 创建新的查询管理器
-    pub fn new(config: QueryManagerConfig) -> Result<Self, TreeSitterError> {
+    pub fn new(config: QueryManagerConfig) -> Result<Self, AppError> {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.network_timeout))
             .build()
-            .map_err(|e| TreeSitterError::QueryError(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(format!("Failed to create HTTP client: {}", e)))?;
 
         // 确保缓存目录存在
         fs::create_dir_all(&config.cache_dir)
-            .map_err(|e| TreeSitterError::IOError(e))?;
+            .map_err(|e| AppError::IO(e))?;
 
         let mut manager = Self {
             config,
@@ -130,7 +130,7 @@ impl QueryManager {
     }
 
     /// 获取查询文件内容
-    pub async fn get_query(&mut self, language: &str, query_type: &str) -> Result<String, TreeSitterError> {
+    pub async fn get_query(&mut self, language: &str, query_type: &str) -> Result<String, AppError> {
         let key = format!("{}:{}", language, query_type);
 
         // 检查缓存
@@ -168,7 +168,7 @@ impl QueryManager {
             return self.load_cached_query(&metadata);
         }
 
-        Err(TreeSitterError::QueryError(format!(
+        Err(AppError::TreeSitter(format!(
             "Failed to get query for {}:{} from any source",
             language, query_type
         )))
@@ -180,7 +180,7 @@ impl QueryManager {
         source: &QuerySource,
         language: &str,
         query_type: &str,
-    ) -> Result<String, TreeSitterError> {
+    ) -> Result<String, AppError> {
         let url = format!(
             "{}/{}/{}.scm",
             source.base_url, language, query_type
@@ -192,10 +192,10 @@ impl QueryManager {
             .get(&url)
             .send()
             .await
-            .map_err(|e| TreeSitterError::QueryError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(format!("HTTP request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(TreeSitterError::QueryError(format!(
+            return Err(AppError::TreeSitter(format!(
                 "HTTP request failed with status: {}",
                 response.status()
             )));
@@ -204,7 +204,7 @@ impl QueryManager {
         let content = response
             .text()
             .await
-            .map_err(|e| TreeSitterError::QueryError(format!("Failed to read response: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(format!("Failed to read response: {}", e)))?;
 
         Ok(content)
     }
@@ -216,18 +216,18 @@ impl QueryManager {
         language: &str,
         query_type: &str,
         content: &str,
-    ) -> Result<(), TreeSitterError> {
+    ) -> Result<(), AppError> {
         let key = format!("{}:{}", language, query_type);
         
         // 创建语言目录
         let lang_dir = self.config.cache_dir.join(language);
         fs::create_dir_all(&lang_dir)
-            .map_err(|e| TreeSitterError::IOError(e))?;
+            .map_err(|e| AppError::IO(e))?;
 
         // 写入查询文件
         let file_path = lang_dir.join(format!("{}.scm", query_type));
         fs::write(&file_path, content)
-            .map_err(|e| TreeSitterError::IOError(e))?;
+            .map_err(|e| AppError::IO(e))?;
 
         // 计算文件哈希
         let file_hash = self.calculate_hash(content);
@@ -252,9 +252,9 @@ impl QueryManager {
     }
 
     /// 加载缓存的查询文件
-    fn load_cached_query(&self, metadata: &QueryMetadata) -> Result<String, TreeSitterError> {
+    fn load_cached_query(&self, metadata: &QueryMetadata) -> Result<String, AppError> {
         fs::read_to_string(&metadata.file_path)
-            .map_err(|e| TreeSitterError::IOError(e))
+            .map_err(|e| AppError::IO(e))
     }
 
     /// 检查缓存是否有效
@@ -277,35 +277,35 @@ impl QueryManager {
     }
 
     /// 加载元数据
-    fn load_metadata(&mut self) -> Result<(), TreeSitterError> {
+    fn load_metadata(&mut self) -> Result<(), AppError> {
         let metadata_file = self.config.cache_dir.join("metadata.json");
         
         if metadata_file.exists() {
             let content = fs::read_to_string(&metadata_file)
-                .map_err(|e| TreeSitterError::IOError(e))?;
+                .map_err(|e| AppError::IO(e))?;
             
             self.metadata = serde_json::from_str(&content)
-                .map_err(|e| TreeSitterError::QueryError(format!("Failed to parse metadata: {}", e)))?;
+                .map_err(|e| AppError::TreeSitter(format!("Failed to parse metadata: {}", e)))?;
         }
 
         Ok(())
     }
 
     /// 保存元数据
-    fn save_metadata(&self) -> Result<(), TreeSitterError> {
+    fn save_metadata(&self) -> Result<(), AppError> {
         let metadata_file = self.config.cache_dir.join("metadata.json");
         
         let content = serde_json::to_string_pretty(&self.metadata)
-            .map_err(|e| TreeSitterError::QueryError(format!("Failed to serialize metadata: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(format!("Failed to serialize metadata: {}", e)))?;
         
         fs::write(&metadata_file, content)
-            .map_err(|e| TreeSitterError::IOError(e))?;
+            .map_err(|e| AppError::IO(e))?;
 
         Ok(())
     }
 
     /// 清理过期缓存
-    pub fn cleanup_cache(&mut self) -> Result<(), TreeSitterError> {
+    pub fn cleanup_cache(&mut self) -> Result<(), AppError> {
         let now = SystemTime::now();
         let mut to_remove = Vec::new();
 
@@ -318,7 +318,7 @@ impl QueryManager {
                     // 删除文件
                     if metadata.file_path.exists() {
                         fs::remove_file(&metadata.file_path)
-                            .map_err(|e| TreeSitterError::IOError(e))?;
+                            .map_err(|e| AppError::IO(e))?;
                     }
                 }
             }
@@ -333,7 +333,7 @@ impl QueryManager {
     }
 
     /// 强制更新所有查询
-    pub async fn force_update_all(&mut self) -> Result<(), TreeSitterError> {
+    pub async fn force_update_all(&mut self) -> Result<(), AppError> {
         let keys: Vec<String> = self.metadata.keys().cloned().collect();
         
         for key in keys {

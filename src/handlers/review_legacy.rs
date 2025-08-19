@@ -1,7 +1,7 @@
 use crate::{
     clients::devops_client::DevOpsClient, // Added
     config::{AppConfig, TreeSitterConfig},
-    errors::{AIError, AppError}, // DevOpsError import removed
+    errors::AppError,
     handlers::analysis::AIAnalysisEngine,
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
@@ -1182,7 +1182,7 @@ async fn generate_ai_review_prompt(
 }
 
 /// Send review request to AI
-async fn send_review_to_ai(config: &AppConfig, prompt: &str, language: Option<&str>) -> Result<String, AIError> {
+async fn send_review_to_ai(config: &AppConfig, prompt: &str, language: Option<&str>) -> Result<String, AppError> {
     // Get effective language
     let effective_language_string = match language {
         Some(lang) => {

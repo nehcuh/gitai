@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig,
-    errors::{AIError, AppError},
+    errors::AppError,
     handlers::ai::execute_review_request,
     types::{
         ai::{
@@ -232,21 +232,9 @@ impl AIAnalysisEngine {
                 tracing::debug!("AI analysis completed successfully");
                 Ok(response)
             }
-            Err(AIError::RequestFailed(e)) => {
-                tracing::error!("AI request failed during analysis: {}", e);
-                Err(AppError::AI(AIError::RequestFailed(e)))
-            }
-            Err(AIError::ResponseParseFailed(e)) => {
-                tracing::error!("AI response parse failed during analysis: {}", e);
-                Err(AppError::AI(AIError::ResponseParseFailed(e)))
-            }
-            Err(AIError::ApiResponseError(status, msg)) => {
-                tracing::error!("AI API response error during analysis: {} - {}", status, msg);
-                Err(AppError::AI(AIError::ApiResponseError(status, msg)))
-            }
             Err(e) => {
-                tracing::error!("Unexpected AI error during analysis: {:?}", e);
-                Err(AppError::AI(e))
+                tracing::error!("AI request failed during analysis: {:?}", e);
+                Err(AppError::AI(format!("AI请求失败: {:?}", e)))
             }
         }
     }

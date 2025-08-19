@@ -2,7 +2,7 @@ use crate::config::RuleManagerConfig;
 use crate::errors::AppError;
 use shellexpand;
 use std::path::{PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use std::process::Command;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -45,10 +45,9 @@ pub struct RuleManager {
 impl RuleManager {
     pub fn new(config: RuleManagerConfig) -> Result<Self, AppError> {
         // Use the rules path directly since build.rs already handles downloading
-        let cache_path = Self::resolve_cache_path(&config.path)?;
+        let cache_path = Self::resolve_cache_path(&config.get_path())?;
         if !cache_path.exists() {
-            std::fs::create_dir_all(&cache_path)
-                .map_err(|e| AppError::FileWrite(cache_path.to_string_lossy().to_string(), e))?;
+            std::fs::create_dir_all(&cache_path)?;
         }
         
         // Load existing version info if available
@@ -78,9 +77,9 @@ impl RuleManager {
             for error in &validation_result.errors {
                 println!("  - {}", error);
             }
-            return Err(AppError::Config(crate::errors::ConfigError::Other(
+            return Err(AppError::Config(
                 "Rule validation failed, update aborted".to_string()
-            )));
+            ));
         }
         
         if !validation_result.warnings.is_empty() {
@@ -123,9 +122,8 @@ impl RuleManager {
         }
         
         // Also check for any .yml files in the cache root (for backward compatibility)
-        for entry in std::fs::read_dir(&self.cache_path)
-            .map_err(|e| AppError::FileRead(self.cache_path.to_string_lossy().to_string(), e))? {
-            let entry = entry.map_err(|e| AppError::FileRead("directory entry".to_string(), e))?;
+        for entry in std::fs::read_dir(&self.cache_path)? {
+            let entry = entry?;
             let path = entry.path();
             if path.is_file() && path.extension().map_or(false, |ext| ext == "yml") {
                 rule_paths.push(path);
@@ -160,21 +158,25 @@ impl RuleManager {
     
     /// Get current commit hash from remote repository
     async fn get_remote_commit_hash(&self) -> Result<String, AppError> {
-        let git_url = if self.config.url.ends_with(".git") {
-            self.config.url.clone()
+        let git_url = if let Some(url) = &self.config.url {
+            if url.ends_with(".git") {
+                url.clone()
+            } else {
+                format!("{}.git", url)
+            }
         } else {
-            format!("{}.git", self.config.url)
+            return Err(AppError::Config("规则仓库URL未配置".to_string()));
         };
         let output = Command::new("git")
             .args(&["ls-remote", &git_url, "HEAD"])
             .output()
-            .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("Failed to get remote commit hash: {}", e))))?;
+            .map_err(|e| AppError::Git(format!("Failed to get remote commit hash: {}", e)))?;
         
         if !output.status.success() {
-            return Err(AppError::Git(crate::errors::GitError::Other(format!(
+            return Err(AppError::Git(format!(
                 "Failed to get remote commit hash: {}", 
                 String::from_utf8_lossy(&output.stderr)
-            ))));
+            )));
         }
         
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -182,9 +184,9 @@ impl RuleManager {
             .lines()
             .next()
             .and_then(|line| line.split_whitespace().next())
-            .ok_or_else(|| AppError::Git(crate::errors::GitError::Other(
+            .ok_or_else(|| AppError::Git(
                 "Failed to parse remote commit hash".to_string()
-            )))?;
+            ))?;
         
         Ok(commit_hash.to_string())
     }
@@ -197,11 +199,9 @@ impl RuleManager {
         // Create backup if repository exists
         if rules_repo_path.exists() {
             if backup_path.exists() {
-                std::fs::remove_dir_all(&backup_path)
-                    .map_err(|e| AppError::FileWrite(backup_path.to_string_lossy().to_string(), e))?;
+                std::fs::remove_dir_all(&backup_path)?;
             }
-            std::fs::rename(&rules_repo_path, &backup_path)
-                .map_err(|e| AppError::FileWrite(rules_repo_path.to_string_lossy().to_string(), e))?;
+            std::fs::rename(&rules_repo_path, &backup_path)?;
         }
         
         let result = self.download_rules_impl().await;
@@ -210,8 +210,7 @@ impl RuleManager {
             Ok(version) => {
                 // Success - remove backup
                 if backup_path.exists() {
-                    std::fs::remove_dir_all(&backup_path)
-                        .map_err(|e| AppError::FileWrite(backup_path.to_string_lossy().to_string(), e))?;
+                    std::fs::remove_dir_all(&backup_path)?;
                 }
                 Ok(version)
             }
@@ -219,11 +218,9 @@ impl RuleManager {
                 // Failure - restore backup
                 if backup_path.exists() {
                     if rules_repo_path.exists() {
-                        std::fs::remove_dir_all(&rules_repo_path)
-                            .map_err(|e| AppError::FileWrite(rules_repo_path.to_string_lossy().to_string(), e))?;
+                        std::fs::remove_dir_all(&rules_repo_path)?;
                     }
-                    std::fs::rename(&backup_path, &rules_repo_path)
-                        .map_err(|e| AppError::FileWrite(rules_repo_path.to_string_lossy().to_string(), e))?;
+                    std::fs::rename(&backup_path, &rules_repo_path)?;
                 }
                 Err(e)
             }
@@ -241,13 +238,13 @@ impl RuleManager {
                 .args(&["pull", "origin", "main"])
                 .current_dir(&rules_repo_path)
                 .output()
-                .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("Failed to execute git pull: {}", e))))?;
+                .map_err(|e| AppError::Git(format!("Failed to execute git pull: {}", e)))?;
             
             if !output.status.success() {
-                return Err(AppError::Git(crate::errors::GitError::Other(format!(
+                return Err(AppError::Git(format!(
                     "Git pull failed: {}", 
                     String::from_utf8_lossy(&output.stderr)
-                ))));
+                )));
             }
             println!("Successfully updated scan rules repository");
         } else {
@@ -256,26 +253,29 @@ impl RuleManager {
             
             // Remove existing directory if it exists but isn't a git repo
             if rules_repo_path.exists() {
-                std::fs::remove_dir_all(&rules_repo_path)
-                    .map_err(|e| AppError::FileWrite(rules_repo_path.to_string_lossy().to_string(), e))?;
+                std::fs::remove_dir_all(&rules_repo_path)?;
             }
             
-            let git_url = if self.config.url.ends_with(".git") {
-                self.config.url.clone()
+            let git_url = if let Some(url) = &self.config.url {
+                if url.ends_with(".git") {
+                    url.clone()
+                } else {
+                    format!("{}.git", url)
+                }
             } else {
-                format!("{}.git", self.config.url)
+                return Err(AppError::Config("规则仓库URL未配置".to_string()));
             };
             let output = Command::new("git")
                 .args(&["clone", &git_url, "scan-rules"])
                 .current_dir(&self.cache_path)
                 .output()
-                .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("Failed to execute git clone: {}", e))))?;
+                .map_err(|e| AppError::Git(format!("Failed to execute git clone: {}", e)))?;
             
             if !output.status.success() {
-                return Err(AppError::Git(crate::errors::GitError::Other(format!(
+                return Err(AppError::Git(format!(
                     "Git clone failed: {}", 
                     String::from_utf8_lossy(&output.stderr)
-                ))));
+                )));
             }
             println!("Successfully cloned scan rules repository");
         }
@@ -295,8 +295,8 @@ impl RuleManager {
 
     fn collect_rule_files(&self, dir: &PathBuf, rule_paths: &mut Vec<PathBuf>) -> Result<(), AppError> {
         for entry in std::fs::read_dir(dir)
-            .map_err(|e| AppError::FileRead(dir.to_string_lossy().to_string(), e))? {
-            let entry = entry.map_err(|e| AppError::FileRead("directory entry".to_string(), e))?;
+            .map_err(|e| AppError::IO(e))? {
+            let entry = entry.map_err(|e| AppError::IO(e))?;
             let path = entry.path();
             
             if path.is_dir() {
@@ -315,13 +315,13 @@ impl RuleManager {
             .args(&["rev-parse", "HEAD"])
             .current_dir(repo_path)
             .output()
-            .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("Failed to get local commit hash: {}", e))))?;
+            .map_err(|e| AppError::Git(format!("Failed to get local commit hash: {}", e)))?;
         
         if !output.status.success() {
-            return Err(AppError::Git(crate::errors::GitError::Other(format!(
+            return Err(AppError::Git(format!(
                 "Failed to get local commit hash: {}", 
                 String::from_utf8_lossy(&output.stderr)
-            ))));
+            )));
         }
         
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -409,7 +409,7 @@ impl RuleManager {
     /// Validate a single rule file
     fn validate_single_rule(&self, rule_path: &PathBuf) -> Result<bool, AppError> {
         let content = fs::read_to_string(rule_path)
-            .map_err(|e| AppError::FileRead(rule_path.to_string_lossy().to_string(), e))?;
+            .map_err(|e| AppError::IO(e))?;
         
         // Basic YAML validation
         match serde_yaml::from_str::<serde_yaml::Value>(&content) {
@@ -432,10 +432,10 @@ impl RuleManager {
     fn load_version_info(cache_path: &PathBuf) -> Result<RuleVersion, AppError> {
         let version_path = cache_path.join(".version.json");
         let content = fs::read_to_string(&version_path)
-            .map_err(|e| AppError::FileRead(version_path.to_string_lossy().to_string(), e))?;
+            .map_err(|e| AppError::IO(e))?;
         
         serde_json::from_str(&content)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(format!("Failed to parse version info: {}", e))))
+            .map_err(|e| AppError::Config(format!("Failed to parse version info: {}", e)))
     }
     
     /// Save version information to cache
@@ -443,10 +443,10 @@ impl RuleManager {
         if let Some(version) = &self.version_info {
             let version_path = self.cache_path.join(".version.json");
             let content = serde_json::to_string_pretty(version)
-                .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(format!("Failed to serialize version info: {}", e))))?;
+                .map_err(|e| AppError::Config(format!("Failed to serialize version info: {}", e)))?;
             
             fs::write(&version_path, content)
-                .map_err(|e| AppError::FileWrite(version_path.to_string_lossy().to_string(), e))?;
+                .map_err(|e| AppError::IO(e))?;
         }
         Ok(())
     }

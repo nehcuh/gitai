@@ -156,12 +156,11 @@ impl LocalScanner {
                 parent = p.parent();
             }
             // Use config-based default instead of hardcoded path
-            parent.unwrap_or_else(|| {
-                std::path::Path::new(&self.config.scan.rule_manager.path)
-            })
+            let default_path = self.config.scan.rule_manager.path.as_deref().unwrap_or(".");
+            parent.unwrap_or_else(|| std::path::Path::new(default_path))
         } else {
-            // Use config-based default instead of hardcoded path
-            std::path::Path::new(&self.config.scan.rule_manager.path)
+            let default_path = self.config.scan.rule_manager.path.as_deref().unwrap_or(".");
+            std::path::Path::new(default_path)
         };
         
         tracing::info!("Using rules directory: {}", rules_dir.display());
@@ -409,10 +408,10 @@ impl LocalScanner {
             
             // Validate that the path exists
             if !path.exists() {
-                return Err(AppError::FileRead(
-                    path.to_string_lossy().to_string(),
-                    std::io::Error::new(std::io::ErrorKind::NotFound, "Path does not exist")
-                ));
+                return Err(AppError::File(format!(
+                    "Path does not exist: {}",
+                    path.display()
+                )));
             }
             
             // Convert to absolute path for consistency
@@ -420,13 +419,13 @@ impl LocalScanner {
                 path
             } else {
                 std::env::current_dir()
-                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .map_err(|e| AppError::IO(e))?
                     .join(path)
             }
         } else {
             // No path specified - scan current directory
             std::env::current_dir()
-                .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                .map_err(|e| AppError::IO(e))?
         };
 
         println!("Scanning directory: {}", scan_path.display());
@@ -452,15 +451,15 @@ impl LocalScanner {
                 scan_path
             } else {
                 std::env::current_dir()
-                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .map_err(|e| AppError::IO(e))?
                     .join(scan_path)
             };
             repo_owned = Repository::open(&repo_path)
-                .map_err(|e| AppError::Git(crate::errors::GitError::Other(format!("无法打开仓库 {}: {}", repo_path.display(), e))))?;
+                .map_err(|e| AppError::Git(format!("无法打开仓库 {}: {}", repo_path.display(), e)))?;
             &repo_owned
         } else {
             // Fallback to the instance repo if no path specified
-            self.repo.as_ref().ok_or_else(|| AppError::Git(crate::errors::GitError::NotARepository))?
+            self.repo.as_ref().ok_or_else(|| AppError::Git("NotARepository".to_string()))?
         };
 
         let mut diff_options = DiffOptions::new();
@@ -473,7 +472,7 @@ impl LocalScanner {
             if let Ok(head_tree) = head.peel_to_tree() {
                 // Normal case: repository has commits, use diff
                 let diff = repo.diff_tree_to_workdir_with_index(Some(&head_tree), Some(&mut diff_options))
-                    .map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+                    .map_err(|e| AppError::Git(e.to_string()))?;
 
                 diff.foreach(
                     &mut |delta, _| {
@@ -485,7 +484,7 @@ impl LocalScanner {
                     None,
                     None,
                     None,
-                ).map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+                ).map_err(|e| AppError::Git(e.to_string()))?;
             } else {
                 // HEAD exists but no tree (empty repository), get all untracked files
                 tracing::info!("仓库为空（无提交历史），扫描所有未跟踪文件");
@@ -501,7 +500,7 @@ impl LocalScanner {
 
         // Get repository root directory
         let repo_workdir = repo.workdir()
-            .ok_or_else(|| AppError::Git(crate::errors::GitError::Other("Repository has no working directory".to_string())))?;
+            .ok_or_else(|| AppError::Git("Repository has no working directory".to_string()))?;
 
         // Filter by scan path if specified
         let filtered_files: Vec<PathBuf> = if let Some(scan_path_str) = path {
@@ -509,22 +508,22 @@ impl LocalScanner {
             
             // Validate that the scan path exists
             if !scan_path.exists() {
-                return Err(AppError::FileRead(
-                    scan_path.to_string_lossy().to_string(),
-                    std::io::Error::new(std::io::ErrorKind::NotFound, "Scan path does not exist")
-                ));
+                return Err(AppError::File(format!(
+                    "Scan path does not exist: {}",
+                    scan_path.display()
+                )));
             }
             
             // Convert scan path to absolute and canonicalize it
             let absolute_scan_path = if scan_path.is_absolute() {
                 scan_path.canonicalize()
-                    .map_err(|e| AppError::FileRead(scan_path.to_string_lossy().to_string(), e))?
+                    .map_err(|e| AppError::IO(e))?
             } else {
                 std::env::current_dir()
-                    .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+                    .map_err(|e| AppError::IO(e))?
                     .join(&scan_path)
                     .canonicalize()
-                    .map_err(|e| AppError::FileRead(scan_path.to_string_lossy().to_string(), e))?
+                    .map_err(|e| AppError::IO(e))?
             };
             
             tracing::debug!("Filtering incremental scan files for directory: {}", absolute_scan_path.display());
@@ -574,7 +573,7 @@ impl LocalScanner {
         status_options.include_ignored(false);
         
         let statuses = repo.statuses(Some(&mut status_options))
-            .map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+            .map_err(|e| AppError::Git(e.to_string()))?;
         
         let mut files = Vec::new();
         for entry in statuses.iter() {
@@ -605,10 +604,10 @@ impl LocalScanner {
     /// Recursively scan a directory and all its subdirectories
     fn scan_directory_recursive(&self, dir_path: &Path, files: &mut Vec<PathBuf>) -> Result<(), AppError> {
         let entries = fs::read_dir(dir_path)
-            .map_err(|e| AppError::FileRead(dir_path.to_string_lossy().to_string(), e))?;
+            .map_err(|e| AppError::IO(e))?;
         
         for entry in entries {
-            let entry = entry.map_err(|e| AppError::FileRead("directory entry".to_string(), e))?;
+            let entry = entry.map_err(|e| AppError::IO(e))?;
             let entry_path = entry.path();
             
             // Skip entries that should be ignored
@@ -741,7 +740,7 @@ impl LocalScanner {
         
         for rule_path in rule_paths {
             let content = fs::read_to_string(rule_path)
-                .map_err(|e| AppError::FileRead(rule_path.to_string_lossy().to_string(), e))?;
+                .map_err(|e| AppError::IO(e))?;
             
             // Try to add rule to AST engine
             match self.ast_engine.add_rule(&content) {
@@ -756,8 +755,8 @@ impl LocalScanner {
             }
             
             let yaml_value: Value = serde_yaml::from_str(&content)
-                .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(format!("Failed to parse rule file {}: {}", 
-                                                    rule_path.display(), e))))?;
+                .map_err(|e| AppError::Config(format!("Failed to parse rule file {}: {}", 
+                                                    rule_path.display(), e)))?;
             
             // Parse ast-grep rule format for compatibility
             if let Some(rule) = self.parse_ast_grep_rule(&yaml_value, rule_path)? {
@@ -784,9 +783,9 @@ impl LocalScanner {
             
             let language = rule_map.get("language")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| AppError::Config(crate::errors::ConfigError::Other(
+                .ok_or_else(|| AppError::Config(
                     format!("Rule {} missing required 'language' field", id)
-                )))?
+                ))?
                 .to_string();
             
             let severity = rule_map.get("severity")
@@ -826,9 +825,9 @@ impl LocalScanner {
                 if let Some(pattern_str) = rule_map.get("pattern").and_then(|v| v.as_str()) {
                     AstGrepRuleConfig::Pattern(pattern_str.to_string())
                 } else {
-                    return Err(AppError::Config(crate::errors::ConfigError::Other(
+                    return Err(AppError::Config(
                         format!("Rule {} missing 'rule' section", id)
-                    )));
+                    ));
                 }
             };
             
@@ -1160,7 +1159,7 @@ impl LocalScanner {
 
         // Create ast-grep source
         let source = ts_lang.ast_grep(content).map_err(|e| {
-            AppError::Config(crate::errors::ConfigError::Other(
+            AppError::Config(
                 format!("Failed to parse source with ast-grep: {:?}", e)
             ))
         })?;
@@ -1168,13 +1167,13 @@ impl LocalScanner {
         // Create a simple pattern rule
         let pattern_rule = format!("pattern: |\n  {}", pattern);
         let rule_core: SerializableRuleCore = serde_yaml::from_str(&pattern_rule)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to parse pattern into SerializableRuleCore: {}", e)
             )))?;
 
         // Create rule config
         let rule_config = ast_grep_config::RuleConfig::try_from(rule_core)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(
+            .map_err(|e| AppError::Config(
                 format!("Failed to create RuleConfig: {:?}", e)
             )))?;
 
@@ -1272,16 +1271,16 @@ impl LocalScanner {
         
         // Fallback to current directory name
         std::env::current_dir()
-            .map_err(|e| AppError::FileRead("current directory".to_string(), e))?
+            .map_err(|e| AppError::IO(e))?
             .file_name()
             .and_then(|name| name.to_str())
             .map(|name| name.to_string())
-            .ok_or_else(|| AppError::Config(crate::errors::ConfigError::Other("Could not determine repository name".to_string())))
+            .ok_or_else(|| AppError::Config("Could not determine repository name".to_string()))
     }
 
     fn get_current_commit_id(&self) -> Result<String, AppError> {
         if let Some(repo) = &self.repo {
-            let head = repo.head().map_err(|e| AppError::Git(crate::errors::GitError::Other(e.to_string())))?;
+            let head = repo.head().map_err(|e| AppError::Git(e.to_string()))?;
             if let Some(oid) = head.target() {
                 return Ok(oid.to_string());
             }
@@ -1294,14 +1293,15 @@ impl LocalScanner {
         let results_path = if let Some(path) = output_path {
             PathBuf::from(path)
         } else {
-            let base_path = shellexpand::tilde(&self.config.scan.results_path);
-            let mut path = PathBuf::from(base_path.as_ref());
+            let base_path = self.config.scan.get_results_path();
+            let expanded_path = shellexpand::tilde(&base_path);
+            let mut path = PathBuf::from(expanded_path.as_ref());
             path.push(&result.repository);
             
             // Create directory if it doesn't exist
             if !path.exists() {
                 std::fs::create_dir_all(&path)
-                    .map_err(|e| AppError::FileWrite(path.to_string_lossy().to_string(), e))?;
+                    .map_err(|e| AppError::IO(e))?;
             }
             
             // Create a more descriptive filename with timestamp and scan type
@@ -1317,10 +1317,10 @@ impl LocalScanner {
         };
         
         let json_content = serde_json::to_string_pretty(result)
-            .map_err(|e| AppError::Config(crate::errors::ConfigError::Other(format!("Failed to serialize scan result: {}", e))))?;
+            .map_err(|e| AppError::Config(format!("Failed to serialize scan result: {}", e)))?;
         
         std::fs::write(&results_path, json_content)
-            .map_err(|e| AppError::FileWrite(results_path.to_string_lossy().to_string(), e))?;
+            .map_err(|e| AppError::IO(e))?;
         
         println!("Scan results saved to: {}", results_path.display());
         Ok(())
@@ -1358,21 +1358,21 @@ impl DefaultRemoteScanner {
 
 impl RemoteScanner for DefaultRemoteScanner {
     async fn scan_remote(&self, _args: &ScanArgs, _rules: &[AstGrepRule]) -> Result<ScanResult, AppError> {
-        Err(AppError::Config(crate::errors::ConfigError::Other(
+        Err(AppError::Config(
             "Remote scanning is not yet implemented".to_string()
-        )))
+        ))
     }
     
     async fn upload_files(&self, _files: &[PathBuf]) -> Result<String, AppError> {
-        Err(AppError::Config(crate::errors::ConfigError::Other(
+        Err(AppError::Config(
             "Remote file upload is not yet implemented".to_string()
-        )))
+        ))
     }
     
     async fn get_results(&self, _scan_id: &str) -> Result<ScanResult, AppError> {
-        Err(AppError::Config(crate::errors::ConfigError::Other(
+        Err(AppError::Config(
             "Remote result retrieval is not yet implemented".to_string()
-        )))
+        ))
     }
     
     async fn is_available(&self) -> Result<bool, AppError> {

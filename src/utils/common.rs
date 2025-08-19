@@ -284,7 +284,7 @@ pub fn get_git_repo_name() -> Result<String, AppError> {
     let output = Command::new("git")
         .args(&["rev-parse", "--show-toplevel"])
         .output()
-        .map_err(|e| AppError::IO("Failed to get git repository path".to_string(), e))?;
+        .map_err(AppError::IO)?;
     
     if !output.status.success() {
         return Err(AppError::Generic("Not in a Git repository".to_string()));
@@ -305,7 +305,7 @@ pub fn get_current_commit_id() -> Result<String, AppError> {
     let output = Command::new("git")
         .args(&["rev-parse", "--short", "HEAD"])
         .output()
-        .map_err(|e| AppError::IO("Failed to get current commit ID".to_string(), e))?;
+        .map_err(AppError::IO)?;
     
     if !output.status.success() {
         return Err(AppError::Generic("Failed to get current commit ID".to_string()));
@@ -365,9 +365,9 @@ pub fn find_latest_review_file(storage_base_path: &str) -> Result<Option<PathBuf
     let mut review_files = Vec::new();
     
     for entry in std::fs::read_dir(&repo_dir)
-        .map_err(|e| AppError::IO(format!("Failed to read review directory: {:?}", repo_dir), e))?
+        .map_err(|e| AppError::File(format!("Failed to read review directory: {:?}: {}", repo_dir, e)))?
     {
-        let entry = entry.map_err(|e| AppError::IO("Failed to read directory entry".to_string(), e))?;
+        let entry = entry.map_err(|e| AppError::File(format!("Failed to read directory entry: {}", e)))?;
         let path = entry.path();
         
         if path.is_file() {
@@ -402,7 +402,7 @@ pub fn read_review_file(file_path: &Path) -> Result<String, AppError> {
     }
     
     std::fs::read_to_string(file_path)
-        .map_err(|e| AppError::IO(format!("Failed to read review file: {:?}", file_path), e))
+        .map_err(|e| AppError::File(format!("Failed to read review file: {:?}: {}", file_path, e)))
 }
 
 /// Extract key insights from review content for commit message integration

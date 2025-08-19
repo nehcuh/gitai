@@ -201,7 +201,7 @@ async fn translate_rule_file(
     ];
     
     let translated_content = ai::execute_ai_request_generic(config, messages, "翻译", false).await
-        .map_err(|e| AppError::AI(e))?;
+        .map_err(|e| AppError::AI(e.to_string()))?;
     
     // 提取翻译后的YAML内容
     let final_content = extract_yaml_from_translation(&translated_content);

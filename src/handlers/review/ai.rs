@@ -1,6 +1,6 @@
 use crate::{
     config::AppConfig,
-    errors::{AIError, AppError},
+    errors::AppError,
     handlers::analysis::AIAnalysisEngine,
     handlers::ai::execute_review_request_with_language,
 };
@@ -100,7 +100,7 @@ impl AIReviewEngine {
     }
 
     /// Send request to AI service
-    pub async fn send_to_ai(&self, prompt: &str) -> Result<String, AIError> {
+    pub async fn send_to_ai(&self, prompt: &str) -> Result<String, AppError> {
         tracing::debug!("发送请求到 AI 服务");
 
         // Load system prompt from configuration

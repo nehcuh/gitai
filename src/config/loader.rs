@@ -1,5 +1,5 @@
 use std::{collections::HashMap, env, fs, path::PathBuf};
-use crate::errors::ConfigError;
+use crate::errors::{AppError, config_error};
 
 use super::{
     app_config::{AppConfig, PartialAppConfig, abs_template_path, get_template_paths},
@@ -27,7 +27,7 @@ impl ConfigLoader {
     }
 
     /// Load complete application configuration
-    pub fn load_config(&self) -> Result<AppConfig, ConfigError> {
+    pub fn load_config(&self) -> Result<AppConfig, AppError> {
         // Initialize configuration files if they don't exist
         let (config_path, prompt_paths) = self.initialize_config()?;
 
@@ -45,7 +45,7 @@ impl ConfigLoader {
     }
 
     /// Initialize configuration files and directories
-    pub fn initialize_config(&self) -> Result<(PathBuf, HashMap<String, PathBuf>), ConfigError> {
+    pub fn initialize_config(&self) -> Result<(PathBuf, HashMap<String, PathBuf>), AppError> {
         let user_config_path = self.extract_file_path(USER_CONFIG_PATH, CONFIG_FILE_NAME)?;
 
         // Build prompt file paths
@@ -71,7 +71,7 @@ impl ConfigLoader {
 
         // Create directories - use any prompt path for directory creation
         let sample_prompt_path = user_prompt_paths.values().next()
-            .ok_or_else(|| ConfigError::Other("No prompt paths available".to_string()))?;
+            .ok_or_else(|| config_error("没有可用的提示词路径"))?;
         self.create_config_directories(&user_config_path, sample_prompt_path)?;
 
         // Initialize missing files
@@ -81,7 +81,7 @@ impl ConfigLoader {
     }
 
     /// Extract file path with tilde expansion and base path override
-    fn extract_file_path(&self, base_dir: &str, file_name: &str) -> Result<PathBuf, ConfigError> {
+    fn extract_file_path(&self, base_dir: &str, file_name: &str) -> Result<PathBuf, AppError> {
         let expanded_base = if let Some(base_path) = &self.base_path {
             // For testing: use custom base path
             base_path.join(base_dir.trim_start_matches("~/"))
@@ -109,7 +109,7 @@ impl ConfigLoader {
     }
 
     /// Log information about existing files
-    fn log_existing_files(&self, existing_count: u32) -> Result<(), ConfigError> {
+    fn log_existing_files(&self, existing_count: u32) -> Result<(), AppError> {
         match existing_count {
             count if count == TOTAL_CONFIG_FILE_COUNT => {
                 tracing::info!("所有 {} 个配置文件已存在，将直接使用", count);
@@ -121,7 +121,7 @@ impl ConfigLoader {
                 );
             }
             count if count > TOTAL_CONFIG_FILE_COUNT => {
-                return Err(ConfigError::Other(format!(
+                return Err(config_error(format!(
                     "发现 {}/{} 个配置文件，超过全局配置文件需求",
                     count, TOTAL_CONFIG_FILE_COUNT,
                 )));
@@ -139,19 +139,15 @@ impl ConfigLoader {
         &self,
         config_path: &PathBuf,
         prompt_path: &PathBuf
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), AppError> {
         // Create config directory
         if let Some(config_dir) = config_path.parent() {
-            fs::create_dir_all(config_dir).map_err(|e| {
-                ConfigError::FileWrite(config_dir.to_string_lossy().to_string(), e)
-            })?;
+            fs::create_dir_all(config_dir)?;
         }
 
         // Create prompt directory
         if let Some(prompt_dir) = prompt_path.parent() {
-            fs::create_dir_all(prompt_dir).map_err(|e| {
-                ConfigError::FileWrite(prompt_dir.to_string_lossy().to_string(), e)
-            })?;
+            fs::create_dir_all(prompt_dir)?;
         }
 
         Ok(())
@@ -162,7 +158,7 @@ impl ConfigLoader {
         &self,
         config_path: &PathBuf,
         prompt_paths: &HashMap<String, PathBuf>
-    ) -> Result<(), ConfigError> {
+    ) -> Result<(), AppError> {
         let templates = get_template_paths();
 
         // Initialize config file
@@ -178,15 +174,11 @@ impl ConfigLoader {
     }
 
     /// Initialize a single config file from template
-    fn initialize_config_file(&self, target_path: &PathBuf, template_path: &str) -> Result<(), ConfigError> {
+    fn initialize_config_file(&self, target_path: &PathBuf, template_path: &str) -> Result<(), AppError> {
         let template_full_path = abs_template_path(template_path);
-        let content = fs::read_to_string(&template_full_path).map_err(|e| {
-            ConfigError::FileRead(template_full_path.to_string_lossy().to_string(), e)
-        })?;
+        let content = fs::read_to_string(&template_full_path)?;
 
-        fs::write(target_path, content).map_err(|e| {
-            ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
-        })?;
+        fs::write(target_path, content)?;
 
         tracing::info!("已初始化配置文件: {:?}", target_path);
         Ok(())
@@ -196,8 +188,8 @@ impl ConfigLoader {
     fn initialize_prompt_files(
         &self,
         prompt_paths: &HashMap<String, PathBuf>,
-        templates: &HashMap<&str, &str>
-    ) -> Result<(), ConfigError> {
+        _templates: &HashMap<&str, &str>
+    ) -> Result<(), AppError> {
         let prompt_types = [
             ("commit_generator", "commit-generator"),
             ("commit_deviation", "commit-deviation"),
@@ -219,61 +211,37 @@ impl ConfigLoader {
         Ok(())
     }
 
-    /// Initialize a single prompt file from template
-    fn initialize_prompt_file(&self, target_path: &PathBuf, template_path: &str) -> Result<(), ConfigError> {
-        let template_full_path = abs_template_path(template_path);
-        let content = fs::read_to_string(&template_full_path).map_err(|e| {
-            ConfigError::FileRead(template_full_path.to_string_lossy().to_string(), e)
-        })?;
-
-        fs::write(target_path, content).map_err(|e| {
-            ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
-        })?;
-
-        tracing::info!("已初始化提示词文件: {:?}", target_path);
-        Ok(())
-    }
 
     /// Initialize a prompt file from assets directory with language support
-    fn initialize_prompt_file_from_assets(&self, target_path: &PathBuf, template_key: &str) -> Result<(), ConfigError> {
+    fn initialize_prompt_file_from_assets(&self, target_path: &PathBuf, template_key: &str) -> Result<(), AppError> {
         let template_path = format!("assets/prompts/cn/{}.md", template_key.replace("_", "-"));
         let template_full_path = abs_template_path(&template_path);
         
         let content = if template_full_path.exists() {
             // Use language-specific template if available
-            fs::read_to_string(&template_full_path).map_err(|e| {
-                ConfigError::FileRead(template_full_path.to_string_lossy().to_string(), e)
-            })?
+            fs::read_to_string(&template_full_path)?
         } else {
             // Fall back to default template from root assets directory
             let fallback_template = format!("assets/{}.md", template_key.replace("_", "-"));
             let fallback_path = abs_template_path(&fallback_template);
-            fs::read_to_string(&fallback_path).map_err(|e| {
-                ConfigError::FileRead(fallback_path.to_string_lossy().to_string(), e)
-            })?
+            fs::read_to_string(&fallback_path)?
         };
 
-        fs::write(target_path, content).map_err(|e| {
-            ConfigError::FileWrite(target_path.to_string_lossy().to_string(), e)
-        })?;
+        fs::write(target_path, content)?;
 
         tracing::info!("已初始化提示词文件: {:?}", target_path);
         Ok(())
     }
 
     /// Load partial configuration from TOML file
-    fn load_partial_config(&self, config_path: &PathBuf) -> Result<Option<PartialAppConfig>, ConfigError> {
+    fn load_partial_config(&self, config_path: &PathBuf) -> Result<Option<PartialAppConfig>, AppError> {
         if !config_path.exists() {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(config_path).map_err(|e| {
-            ConfigError::FileRead(config_path.to_string_lossy().to_string(), e)
-        })?;
+        let content = fs::read_to_string(config_path)?;
 
-        let partial_config: PartialAppConfig = toml::from_str(&content).map_err(|e| {
-            ConfigError::Other(format!("Failed to parse config file: {}", e))
-        })?;
+        let partial_config: PartialAppConfig = toml::from_str(&content)?;
 
         Ok(Some(partial_config))
     }
@@ -302,14 +270,12 @@ impl ConfigLoader {
     }
 
     /// Load prompt templates from files
-    fn load_prompts(&self, prompt_paths: &HashMap<String, PathBuf>) -> Result<HashMap<String, String>, ConfigError> {
+    fn load_prompts(&self, prompt_paths: &HashMap<String, PathBuf>) -> Result<HashMap<String, String>, AppError> {
         let mut prompts = HashMap::new();
 
         for (key, path) in prompt_paths {
             if path.exists() {
-                let content = fs::read_to_string(path).map_err(|e| {
-                    ConfigError::FileRead(path.to_string_lossy().to_string(), e)
-                })?;
+                let content = fs::read_to_string(path)?;
                 prompts.insert(key.clone(), content);
             }
         }

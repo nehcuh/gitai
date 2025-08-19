@@ -1,5 +1,5 @@
 use crate::{
-    errors::{AppError, GitError},
+    errors::AppError,
     handlers::git,
 };
 
@@ -17,7 +17,7 @@ impl RepositoryManager {
     /// Check if current directory is a git repository
     pub fn check_repository_status(&self) -> Result<(), AppError> {
         if !git::is_git_repository()? {
-            return Err(AppError::Git(GitError::NotARepository));
+            return Err(AppError::Git("NotARepository".to_string()));
         }
         Ok(())
     }
@@ -39,7 +39,7 @@ impl RepositoryManager {
         let has_changes = !diff_content.trim().is_empty();
 
         if !has_changes {
-            return Err(AppError::Git(GitError::NoStagedChanges));
+            return Err(AppError::Git("NoStagedChanges".to_string()));
         }
 
         Ok(GitOperationResult {

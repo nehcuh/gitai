@@ -1,6 +1,6 @@
 use crate::{
     config::{AppConfig, TreeSitterConfig},
-    errors::{AppError, GitError},
+    errors::{AppError, git_error},
     handlers::{ai, git},
     tree_sitter_analyzer::{
         analyzer::TreeSitterAnalyzer,
@@ -65,7 +65,7 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
     // Get changes for commit
     let diff = get_changes_for_commit().await?;
     if diff.trim().is_empty() {
-        return Err(AppError::Git(GitError::NoStagedChanges));
+        return Err(AppError::Git("没有暂存的更改"));
     }
     
     // Generate commit message using AI with optional Tree-sitter analysis and review context
@@ -114,7 +114,7 @@ pub async fn handle_commit(config: &AppConfig, args: CommitArgs) -> Result<(), A
 /// Check if current directory is a git repository
 fn check_repository_status() -> Result<(), AppError> {
     if !git::is_git_repository()? {
-        return Err(AppError::Git(GitError::NotARepository));
+        return Err(AppError::Git("不是Git仓库"));
     }
     Ok(())
 }
@@ -423,10 +423,10 @@ fn format_enhanced_commit_message(
 /// Ask user to confirm the commit message
 fn confirm_commit_message(_message: &str) -> Result<bool, AppError> {
     print!("\n是否使用此提交信息? [Y/n] ");
-    io::stdout().flush().map_err(|e| AppError::IO("输出刷新失败".to_string(), e))?;
+    io::stdout().flush().map_err(|e| AppError::File(format!("输出刷新失败: {}", e)))?;
     
     let mut input = String::new();
-    io::stdin().read_line(&mut input).map_err(|e| AppError::IO("读取用户输入失败".to_string(), e))?;
+    io::stdin().read_line(&mut input).map_err(|e| AppError::File(format!("读取用户输入失败: {}", e)))?;
     
     let input = input.trim().to_lowercase();
     Ok(input.is_empty() || input == "y" || input == "yes" || input == "是")
@@ -629,8 +629,8 @@ mod tests {
             Err(e) => {
                 // Expected in test environment
                 match e {
-                    AppError::Git(GitError::NotARepository) => assert!(true),
-                    AppError::Git(GitError::NoStagedChanges) => assert!(true),
+                    AppError::Git("不是Git仓库") => assert!(true),
+                    AppError::Git("没有暂存的更改") => assert!(true),
                     AppError::Generic(msg) => {
                         assert!(msg.contains("没有已暂存的变更") || msg.contains("检查Git仓库状态失败"));
                     }
@@ -661,8 +661,8 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Git(GitError::NotARepository) => assert!(true),
-                    AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
+                    AppError::Git("不是Git仓库") => assert!(true),
+                    AppError::Git("Git命令失败" { .. }) => assert!(true),
                     AppError::Generic(_) => assert!(true),
                     _ => assert!(true),
                 }
@@ -695,7 +695,7 @@ mod tests {
             Err(e) => {
                 // Expected error types in test environment
                 match e {
-                    AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
+                    AppError::Git("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
@@ -717,7 +717,7 @@ mod tests {
                     AppError::Generic(msg) => {
                         assert!(msg.contains("没有检测到任何变更") || msg.contains("没有已暂存的变更"));
                     }
-                    AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
+                    AppError::Git("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }
@@ -737,7 +737,7 @@ mod tests {
             Err(e) => {
                 // Expected in test environment
                 match e {
-                    AppError::Git(GitError::CommandFailed { command, .. }) => {
+                    AppError::Git("Git命令失败" { command, .. }) => {
                         assert!(command.contains("git commit"));
                     }
                     _ => assert!(true),
@@ -988,7 +988,7 @@ mod tests {
             Err(e) => {
                 // Expected errors in test environment
                 match e {
-                    AppError::Git(GitError::NotARepository) => assert!(true),
+                    AppError::Git("不是Git仓库") => assert!(true),
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
                     _ => assert!(true),
                 }
@@ -1002,7 +1002,7 @@ mod tests {
             }
             Err(e) => {
                 match e {
-                    AppError::Git(GitError::NotARepository) => assert!(true),
+                    AppError::Git("不是Git仓库") => assert!(true),
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
                     _ => assert!(true),
                 }
@@ -1071,7 +1071,7 @@ mod tests {
                 // Expected errors in test environment
                 match e {
                     AppError::Generic(msg) if msg.contains("没有检测到任何变更") => assert!(true),
-                    AppError::Git(GitError::CommandFailed { .. }) => assert!(true),
+                    AppError::Git("Git命令失败" { .. }) => assert!(true),
                     AppError::IO(_, _) => assert!(true),
                     _ => assert!(true),
                 }

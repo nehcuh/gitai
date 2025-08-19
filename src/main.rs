@@ -37,7 +37,7 @@ async fn main() -> Result<(), AppError> {
     let mut config = match AppConfig::load() {
         // Prefix with underscore to mark as unused
         Ok(config) => config,
-        Err(e) => return Err(AppError::Config(e)),
+        Err(e) => return Err(AppError::Config(e.to_string())),
     };
 
     // Handling cmd args
@@ -211,10 +211,16 @@ async fn main() -> Result<(), AppError> {
         Ok(_) => {
             tracing::debug!("✅ Git 命令执行成功");
         },
-        Err(AppError::Git(crate::errors::GitError::CommandFailed { status_code, .. })) => {
-            tracing::debug!("❌ Git 命令执行失败，退出码: {:?}", status_code);
-            // Maintain same exit status as original git command
-            std::process::exit(status_code.unwrap_or(1));
+        Err(AppError::Git(error_msg)) => {
+            tracing::debug!("❌ Git 命令执行失败: {}", error_msg);
+            // Extract exit code from error message if possible, otherwise use 1
+            let exit_code = error_msg
+                .split("Exit code: ")
+                .nth(1)
+                .and_then(|s| s.split_whitespace().next())
+                .and_then(|code| code.parse::<i32>().ok())
+                .unwrap_or(1);
+            std::process::exit(exit_code);
         }
         Err(e) => {
             tracing::error!("💥 gitai 内部错误: {}", e);
@@ -308,9 +314,8 @@ async fn handle_check_ast_grep() -> Result<(), AppError> {
 /// Handle MCP services startup command
 async fn handle_start_mcp_services(config: &AppConfig) -> Result<(), AppError> {
     use crate::mcp::{init_gitai_mcp_manager, GitAiMcpConfig};
-    use crate::mcp::services::{GitService, GitServiceHandler};
+    use crate::mcp::services::GitService;
     use std::sync::Arc;
-    use std::path::PathBuf;
 
     println!("{}", "🚀 GitAI MCP 服务启动器".bright_blue().bold());
     

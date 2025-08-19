@@ -414,7 +414,7 @@ impl GitAiMcpBridge {
     /// 获取缓存的扫描结果
     async fn get_cached_scan_result(&self, scan_path: &str, full_scan: bool) -> Result<String, McpError> {
         use std::fs;
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::SystemTime;
         
         // 使用仓库名作为缓存键
         let repo_name = self.get_repository_name_from_path(scan_path)?;
@@ -489,7 +489,7 @@ impl GitAiMcpBridge {
     }
 
     /// 解析并格式化扫描输出
-    async fn parse_and_format_scan_output(&self, stdout: &[u8], scan_path: &str) -> Result<String, McpError> {
+    async fn parse_and_format_scan_output(&self, _stdout: &[u8], scan_path: &str) -> Result<String, McpError> {
         // 根据扫描路径确定仓库名
         let repo_name = self.get_repository_name_from_path(scan_path)?;
         

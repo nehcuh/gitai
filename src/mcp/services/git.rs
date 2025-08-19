@@ -2,22 +2,19 @@
 // 
 // 封装 GitAI 增强的 git 功能为 MCP 工具，提供智能化的 git 操作能力
 // 对于已被 GitAI 增强的功能，调用 GitAI 实现；对于原生功能，调用原生 git
-
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use crate::mcp::{McpService, RmcpResult, RmcpError};
+use crate::mcp::{McpService, RmcpResult};
 use crate::config::AppConfig;
 use crate::handlers::commit::handle_commit;
 use crate::handlers::review::handle_review_with_output_in_dir;
-use crate::types::git::{CommitArgs, ReviewArgs};
 use crate::utils::{construct_commit_args, construct_review_args};
-use rmcp::model::{Tool, Resource};
+use rmcp::model::Tool;
 use crate::mcp::rmcp_compat::{
     ServiceError, ToolBuilder, CompatServerHandler, 
-    create_param, create_object_schema,
+    create_param,
 };
 
 /// GitAI 增强 Git MCP 服务

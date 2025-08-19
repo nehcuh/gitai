@@ -1,13 +1,11 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use rmcp::{
-    handler::server::ServerHandler,
     model::{ServerInfo, Tool, Resource, Implementation, ServerCapabilities, ProtocolVersion},
 };
 use crate::mcp::rmcp_compat::{
-    ServiceError, ToolBuilder, CompatServerHandler, ServerHandlerAdapter,
-    create_param, create_object_schema,
+    ServiceError, ToolBuilder, CompatServerHandler,
+    create_param,
 };
 
 use crate::{

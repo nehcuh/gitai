@@ -41,27 +41,23 @@ impl CommitAnalyzer {
             let mut ts_config = TreeSitterConfig::default();
             
             // Set analysis depth based on args
-            if let Some(depth) = args_depth {
-                ts_config.analysis_depth = depth;
-            } else {
-                ts_config.analysis_depth = "medium".to_string(); // Default for commit
-            }
+            ts_config.analysis_depth = args_depth.or(Some("medium".to_string()));
             
             let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
                 tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
-                AppError::TreeSitter(e)
+                AppError::TreeSitter(e.to_string())
             })?;
 
             // Parse the diff to get structured representation
             let git_diff = parse_git_diff(&diff_owned).map_err(|e| {
                 tracing::error!("解析Git差异失败: {:?}", e);
-                AppError::TreeSitter(e)
+                AppError::TreeSitter(e.to_string())
             })?;
 
             // Generate analysis using TreeSitter
             let analysis = analyzer.analyze_diff(&diff_owned).map_err(|e| {
                 tracing::error!("执行差异分析失败: {:?}", e);
-                AppError::TreeSitter(e)
+                AppError::TreeSitter(e.to_string())
             })?;
             
             tracing::debug!("差异分析结果: {:?}", analysis);
@@ -106,12 +102,12 @@ impl CommitAnalyzer {
 
     /// Check if Tree-sitter analysis is available
     pub fn is_analysis_available(&self) -> bool {
-        self.tree_sitter_config.enabled
+        self.tree_sitter_config.enabled == Some(true)
     }
 
     /// Get supported languages for analysis
     pub fn get_supported_languages(&self) -> &[String] {
-        &self.tree_sitter_config.languages
+        self.tree_sitter_config.languages.as_deref().unwrap_or(&[])
     }
 
     /// Validate diff content for analysis

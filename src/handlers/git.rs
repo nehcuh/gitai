@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use crate::{
-    errors::{AppError, GitError},
+    errors::AppError,
     types::{general::CommandOutput, git::ReviewArgs},
 };
 
@@ -10,10 +10,7 @@ pub fn passthrough_to_git(args: &[String]) -> Result<(), AppError> {
 
     // 检查状态以保持原始行为一致
     if !result.status.success() {
-        return Err(AppError::Git(GitError::PassthroughFailed {
-            command: format!("git: {}", args.join(" ")),
-            status_code: result.status.code(),
-        }));
+        return Err(AppError::Git(format!("Command failed: git {} - Exit code: {:?}", args.join(" "), result.status.code())));
     }
 
     Ok(())
@@ -35,7 +32,9 @@ pub fn passthrough_to_git_with_error_handling(
     let output = Command::new("git")
         .args(&command_to_run)
         .output()
-        .map_err(|e| AppError::IO(format!("执行系统 git 命令失败: git {}", cmd_str_log), e))?;
+        .map_err(|e| {
+            AppError::Git(format!("执行系统 git 命令失败: git {}: {}", cmd_str_log, e))
+        })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -56,10 +55,7 @@ pub fn passthrough_to_git_with_error_handling(
 
         // 只有当不需要错误处理时才返回错误
         if !handle_error {
-            return Err(AppError::Git(GitError::PassthroughFailed {
-                command: format!("git {}", cmd_str_log),
-                status_code: output.status.code(),
-            }));
+            return Err(AppError::Git(format!("Command failed: git {} - Exit code: {:?}", cmd_str_log, output.status.code())));
         }
         // 当handle_error为true时，我们将继续执行并返回Ok结果
     }
@@ -87,7 +83,7 @@ pub fn is_git_repository_in_dir(dir: Option<&str>) -> Result<bool, AppError> {
     let result = cmd
         .args(&["rev-parse", "--is-inside-work-tree"])
         .output()
-        .map_err(|e| AppError::IO("检查Git仓库状态失败".to_string(), e))?;
+        .map_err(AppError::IO)?;
     
     Ok(result.status.success())
 }
@@ -125,9 +121,7 @@ pub async fn get_formatted_repository_status_in_dir(dir: Option<&str>) -> Result
     // 首先检查指定目录是否是 git 仓库
     if !is_git_repository_in_dir(dir)? {
         let path_desc = dir.unwrap_or("当前目录");
-        return Err(AppError::Git(crate::errors::GitError::NotRepository {
-            path: path_desc.to_string(),
-        }));
+        return Err(AppError::Git(format!("Not a git repository: {}", path_desc)));
     }
     
     let status_output = get_repository_status_in_dir(dir).await?;
@@ -286,12 +280,7 @@ pub async fn auto_stage_tracked_files_in_dir(dir: Option<&str>) -> Result<(), Ap
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {
-        return Err(AppError::Git(GitError::CommandFailed {
-            command: "git add -u".to_string(),
-            status_code: result.status.code(),
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }));
+        return Err(AppError::Git(format!("Command failed: git add -u - Exit code: {:?}\nStdout: {}\nStderr: {}", result.status.code(), result.stdout, result.stderr)));
     }
     
     Ok(())
@@ -312,12 +301,7 @@ pub async fn execute_commit_with_message_in_dir(message: &str, dir: Option<&str>
     let result = passthrough_to_git_with_error_handling(&args, false)?;
     
     if !result.status.success() {
-        return Err(AppError::Git(GitError::CommandFailed {
-            command: format!("git commit -m \"{}\"", message),
-            status_code: result.status.code(),
-            stdout: result.stdout,
-            stderr: result.stderr,
-        }));
+        return Err(AppError::Git(format!("Command failed: git commit -m \"{}\" - Exit code: {:?}\nStdout: {}\nStderr: {}", message, result.status.code(), result.stdout, result.stderr)));
     }
     
     Ok(())

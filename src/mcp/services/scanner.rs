@@ -1,9 +1,8 @@
 use rmcp::{
-    handler::server::ServerHandler,
     model::{ServerInfo, Tool, Resource, Implementation, ServerCapabilities, ProtocolVersion},
 };
 use crate::mcp::rmcp_compat::{
-    ServiceError, CompatServerHandler, ServerHandlerAdapter,
+    ServiceError, CompatServerHandler,
 };
 use crate::mcp::{McpService, RmcpResult};
 

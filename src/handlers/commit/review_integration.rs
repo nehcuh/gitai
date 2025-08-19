@@ -19,8 +19,8 @@ impl ReviewIntegrator {
     /// Create integrator from review config
     pub fn from_review_config(review_config: &crate::config::ReviewConfig) -> Self {
         let config = ReviewIntegrationConfig {
-            enabled: review_config.include_in_commit,
-            storage_path: review_config.storage_path.clone(),
+            enabled: review_config.include_in_commit.unwrap_or(false),
+            storage_path: review_config.storage_path.clone().unwrap_or_else(|| ".".to_string()),
             include_in_message: true,
         };
         Self::new(config)
