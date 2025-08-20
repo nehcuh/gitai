@@ -301,7 +301,6 @@ impl GitService {
                     props.insert("message".to_string(), create_param("string", "自定义提交信息（可选，如果不提供将由 AI 生成）"));
                     props.insert("auto_stage".to_string(), create_param("boolean", "是否自动暂存所有修改的文件"));
                     props.insert("tree_sitter".to_string(), create_param("boolean", "是否启用 Tree-sitter 分析"));
-                    props.insert("depth".to_string(), create_param("string", "分析深度"));
                     props.insert("issue_id".to_string(), create_param("string", "工单号（可选）"));
                     props.insert("review".to_string(), create_param("boolean", "是否集成代码评审结果"));
                     props.insert("working_dir".to_string(), create_param("string", "工作目录（可选）"));
