@@ -228,12 +228,7 @@ async fn analyze_diff_with_tree_sitter(
         // Initialize TreeSitter analyzer with analysis depth
         let mut ts_config = TreeSitterConfig::default();
         
-        // Set analysis depth based on args
-        if let Some(depth) = args_depth {
-            ts_config.analysis_depth = depth;
-        } else {
-            ts_config.analysis_depth = "medium".to_string(); // Default for commit
-        }
+        // AST分析不需要深度概念，移除无意义的analysis_depth参数
         
         let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
             tracing::error!("TreeSitter分析器初始化失败: {:?}", e);

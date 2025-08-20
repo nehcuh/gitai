@@ -4,7 +4,7 @@ use crate::{
     handlers::ai::execute_review_request,
     types::{
         ai::{
-            AnalysisDepth, AnalysisRequest, AnalysisResult, CodeQualityAnalysis, Deviation,
+            AnalysisRequest, AnalysisResult, CodeQualityAnalysis, Deviation,
             DeviationSeverity, Recommendation, RequirementAnalysis, RiskAssessment,
         },
         devops::AnalysisWorkItem,
@@ -62,7 +62,6 @@ impl AIAnalysisEngine {
     fn build_requirement_analysis_prompt(&self, request: &AnalysisRequest) -> Result<String, AppError> {
         let work_items_description = self.format_work_items_for_analysis(&request.work_items)?;
         let focus_areas_text = self.format_focus_areas(&request.focus_areas);
-        let analysis_depth_instruction = self.get_analysis_depth_instruction(&request.analysis_depth);
 
         let prompt = format!(
             r#"你是一位资深的代码评审专家和需求分析师。请分析以下代码变更与业务需求的一致性。
@@ -76,7 +75,7 @@ impl AIAnalysisEngine {
 ```
 
 ## 分析要求
-{analysis_depth_instruction}
+请进行标准分析，全面评估实现质量和需求一致性。
 
 {focus_areas_text}
 
@@ -153,7 +152,6 @@ impl AIAnalysisEngine {
 请确保分析客观、准确，提供可执行的建议。"#,
             work_items_description = work_items_description,
             git_diff = request.git_diff,
-            analysis_depth_instruction = analysis_depth_instruction,
             focus_areas_text = focus_areas_text
         );
 
@@ -213,14 +211,6 @@ impl AIAnalysisEngine {
         }
     }
 
-    /// Gets analysis depth specific instructions
-    fn get_analysis_depth_instruction(&self, depth: &AnalysisDepth) -> &'static str {
-        match depth {
-            AnalysisDepth::Basic => "请进行基础分析，关注主要的功能实现和明显的问题。",
-            AnalysisDepth::Normal => "请进行标准分析，全面评估实现质量和需求一致性。",
-            AnalysisDepth::Deep => "请进行深度分析，详细检查代码逻辑、性能、安全性和最佳实践。",
-        }
-    }
 
     /// Executes the AI analysis request
     async fn execute_ai_analysis(&self, prompt: &str) -> Result<String, AppError> {
@@ -415,18 +405,6 @@ mod tests {
         assert!(result.contains("性能"));
     }
 
-    #[test]
-    fn test_get_analysis_depth_instruction() {
-        let engine = AIAnalysisEngine::new(create_test_config());
-        
-        let basic = engine.get_analysis_depth_instruction(&AnalysisDepth::Basic);
-        let normal = engine.get_analysis_depth_instruction(&AnalysisDepth::Normal);
-        let deep = engine.get_analysis_depth_instruction(&AnalysisDepth::Deep);
-        
-        assert!(basic.contains("基础分析"));
-        assert!(normal.contains("标准分析"));
-        assert!(deep.contains("深度分析"));
-    }
 
     #[test]
     fn test_extract_json_from_response() {
@@ -461,7 +439,6 @@ mod tests {
             work_items: vec![create_test_work_item()],
             git_diff: "test diff".to_string(),
             focus_areas: None,
-            analysis_depth: AnalysisDepth::Normal,
             output_format: crate::types::ai::OutputFormat::Json,
         };
         
@@ -608,7 +585,6 @@ mod tests {
             work_items: vec![create_test_work_item()],
             git_diff: "diff content".to_string(),
             focus_areas: Some(vec!["安全性".to_string(), "性能".to_string()]),
-            analysis_depth: AnalysisDepth::Deep,
             output_format: crate::types::ai::OutputFormat::Json,
         };
         
@@ -616,7 +592,7 @@ mod tests {
         
         assert!(result.contains("工作项信息"));
         assert!(result.contains("代码变更"));
-        assert!(result.contains("深度分析"));
+        assert!(result.contains("标准分析"));
         assert!(result.contains("重点关注领域"));
         assert!(result.contains("安全性、性能"));
         assert!(result.contains("diff content"));
@@ -629,13 +605,12 @@ mod tests {
             work_items: vec![],
             git_diff: "simple diff".to_string(),
             focus_areas: None,
-            analysis_depth: AnalysisDepth::Basic,
             output_format: crate::types::ai::OutputFormat::Text,
         };
         
         let result = engine.build_requirement_analysis_prompt(&request).unwrap();
         
-        assert!(result.contains("基础分析"));
+        assert!(result.contains("标准分析"));
         assert!(result.contains("无关联的工作项信息"));
         assert!(!result.contains("重点关注领域"));
     }
@@ -647,7 +622,6 @@ mod tests {
             work_items: vec![],
             git_diff: "test".to_string(),
             focus_areas: None,
-            analysis_depth: AnalysisDepth::Normal,
             output_format: crate::types::ai::OutputFormat::Json,
         };
         

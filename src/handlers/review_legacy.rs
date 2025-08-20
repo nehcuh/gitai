@@ -247,9 +247,9 @@ async fn analyze_diff_with_tree_sitter(
     let depth = depth.to_string();
 
     tokio::task::spawn_blocking(move || {
-        // Initialize TreeSitter analyzer with analysis depth
+        // Initialize TreeSitter analyzer 
         let mut config = TreeSitterConfig::default();
-        config.analysis_depth = depth.to_string();
+        // AST分析不需要深度概念，移除无意义的analysis_depth参数
         let mut analyzer = TreeSitterAnalyzer::new(config).map_err(|e| {
             tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
             tree_sitter_error(e)
@@ -714,32 +714,7 @@ mod tests {
         assert_eq!(analysis_item.description, Some("实现测试功能".to_string()));
     }
 
-    #[test]
-    fn test_analysis_depth_parsing() {
-        use crate::types::ai::AnalysisDepth;
-        
-        // Test depth parsing logic
-        let basic_depth = match "basic" {
-            "basic" => AnalysisDepth::Basic,
-            "deep" => AnalysisDepth::Deep,
-            _ => AnalysisDepth::Normal,
-        };
-        assert!(matches!(basic_depth, AnalysisDepth::Basic));
-
-        let deep_depth = match "deep" {
-            "basic" => AnalysisDepth::Basic,
-            "deep" => AnalysisDepth::Deep,
-            _ => AnalysisDepth::Normal,
-        };
-        assert!(matches!(deep_depth, AnalysisDepth::Deep));
-
-        let normal_depth = match "medium" {
-            "basic" => AnalysisDepth::Basic,
-            "deep" => AnalysisDepth::Deep,
-            _ => AnalysisDepth::Normal,
-        };
-        assert!(matches!(normal_depth, AnalysisDepth::Normal));
-    }
+    // test_analysis_depth_parsing removed - AnalysisDepth parameter has been removed
 
     #[test]
     fn test_output_format_parsing() {
@@ -832,13 +807,6 @@ async fn perform_enhanced_ai_analysis(
         .map(|item| item.into())
         .collect();
     
-    // Parse analysis depth from review args
-    let analysis_depth = match review_args.depth.as_str() {
-        "basic" => AnalysisDepth::Basic,
-        "deep" => AnalysisDepth::Deep,
-        _ => AnalysisDepth::Normal,
-    };
-    
     // Parse output format from review args
     let output_format = match review_args.format.as_str() {
         "json" => OutputFormat::Json,
@@ -852,7 +820,6 @@ async fn perform_enhanced_ai_analysis(
         work_items: analysis_work_items,
         git_diff: diff_text.to_string(),
         focus_areas: review_args.focus.as_ref().map(|f| vec![f.clone()]),
-        analysis_depth,
         output_format,
     };
     
@@ -1279,7 +1246,7 @@ async fn format_and_output_review(review_text: &str, args: &ReviewArgs) -> Resul
                 "timestamp": timestamp,
                 "format_version": "1.0",
                 "generator": "gitai",
-                "analysis_depth": args.depth,
+                "analysis_depth_removed": true,
                 "focus": args.focus,
                 "language": args.language
             })

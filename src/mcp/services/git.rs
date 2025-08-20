@@ -502,7 +502,6 @@ mod tests {
             },
             tree_sitter: TreeSitterConfig {
                 enabled: true,
-                analysis_depth: "medium".to_string(),
                 cache_enabled: true,
                 languages: vec!["rust".to_string(), "javascript".to_string()],
             },

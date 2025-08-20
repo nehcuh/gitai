@@ -389,7 +389,6 @@ retry_count = 3
 
 [tree_sitter]
 enabled = true
-analysis_depth = "medium"
 cache_enabled = true
 languages = ["rust", "python", "javascript", "typescript", "go", "java", "c", "cpp"]
 

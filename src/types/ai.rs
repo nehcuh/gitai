@@ -51,14 +51,6 @@ pub struct OpenAIChoice {
 // AI Analysis Types for Story 04: AI Analysis Integration
 // ============================================================================
 
-/// Analysis depth levels for configuring AI analysis granularity
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub enum AnalysisDepth {
-    Basic,
-    Normal,
-    Deep,
-}
-
 /// Output format options for analysis results
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum OutputFormat {
@@ -86,8 +78,6 @@ pub struct AnalysisRequest {
     pub git_diff: String,
     /// Optional focus areas for analysis (e.g., "security", "performance")
     pub focus_areas: Option<Vec<String>>,
-    /// Analysis depth level
-    pub analysis_depth: AnalysisDepth,
     /// Output format for results
     pub output_format: OutputFormat,
 }

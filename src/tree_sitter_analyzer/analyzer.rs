@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use streaming_iterator::StreamingIterator;
+use std::path::Path;
 use tree_sitter::{Parser, Query, QueryCursor};
+use streaming_iterator::StreamingIterator;
 
 use crate::config::TreeSitterConfig;
-use crate::errors::{AppError, tree_sitter_error, tree_sitter_language_error, tree_sitter_parse_error, tree_sitter_file_parse_error, tree_sitter_query_compilation_error};
+use crate::errors::AppError;
 use crate::types::git::{ChangeType, DiffHunk};
 
 use super::core::{
@@ -17,13 +18,72 @@ use super::language_processor::LanguageProcessor;
 use super::query_provider::QueryType;
 use super::utils::calculate_hash;
 
+// AST 缓存管理器
+struct AstCache {
+    cache: HashMap<PathBuf, FileAst>,
+    max_size: usize,
+}
+
+impl AstCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            cache: HashMap::new(),
+            max_size,
+        }
+    }
+
+    fn get(&self, path: &Path) -> Option<&FileAst> {
+        self.cache.get(path)
+    }
+
+    fn insert(&mut self, path: PathBuf, ast: FileAst) -> Option<FileAst> {
+        // 检查是否需要清理缓存
+        if self.cache.len() >= self.max_size {
+            self.cleanup_oldest();
+        }
+        self.cache.insert(path, ast)
+    }
+
+    fn get_or_insert<F>(&mut self, path: &Path, compute: F) -> Result<FileAst, AppError>
+    where
+        F: FnOnce() -> Result<FileAst, AppError>,
+    {
+        // 检查缓存
+        if let Some(ast) = self.get(path) {
+            return Ok(ast.clone());
+        }
+
+        // 计算新的 AST
+        let ast = compute()?;
+        self.insert(path.to_path_buf(), ast.clone());
+        Ok(ast)
+    }
+
+    fn cleanup_oldest(&mut self) {
+        if let Some(oldest_key) = self.cache.iter()
+            .min_by_key(|(_, ast)| ast.last_parsed)
+            .map(|(path, _)| path.clone())
+        {
+            self.cache.remove(&oldest_key);
+        }
+    }
+
+    fn clear(&mut self) {
+        self.cache.clear();
+    }
+
+    fn len(&self) -> usize {
+        self.cache.len()
+    }
+}
+
 
 
 pub struct TreeSitterAnalyzer {
     pub config: TreeSitterConfig,
     pub project_root: PathBuf,
     language_processor: LanguageProcessor,
-    file_asts: HashMap<PathBuf, FileAst>,
+    ast_cache: AstCache,
 }
 
 // 节点分析配置
@@ -413,19 +473,16 @@ impl TreeSitterAnalyzer {
             config: validated_config,
             project_root: PathBuf::new(),
             language_processor,
-            file_asts: HashMap::new(),
+            ast_cache: AstCache::new(100), // 限制缓存大小为100个文件
         })
     }
 
     pub fn set_project_root(&mut self, root: PathBuf) {
         self.project_root = root;
-        self.file_asts.clear();
+        self.ast_cache.clear();
     }
 
-    pub fn set_analysis_depth(&mut self, depth: String) {
-        self.config.analysis_depth = Some(depth);
-    }
-
+    
     /// 强制更新所有查询 (no-op with new simplified provider)
     pub async fn update_queries(&mut self) -> Result<(), AppError> {
         // With simplified language processor, queries are built-in, no update needed
@@ -450,13 +507,7 @@ impl TreeSitterAnalyzer {
         &self,
         path: &std::path::Path,
     ) -> Result<Option<String>, AppError> {
-        let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-
-        if let Some(config) = self.language_processor.detect_language_by_extension(extension) {
-            Ok(Some(config.name.to_string()))
-        } else {
-            Ok(None)
-        }
+        Ok(self.language_processor.detect_language(path))
     }
 
     pub fn parse_file(&mut self, file_path: &std::path::Path) -> Result<FileAst, AppError> {
@@ -468,22 +519,24 @@ impl TreeSitterAnalyzer {
         // 验证文件扩展名
         let extension = file_path.extension()
             .and_then(|s| s.to_str())
-            .ok_or_else(|| tree_sitter_file_parse_error(
-                file_path.display().to_string(),
-                "No file extension"
-            ))?;
+            .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                file: file_path.display().to_string(), 
+                error: "No file extension".to_string() 
+            }))?;
 
         // 检测语言
         let lang_id = self.detect_language(file_path)?.ok_or_else(|| {
-            tree_sitter_file_parse_error(
-                file_path.display().to_string(), 
-                format!("Unsupported file type: .{}", extension)
-            )
+            AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                file: file_path.display().to_string(), 
+                error: format!("Unsupported file type: .{}", extension) 
+            })
         })?;
 
         // 获取语言配置
         let config = self.language_processor.get_language_config(&lang_id)
-            .ok_or_else(|| tree_sitter_language_error(&lang_id))?;
+            .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::LanguageNotSupported { 
+                language: lang_id.clone() 
+            }))?;
 
         // 读取源代码
         let source_code = fs::read_to_string(file_path)
@@ -494,73 +547,93 @@ impl TreeSitterAnalyzer {
 
         // 验证源代码内容
         if source_code.is_empty() {
-            return Err(tree_sitter_file_parse_error(
-                file_path.display().to_string(),
-                "Empty source file"
-            ));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                file: file_path.display().to_string(), 
+                error: "Empty source file".to_string() 
+            }));
         }
 
         let current_hash = calculate_hash(&source_code);
 
-        // 检查缓存
-        if let Some(cached_ast) = self.file_asts.get(file_path) {
-            if cached_ast.content_hash == current_hash {
-                return Ok(cached_ast.clone());
-            }
-        }
-
-        // 创建并配置parser
-        let mut parser = Parser::new();
-        let language = config.get_language();
-        
-        parser
-            .set_language(&language)
-            .map_err(|e| tree_sitter_query_compilation_error(
-                &lang_id, 
-                format!("Failed to set language: {}", e)
-            ))?;
-
-        // 解析源代码
-        let tree = parser
-            .parse(&source_code, None)
-            .ok_or_else(|| tree_sitter_parse_error(&lang_id))?;
-
-        // 验证语法树的有效性
-        let tree_root = tree.root_node();
-        if tree_root.has_error() {
-            return Err(tree_sitter_file_parse_error(
-                file_path.display().to_string(),
-                "Syntax error in source code"
-            ));
-        }
-
-        let file_ast = FileAst {
-            path: file_path.to_path_buf(),
-            tree,
-            source: source_code,
-            content_hash: current_hash,
-            last_parsed: SystemTime::now(),
-            language_id: lang_id,
-        };
-
-        // 缓存管理
+        // 使用缓存管理器
         if self.config.is_cache_enabled() {
-            // 限制缓存大小，防止内存泄漏
-            if self.file_asts.len() > 100 {
-                // 清理最旧的缓存项
-                let oldest_key = self.file_asts.iter()
-                    .min_by_key(|(_, ast)| ast.last_parsed)
-                    .map(|(path, _)| path.clone());
+            let cache_result = self.ast_cache.get_or_insert(file_path, || {
+                // 创建并配置parser
+                let mut parser = Parser::new();
+                let language = config.get_language();
                 
-                if let Some(key) = oldest_key {
-                    self.file_asts.remove(&key);
-                }
-            }
-            
-            self.file_asts.insert(file_path.to_path_buf(), file_ast.clone());
-        }
+                parser
+                    .set_language(&language)
+                    .map_err(|e| AppError::TreeSitter(crate::errors::TreeSitterError::QueryCompilationFailed { 
+                        language: lang_id.clone(), 
+                        error: format!("Failed to set language: {}", e) 
+                    }))?;
 
-        Ok(file_ast)
+                // 解析源代码
+                let tree = parser
+                    .parse(&source_code, None)
+                    .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::ParseFailed { 
+                        language: lang_id.clone() 
+                    }))?;
+
+                // 验证语法树的有效性
+                let tree_root = tree.root_node();
+                if tree_root.has_error() {
+                    return Err(AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                        file: file_path.display().to_string(), 
+                        error: "Syntax error in source code".to_string() 
+                    }));
+                }
+
+                Ok(FileAst {
+                    path: file_path.to_path_buf(),
+                    tree,
+                    source: source_code,
+                    content_hash: current_hash,
+                    last_parsed: SystemTime::now(),
+                    language_id: lang_id,
+                })
+            })?;
+
+            Ok(cache_result)
+        } else {
+            // 不使用缓存的情况，直接解析
+            // 创建并配置parser
+            let mut parser = Parser::new();
+            let language = config.get_language();
+            
+            parser
+                .set_language(&language)
+                .map_err(|e| AppError::TreeSitter(crate::errors::TreeSitterError::QueryCompilationFailed { 
+                    language: lang_id.clone(), 
+                    error: format!("Failed to set language: {}", e) 
+                }))?;
+
+            // 解析源代码
+            let tree = parser
+                .parse(&source_code, None)
+                .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::ParseFailed { 
+                    language: lang_id.clone() 
+                }))?;
+
+            // 验证语法树的有效性
+            let tree_root = tree.root_node();
+            if tree_root.has_error() {
+                return Err(AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                    file: file_path.display().to_string(), 
+                    error: "Syntax error in source code".to_string() 
+                }));
+            }
+
+            Ok(FileAst {
+                path: file_path.to_path_buf(),
+                tree,
+                source: source_code,
+                content_hash: current_hash,
+                last_parsed: SystemTime::now(),
+                language_id: lang_id,
+            })
+        }
     }
 
     pub fn analyze_file_changes(
@@ -575,7 +648,9 @@ impl TreeSitterAnalyzer {
 
         // 检查语言支持
         if !self.language_processor.is_language_supported(&file_ast.language_id) {
-            return Err(tree_sitter_language_error(&file_ast.language_id));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::LanguageNotSupported { 
+                language: file_ast.language_id.clone() 
+            }));
         }
 
         let mut affected_nodes = self.analyze_generic_file_changes(file_ast, hunks)?;
@@ -605,14 +680,16 @@ impl TreeSitterAnalyzer {
 
         // 获取编译后的查询
         let query = self.language_processor.get_compiled_query(&file_ast.language_id, QueryType::Highlights)
-            .ok_or_else(|| tree_sitter_error(format!("Unsupported language: {}", file_ast.language_id)))?;
+            .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::LanguageNotSupported { 
+                language: file_ast.language_id.clone() 
+            }))?;
 
         // 验证源代码和语法树
         if file_ast.source.is_empty() {
-            return Err(tree_sitter_file_parse_error(
-                file_ast.path.display().to_string(),
-                "Empty source code"
-            ));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                file: file_ast.path.display().to_string(), 
+                error: "Empty source code".to_string() 
+            }));
         }
 
         let source_bytes = file_ast.source.as_bytes();
@@ -620,7 +697,9 @@ impl TreeSitterAnalyzer {
         
         // 验证语法树根节点
         if tree_root.kind().is_empty() {
-            return Err(tree_sitter_parse_error(&file_ast.language_id));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::ParseFailed { 
+                language: file_ast.language_id.clone() 
+            }));
         }
 
         let mut cursor = QueryCursor::new();
@@ -646,10 +725,10 @@ impl TreeSitterAnalyzer {
                     // 检查节点是否与hunk重叠
                     if node_start_line <= hunk_end_line && node_end_line >= hunk_start_line {
                         let content = node.utf8_text(source_bytes)
-                            .map_err(|e| tree_sitter_file_parse_error(
-                                file_ast.path.display().to_string(),
-                                format!("Failed to extract node text: {}", e)
-                            ))?
+                            .map_err(|e| AppError::TreeSitter(crate::errors::TreeSitterError::FileParseFailed { 
+                                file: file_ast.path.display().to_string(), 
+                                error: format!("Failed to extract node text: {}", e) 
+                            }))?
                             .to_string();
                         
                         let node_name = self.extract_node_name(&m, query, source_bytes);
@@ -762,12 +841,12 @@ impl TreeSitterAnalyzer {
     pub fn analyze_diff(&mut self, diff_text: &str) -> Result<DiffAnalysis, AppError> {
         // 验证输入参数
         if diff_text.trim().is_empty() {
-            return Err(tree_sitter_error("Empty diff text"));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::QueryFailed("Empty diff text".to_string())));
         }
 
         // 解析git diff
         let git_diff = parse_git_diff(diff_text)
-            .map_err(|e| tree_sitter_error(format!("Failed to parse git diff: {}", e)))?;
+            .map_err(|e| AppError::TreeSitter(crate::errors::TreeSitterError::QueryFailed(format!("Failed to parse git diff: {}", e))))?;
 
         // 验证解析结果
         if git_diff.changed_files.is_empty() {
@@ -900,12 +979,8 @@ impl TreeSitterAnalyzer {
         // 计算变更范围
         let change_pattern = ChangePattern::MixedChange;
         
-        // 根据分析深度动态调整阈值
-        let (major_threshold, moderate_threshold) = match self.config.get_analysis_depth().as_str() {
-            "shallow" | "basic" => (30, 10),  // 较高阈值，更容易归类为minor
-            "deep" => (10, 3),                // 较低阈值，更敏感地检测变更
-            _ => (20, 5),                     // 默认medium深度
-        };
+        // 使用固定的阈值，AST分析不需要深度概念
+        let (major_threshold, moderate_threshold) = (20, 5);
         
         let change_scope = if total_affected_nodes > major_threshold {
             ChangeScope::Major

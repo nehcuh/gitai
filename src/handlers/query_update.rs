@@ -86,7 +86,6 @@ pub fn handle_query_status() -> Result<(), AppError> {
     }
 
     println!("{}", "Tree-sitter 分析: 已启用".green());
-    println!("分析深度: {}", config.tree_sitter.analysis_depth.as_deref().unwrap_or("未设置").cyan());
     println!("缓存启用: {}", if config.tree_sitter.cache_enabled == Some(true) { "是".green() } else { "否".red() });
     
     // 创建分析器

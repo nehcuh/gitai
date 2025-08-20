@@ -71,7 +71,7 @@ retry_count = 3
 
 [tree_sitter]
 enabled = true
-analysis_depth = "medium"
+# analysis_depth parameter has been removed
 cache_enabled = true
 languages = ["rust", "python", "javascript", "go", "java", "c", "cpp"]
 
@@ -143,7 +143,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "~/gitai-test-projects/simple-test-project",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }'

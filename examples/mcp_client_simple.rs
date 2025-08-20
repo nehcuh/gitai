@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn create_test_config() -> HashMap<String, Value> {
     let mut config = HashMap::new();
     config.insert("ai_model".to_string(), json!("gpt-4"));
-    config.insert("analysis_depth".to_string(), json!("medium"));
+    // analysis_depth parameter has been removed
     config.insert("language".to_string(), json!("cn"));
     config.insert("mcp_endpoint".to_string(), json!("stdio"));
     config.insert("transport".to_string(), json!("stdio"));
@@ -162,7 +162,7 @@ mod tests {
     fn test_create_test_config() {
         let config = create_test_config();
         assert!(config.contains_key("ai_model"));
-        assert!(config.contains_key("analysis_depth"));
+        // analysis_depth parameter has been removed
         assert!(config.contains_key("language"));
         assert!(config.contains_key("mcp_endpoint"));
     }

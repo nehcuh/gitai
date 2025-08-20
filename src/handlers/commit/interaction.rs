@@ -308,7 +308,6 @@ impl UserInteractionManager {
         
         if analysis_info.tree_sitter_used {
             println!("  ✅ Tree-sitter 静态分析已启用");
-            println!("  • 分析深度: {}", analysis_info.analysis_depth);
         }
         
         if analysis_info.review_integrated {
@@ -363,7 +362,6 @@ pub struct CommitStats {
 #[derive(Debug, Clone)]
 pub struct EnhancedAnalysisInfo {
     pub tree_sitter_used: bool,
-    pub analysis_depth: String,
     pub review_integrated: bool,
     pub ai_enhanced: bool,
     pub ai_model: Option<String>,
@@ -523,7 +521,6 @@ mod tests {
     fn test_enhanced_analysis_info() {
         let info = EnhancedAnalysisInfo {
             tree_sitter_used: true,
-            analysis_depth: "deep".to_string(),
             review_integrated: true,
             ai_enhanced: true,
             ai_model: Some("gpt-4".to_string()),
@@ -531,7 +528,6 @@ mod tests {
         };
         
         assert!(info.tree_sitter_used);
-        assert_eq!(info.analysis_depth, "deep");
         assert!(info.review_integrated);
         assert!(info.ai_enhanced);
         assert_eq!(info.ai_model.as_ref().unwrap(), "gpt-4");

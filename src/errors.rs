@@ -184,11 +184,12 @@ pub fn ai_error<S: Into<String>>(msg: S) -> AppError {
     AppError::AI(AIError::Configuration(msg.into()))
 }
 
+// 统一的 tree-sitter 错误构造函数
 pub fn tree_sitter_error<S: Into<String>>(msg: S) -> AppError {
     AppError::TreeSitter(TreeSitterError::QueryFailed(msg.into()))
 }
 
-// 专门的tree-sitter错误构造函数
+// 专门的 tree-sitter 错误构造函数（向后兼容）
 pub fn tree_sitter_parse_error<S: Into<String>>(language: S) -> AppError {
     AppError::TreeSitter(TreeSitterError::ParseFailed { 
         language: language.into() 
@@ -201,13 +202,6 @@ pub fn tree_sitter_language_error<S: Into<String>>(language: S) -> AppError {
     })
 }
 
-pub fn tree_sitter_query_compilation_error<S1: Into<String>, S2: Into<String>>(language: S1, error: S2) -> AppError {
-    AppError::TreeSitter(TreeSitterError::QueryCompilationFailed { 
-        language: language.into(), 
-        error: error.into() 
-    })
-}
-
 pub fn tree_sitter_file_parse_error<S1: Into<String>, S2: Into<String>>(file: S1, error: S2) -> AppError {
     AppError::TreeSitter(TreeSitterError::FileParseFailed { 
         file: file.into(), 
@@ -215,23 +209,50 @@ pub fn tree_sitter_file_parse_error<S1: Into<String>, S2: Into<String>>(file: S1
     })
 }
 
-pub fn tree_sitter_cache_error<S: Into<String>>(operation: S) -> AppError {
-    AppError::TreeSitter(TreeSitterError::CacheFailed { 
-        operation: operation.into() 
-    })
-}
-
-pub fn tree_sitter_config_error<S1: Into<String>, S2: Into<String>>(field: S1, value: S2) -> AppError {
-    AppError::TreeSitter(TreeSitterError::ConfigValidation { 
-        field: field.into(), 
-        value: value.into() 
-    })
-}
-
-pub fn tree_sitter_init_error<S: Into<String>>(reason: S) -> AppError {
-    AppError::TreeSitter(TreeSitterError::InitializationFailed { 
-        reason: reason.into() 
-    })
+// 宏用于创建带上下文的 tree-sitter 错误
+#[macro_export]
+macro_rules! ts_error {
+    (parse, $lang:expr) => {
+        AppError::TreeSitter(TreeSitterError::ParseFailed { 
+            language: $lang.into() 
+        })
+    };
+    (language, $lang:expr) => {
+        AppError::TreeSitter(TreeSitterError::LanguageNotSupported { 
+            language: $lang.into() 
+        })
+    };
+    (query, $lang:expr, $err:expr) => {
+        AppError::TreeSitter(TreeSitterError::QueryCompilationFailed { 
+            language: $lang.into(), 
+            error: $err.into() 
+        })
+    };
+    (file, $file:expr, $err:expr) => {
+        AppError::TreeSitter(TreeSitterError::FileParseFailed { 
+            file: $file.into(), 
+            error: $err.into() 
+        })
+    };
+    (cache, $op:expr) => {
+        AppError::TreeSitter(TreeSitterError::CacheFailed { 
+            operation: $op.into() 
+        })
+    };
+    (config, $field:expr, $value:expr) => {
+        AppError::TreeSitter(TreeSitterError::ConfigValidation { 
+            field: $field.into(), 
+            value: $value.into() 
+        })
+    };
+    (init, $reason:expr) => {
+        AppError::TreeSitter(TreeSitterError::InitializationFailed { 
+            reason: $reason.into() 
+        })
+    };
+    ($msg:expr) => {
+        AppError::TreeSitter(TreeSitterError::QueryFailed($msg.into()))
+    };
 }
 
 pub fn devops_error<S: Into<String>>(msg: S) -> AppError {

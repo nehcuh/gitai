@@ -133,7 +133,6 @@ impl CommitOrchestrator {
     ) -> Result<CommitGenerationResult, AppError> {
         let generation_config = CommitGenerationConfig {
             use_tree_sitter: args.tree_sitter && self.commit_analyzer.is_some(),
-            analysis_depth: args.depth.clone(),
             include_review: review_result.integration_successful,
             custom_message: args.message.clone(),
         };
@@ -166,7 +165,6 @@ impl CommitOrchestrator {
                     let enhanced_request = EnhancedCommitRequest {
                         diff_content: git_result.diff_content.clone(),
                         custom_message: args.message.clone(),
-                        analysis_depth: args.depth.clone().unwrap_or_else(|| "medium".to_string()),
                         review_context: review_result.review_content.clone(),
                     };
                     
@@ -248,7 +246,6 @@ impl CommitOrchestrator {
             if commit_result.enhanced || commit_result.tree_sitter_analysis.is_some() {
                 let analysis_info = EnhancedAnalysisInfo {
                     tree_sitter_used: commit_result.tree_sitter_analysis.is_some(),
-                    analysis_depth: "medium".to_string(), // Could be extracted from config
                     review_integrated: false, // Could be extracted from context
                     ai_enhanced: !commit_result.fallback_used,
                     ai_model: Some(self.config.ai.model_name.clone()),
@@ -378,7 +375,6 @@ mod tests {
             },
             tree_sitter: TreeSitterConfig {
                 enabled: true,
-                analysis_depth: "medium".to_string(),
                 cache_enabled: true,
                 languages: vec!["rust".to_string(), "javascript".to_string()],
             },
@@ -617,13 +613,11 @@ mod tests {
     fn test_commit_generation_config() {
         let config = CommitGenerationConfig {
             use_tree_sitter: true,
-            analysis_depth: Some("deep".to_string()),
             include_review: true,
             custom_message: Some("custom message".to_string()),
         };
         
         assert!(config.use_tree_sitter);
-        assert_eq!(config.analysis_depth, Some("deep".to_string()));
         assert!(config.include_review);
         assert_eq!(config.custom_message, Some("custom message".to_string()));
     }

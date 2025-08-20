@@ -33,7 +33,6 @@ impl CommitMessageGenerator {
                 EnhancedCommitRequest {
                     diff_content: diff.to_string(),
                     custom_message: generation_config.custom_message,
-                    analysis_depth: generation_config.analysis_depth.unwrap_or_else(|| "medium".to_string()),
                     review_context: None,
                 },
             ).await
@@ -506,7 +505,6 @@ mod tests {
         let request = EnhancedCommitRequest {
             diff_content: "diff --git a/test.rs b/test.rs\n+fn new_function() {}".to_string(),
             custom_message: Some("feat: add new function".to_string()),
-            analysis_depth: "medium".to_string(),
             review_context: None,
         };
         
@@ -534,7 +532,6 @@ mod tests {
         // Test basic generation
         let basic_config = CommitGenerationConfig {
             use_tree_sitter: false,
-            analysis_depth: None,
             include_review: false,
             custom_message: None,
         };
@@ -553,7 +550,6 @@ mod tests {
         // Test enhanced generation
         let enhanced_config = CommitGenerationConfig {
             use_tree_sitter: true,
-            analysis_depth: Some("deep".to_string()),
             include_review: false,
             custom_message: Some("feat: custom message".to_string()),
         };

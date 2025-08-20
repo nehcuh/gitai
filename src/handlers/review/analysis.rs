@@ -7,7 +7,7 @@ use crate::{
         core::{detect_language_from_extension, parse_git_diff},
     },
     types::{
-        ai::{AnalysisDepth, AnalysisRequest, OutputFormat},
+        ai::{AnalysisRequest, OutputFormat},
         git::GitDiff,
     },
 };
@@ -100,7 +100,6 @@ impl DiffAnalyzer {
             work_items: Vec::new(), // No work items for TreeSitter analysis
             git_diff: diff_text.to_string(),
             focus_areas: None,
-            analysis_depth: AnalysisDepth::Basic,
             output_format: OutputFormat::Text,
         };
 

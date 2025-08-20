@@ -13,7 +13,6 @@ pub struct CommitContext {
 #[derive(Debug, Clone)]
 pub struct CommitGenerationConfig {
     pub use_tree_sitter: bool,
-    pub analysis_depth: Option<String>,
     pub include_review: bool,
     pub custom_message: Option<String>,
 }
@@ -39,7 +38,6 @@ pub struct BasicCommitRequest {
 pub struct EnhancedCommitRequest {
     pub diff_content: String,
     pub custom_message: Option<String>,
-    pub analysis_depth: String,
     pub review_context: Option<String>,
 }
 

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use tree_sitter::Query;
-use crate::errors::{AppError, tree_sitter_query_compilation_error};
+use crate::errors::AppError;
 
 /// 查询类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -397,14 +397,17 @@ impl QueryProvider {
     /// 编译查询
     pub fn compile_query(&self, language: &str, query_type: QueryType, language_fn: fn() -> tree_sitter::Language) -> Result<Query, AppError> {
         let content = self.get_query_content(language, query_type)
-            .ok_or_else(|| tree_sitter_query_compilation_error(
-                language, 
-                format!("Query not found for type: {:?}", query_type)
-            ))?;
+            .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::QueryCompilationFailed { 
+                language: language.to_string(), 
+                error: format!("Query not found for type: {:?}", query_type) 
+            }))?;
         
         let ts_language = language_fn();
         Query::new(&ts_language, content)
-            .map_err(|e| tree_sitter_query_compilation_error(language, e.to_string()))
+            .map_err(|e| AppError::TreeSitter(crate::errors::TreeSitterError::QueryCompilationFailed { 
+                language: language.to_string(), 
+                error: e.to_string() 
+            }))
     }
     
     /// 获取默认查询内容（fallback）

@@ -67,7 +67,7 @@ retry_count = 3
 
 [tree_sitter]
 enabled = true
-analysis_depth = "medium"
+# analysis_depth parameter has been removed
 cache_enabled = true
 languages = ["rust", "python", "javascript", "go", "java", "c", "cpp"]
 
@@ -260,7 +260,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-review-result.json
@@ -273,7 +273,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "deep",
+      "analysis_depth_removed": true,
       "include_tree_sitter": true,
       "focus": "安全性,性能,可维护性",
       "format": "json"
@@ -290,7 +290,7 @@ curl -X POST http://localhost:8080/tools/call \
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
       "space_id": "726226",
       "stories": "99,100",
-      "analysis_depth": "deep",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-devops-review.json
@@ -581,7 +581,7 @@ for i in {1..20}; do
         "name": "code_review",
         "arguments": {
           "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-          "analysis_depth": "medium",
+          "analysis_depth_removed": true,
           "format": "json"
         }
       }' > mcp-concurrent-result-$i.json &
@@ -685,7 +685,7 @@ time curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "deep",
+      "analysis_depth_removed": true,
       "include_tree_sitter": true,
       "format": "json"
     }
@@ -709,7 +709,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-ai-fail-result.json
@@ -727,7 +727,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-ai-recovery-result.json
@@ -748,7 +748,7 @@ timeout 10 curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-network-fail-result.json
@@ -765,7 +765,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > mcp-network-recovery-result.json
@@ -820,7 +820,7 @@ curl -X POST http://localhost:8080/tools/call \
     "name": "code_review",
     "arguments": {
       "project_path": "'$HOME'/gitai-mcp-test-projects/simple-test",
-      "analysis_depth": "medium",
+      "analysis_depth_removed": true,
       "format": "json"
     }
   }' | jq . > chatwise-test-result.json
@@ -864,7 +864,7 @@ class VSCodeMCPClient:
             "name": "code_review",
             "arguments": {
                 "project_path": project_path,
-                "analysis_depth": "medium",
+                "analysis_depth_removed": true,
                 "format": "json"
             }
         }
@@ -961,7 +961,7 @@ class WebAppMCPClient:
             "name": "code_review",
             "arguments": {
                 "project_path": "$HOME/gitai-mcp-test-projects/simple-test",
-                "analysis_depth": "medium",
+                "analysis_depth_removed": true,
                 "format": "json"
             }
         }

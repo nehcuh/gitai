@@ -33,15 +33,12 @@ impl CommitAnalyzer {
         let analysis_start = Instant::now();
         
         let diff_owned = diff.to_string();
-        let args_depth = args.depth.clone();
+        let _args_depth = args.depth.clone();
         
         // Wrap CPU-intensive operations in spawn_blocking
         let result: Result<(String, Option<DiffAnalysis>), AppError> = tokio::task::spawn_blocking(move || {
-            // Initialize TreeSitter analyzer with analysis depth
-            let mut ts_config = TreeSitterConfig::default();
-            
-            // Set analysis depth based on args
-            ts_config.analysis_depth = args_depth.or(Some("medium".to_string()));
+            // Initialize TreeSitter analyzer 
+            let ts_config = TreeSitterConfig::default();
             
             let mut analyzer = TreeSitterAnalyzer::new(ts_config).map_err(|e| {
                 tracing::error!("TreeSitter分析器初始化失败: {:?}", e);
@@ -89,7 +86,7 @@ impl CommitAnalyzer {
         
         let args = CommitArgs {
             tree_sitter: true,
-            depth: Some(request.analysis_depth),
+            depth: None, // AST分析不需要深度概念
             auto_stage: false,
             message: request.custom_message,
             issue_id: None,
@@ -227,7 +224,6 @@ mod tests {
     fn create_test_config() -> TreeSitterConfig {
         TreeSitterConfig {
             enabled: true,
-            analysis_depth: "medium".to_string(),
             cache_enabled: true,
             languages: vec!["rust".to_string(), "javascript".to_string()],
         }
@@ -304,7 +300,7 @@ mod tests {
         let diff = create_test_diff();
         let args = CommitArgs {
             tree_sitter: true,
-            depth: Some("medium".to_string()),
+            depth: None,
             auto_stage: false,
             message: None,
             issue_id: None,
@@ -333,7 +329,6 @@ mod tests {
         let request = EnhancedCommitRequest {
             diff_content: create_test_diff(),
             custom_message: Some("feat: test feature".to_string()),
-            analysis_depth: "medium".to_string(),
             review_context: None,
         };
         

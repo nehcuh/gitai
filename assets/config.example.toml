@@ -47,9 +47,6 @@ system_prompt = """
 # 是否启用语法树分析功能（默认关闭）
 enabled = true
 
-# 分析深度: "shallow", "medium", "deep"
-analysis_depth = "medium"
-
 # 是否启用缓存
 cache_enabled = true
 

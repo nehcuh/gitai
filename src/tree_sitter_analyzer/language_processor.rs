@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use tree_sitter::Query;
-use crate::errors::{AppError, tree_sitter_init_error, tree_sitter_language_error, tree_sitter_query_compilation_error};
+use crate::errors::AppError;
 use super::core::{LanguageConfig, LanguageRegistry, create_language_registry};
 use super::query_provider::{QueryProvider, QueryType};
 
@@ -22,59 +22,45 @@ impl LanguageProcessor {
 
     /// 初始化所有语言的查询
     pub fn initialize(&mut self) -> Result<(), AppError> {
-        // 验证注册表状态并收集语言名称
-        let language_names: Vec<String> = self.registry.get_all_languages()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
+        let languages = self.registry.get_all_languages();
+        let languages_count = languages.len();
         
-        if language_names.is_empty() {
-            return Err(tree_sitter_init_error("No languages configured in registry"));
+        if languages_count == 0 {
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::InitializationFailed { 
+                reason: "No languages configured in registry".to_string() 
+            }));
         }
         
-        // 清理现有缓存
         self.compiled_queries.clear();
         
-        let mut success_count = 0;
-        let mut failure_count = 0;
-        let mut failed_languages = Vec::new();
+        let mut failed = Vec::new();
+        
+        // 先收集所有语言名称
+        let language_names: Vec<String> = languages.iter().map(|&s| s.to_string()).collect();
         
         for language in language_names {
-            match self.initialize_language_queries(&language) {
-                Ok(_) => success_count += 1,
-                Err(e) => {
-                    failure_count += 1;
-                    failed_languages.push((language, e));
-                }
+            if let Err(e) = self.initialize_language_queries(&language) {
+                failed.push((language, e));
             }
         }
         
-        // 验证初始化结果
-        if success_count == 0 {
-            let error_details = failed_languages
-                .into_iter()
+        // 如果所有语言都失败了，返回错误
+        if failed.len() == languages_count {
+            let error_details = failed.iter()
                 .map(|(lang, err)| format!("{}: {}", lang, err))
                 .collect::<Vec<_>>()
                 .join(", ");
-            
-            return Err(tree_sitter_init_error(format!(
-                "Failed to initialize any language queries. Errors: {}", 
-                error_details
-            )));
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::InitializationFailed { 
+                reason: format!("All languages failed to initialize: {}", error_details) 
+            }));
         }
         
-        // 记录部分失败的情况
-        if failure_count > 0 {
-            eprintln!("Warning: {} languages failed to initialize, {} succeeded", failure_count, success_count);
-            for (language, error) in failed_languages {
+        // 记录失败的语言但不阻止初始化
+        if !failed.is_empty() {
+            eprintln!("Warning: {} languages failed to initialize", failed.len());
+            for (language, error) in failed {
                 eprintln!("  - {}: {}", language, error);
             }
-        }
-        
-        // 验证缓存一致性
-        if self.compiled_queries.len() != success_count {
-            eprintln!("Warning: Query cache size mismatch. Expected: {}, Actual: {}", 
-                success_count, self.compiled_queries.len());
         }
         
         Ok(())
@@ -83,7 +69,9 @@ impl LanguageProcessor {
     /// 初始化单个语言的查询
     fn initialize_language_queries(&mut self, language: &str) -> Result<(), AppError> {
         let config = self.registry.get_config(language)
-            .ok_or_else(|| tree_sitter_language_error(language))?;
+            .ok_or_else(|| AppError::TreeSitter(crate::errors::TreeSitterError::LanguageNotSupported { 
+                language: language.to_string() 
+            }))?;
         
         let mut lang_queries = HashMap::new();
         
@@ -102,15 +90,14 @@ impl LanguageProcessor {
             lang_queries.insert(QueryType::Locals, query);
         }
         
-        if !lang_queries.is_empty() {
-            self.compiled_queries.insert(language.to_string(), lang_queries);
-        } else {
-            return Err(tree_sitter_query_compilation_error(
-                language, 
-                "No queries could be compiled"
-            ));
+        if lang_queries.is_empty() {
+            return Err(AppError::TreeSitter(crate::errors::TreeSitterError::QueryCompilationFailed { 
+                language: language.to_string(), 
+                error: "No queries could be compiled".to_string() 
+            }));
         }
         
+        self.compiled_queries.insert(language.to_string(), lang_queries);
         Ok(())
     }
 
@@ -139,6 +126,14 @@ impl LanguageProcessor {
     /// 根据文件扩展名检测语言
     pub fn detect_language_by_extension(&self, extension: &str) -> Option<&LanguageConfig> {
         self.registry.detect_language_by_extension(extension)
+    }
+
+    /// 简化的语言检测方法
+    pub fn detect_language(&self, file_path: &std::path::Path) -> Option<String> {
+        file_path.extension()
+            .and_then(|ext| ext.to_str())
+            .and_then(|ext| self.detect_language_by_extension(ext))
+            .map(|config| config.name.to_string())
     }
 }
 
