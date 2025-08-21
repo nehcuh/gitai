@@ -350,51 +350,30 @@ pub(crate) async fn extract_diff_for_review_in_dir(args: &ReviewArgs, dir: Optio
             Ok(result.stdout)
         }
         (None, None) => {
-            // Use the existing workspace status detection functions
-            let status_output = get_repository_status_in_dir(dir).await?;
+            // 优先级：staged changes > unstaged changes > 报错
+            tracing::info!("检测工作区变更以进行评审");
             
-            if status_output.trim().is_empty() {
-                return Err(AppError::Generic(
-                    "没有检测到变更，无法执行代码评审。\n\n💡 提示：\n• 如果要分析特定的提交，请使用 --commit1 和 --commit2 参数\n• 如果要分析工作区变更，请先修改一些文件\n• 或者使用 `git add` 暂存一些变更后再进行评审"
-                        .to_string(),
-                ));
+            // 首先检查是否有已暂存的变更
+            let staged_diff = get_staged_diff_in_dir(dir).await?;
+            if !staged_diff.trim().is_empty() {
+                tracing::info!("发现已暂存的变更，执行pre-commit review");
+                // 在返回的diff中添加review类型标识
+                return Ok(format!("<!-- REVIEW_TYPE: staged -->\n{}", staged_diff));
             }
-
-            // Parse status to determine what to review
-            let mut has_staged = false;
-            let mut has_unstaged = false;
             
-            for line in status_output.lines() {
-                if line.len() < 2 { continue; }
-                
-                let staged_status = line.chars().nth(0).unwrap_or(' ');
-                let unstaged_status = line.chars().nth(1).unwrap_or(' ');
-                
-                if staged_status != ' ' && staged_status != '?' {
-                    has_staged = true;
-                }
-                if unstaged_status != ' ' && unstaged_status != '?' {
-                    has_unstaged = true;
-                }
+            // 如果没有暂存变更，检查工作区变更
+            let unstaged_diff = get_unstaged_diff_in_dir(dir).await?;
+            if !unstaged_diff.trim().is_empty() {
+                tracing::info!("发现工作区变更，执行working copy review");
+                // 在返回的diff中添加review类型标识
+                return Ok(format!("<!-- REVIEW_TYPE: working -->\n{}", unstaged_diff));
             }
-
-            // Get appropriate diff based on what's available
-            let diff_content = if has_staged {
-                tracing::info!("评审已暂存的变更");
-                get_staged_diff_in_dir(dir).await?
-            } else if has_unstaged {
-                tracing::info!("评审工作区的变更");
-                get_unstaged_diff_in_dir(dir).await?
-            } else {
-                // If nothing is staged or unstaged, but status shows changes,
-                // try to get any available diff
-                match get_staged_diff_in_dir(dir).await {
-                    Ok(diff) if !diff.trim().is_empty() => diff,
-                    _ => get_unstaged_diff_in_dir(dir).await?,
-                }
-            };
-
-            Ok(diff_content)
+            
+            // 如果什么都没有，才报错
+            Err(AppError::Generic(
+                "没有检测到任何变更，无法执行代码评审。\n\n💡 提示：\n• 如果要分析特定的提交，请使用 --commit1 和 --commit2 参数\n• 如果要分析已暂存的变更，请先使用 `git add` 暂存一些文件\n• 如果要分析工作区变更，请先修改一些文件"
+                    .to_string(),
+            ))
         }
         (None, Some(_)) => {
             // This should not happen with the CLI parser, but handle it just in case

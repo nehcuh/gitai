@@ -53,7 +53,9 @@
       "Bash(cargo bench:*)",
       "Bash(./target/release/deps/core_benchmark-*)",
       "Bash(git pull:*)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(/Users/huchen/Projects/gitai/target/release/gitai:*)",
+      "Bash(gitai review:*)"
     ],
     "deny": []
   }

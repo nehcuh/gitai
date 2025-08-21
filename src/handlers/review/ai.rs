@@ -2,7 +2,7 @@ use crate::{
     config::AppConfig,
     errors::AppError,
     handlers::analysis::AIAnalysisEngine,
-    handlers::ai::execute_review_request_with_language,
+    handlers::ai::execute_review_request,
 };
 use std::sync::Arc;
 use tracing;
@@ -112,7 +112,7 @@ impl AIReviewEngine {
                 "你是一个专业的代码审查助手，请提供详细的代码审查反馈。".to_string()
             });
 
-        match execute_review_request_with_language(&self.config, &system_prompt, prompt).await {
+        match execute_review_request(&self.config, &system_prompt, prompt).await {
             Ok(response) => {
                 tracing::info!("AI 分析完成");
                 Ok(response)

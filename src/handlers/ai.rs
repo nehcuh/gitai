@@ -180,15 +180,6 @@ pub async fn execute_review_request(
     system_prompt: &str,
     user_prompt: &str,
 ) -> Result<String, AppError> {
-    execute_review_request_with_language(config, system_prompt, user_prompt).await
-}
-
-/// Execute review request
-pub async fn execute_review_request_with_language(
-    config: &AppConfig,
-    system_prompt: &str,
-    user_prompt: &str,
-) -> Result<String, AppError> {
     let messages = vec![
         ChatMessage {
             role: "system".to_string(),
@@ -202,6 +193,7 @@ pub async fn execute_review_request_with_language(
 
     execute_ai_request_with_language(config, messages, "评审", false).await
 }
+
 
 /// Dedicated function for explanation requests  
 /// Cleans the output by removing <think> tags for cleaner explanations
@@ -280,53 +272,22 @@ pub fn create_review_prompt(
     focus: Option<&str>,
     languages: &str,
 ) -> String {
-    create_review_prompt_with_language(diff_text, analysis, focus, languages, None)
-}
-
-/// Helper function to create a review prompt for code changes with language support
-pub fn create_review_prompt_with_language(
-    diff_text: &str,
-    analysis: &str,
-    focus: Option<&str>,
-    languages: &str,
-    output_language: Option<&str>,
-) -> String {
-    // Use language-specific prompts based on output_language
-    let (focus_label, language_label, review_header, analysis_header, changes_header) = match output_language {
-        Some("us") => (
-            "**Special Focus Areas:**",
-            "**Detected Programming Languages:**",
-            "## Code Review Request",
-            "## Code Structure Analysis",
-            "## Code Changes"
-        ),
-        _ => (
-            "**特别关注的方面:**",
-            "**检测到的编程语言:**",
-            "## 代码评审请求",
-            "## 代码结构分析",
-            "## 代码变更"
-        )
-    };
-
     let focus_instruction = if let Some(focus) = focus {
-        format!("\n\n{} {}", focus_label, focus)
+        format!("\n\n**特别关注的方面:** {}", focus)
     } else {
         String::new()
     };
-
     let language_context = if !languages.is_empty() {
-        format!("\n\n{} {}", language_label, languages)
+        format!("\n\n**检测到的编程语言:** {}", languages)
     } else {
         String::new()
     };
-
     format!(
-        "{}{}{}\n\n{}\n\n{}\n\n{}\n\n```diff\n{}\n```",
-        review_header, focus_instruction, language_context, 
-        analysis_header, analysis, changes_header, diff_text
+        "## 代码评审请求{}{}\n\n## 代码结构分析\n\n{}\n\n## 代码变更\n\n```diff\n{}\n```",
+        focus_instruction, language_context, analysis, diff_text
     )
 }
+
 
 pub fn clean_ai_output(text: &str) -> String {
     // Using the pre-compiled regex pattern for better performance

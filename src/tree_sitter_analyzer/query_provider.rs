@@ -235,7 +235,7 @@ impl QueryProvider {
         });
         
         // JavaScript 查询
-        self.language_queries.insert("javascript", LanguageQueries {
+        self.language_queries.insert("js", LanguageQueries {
             language: "javascript",
             queries: {
                 let mut queries = HashMap::new();
@@ -273,6 +273,50 @@ impl QueryProvider {
 )
 "#,
                     description: "JavaScript 局部变量查询",
+                });
+                queries
+            },
+        });
+        
+              // TypeScript 查询（使用 JavaScript 解析器，共享查询定义）
+        self.language_queries.insert("typescript", LanguageQueries {
+            language: "typescript",
+            queries: {
+                let mut queries = HashMap::new();
+                queries.insert(QueryType::Highlights, QueryDefinition {
+                    content: r#"
+[
+  (function_declaration)
+  (function_expression)
+  (class_declaration)
+  (method_definition)
+  (identifier)
+] @variable
+"#,
+                    description: "TypeScript 语法高亮查询",
+                });
+                queries.insert(QueryType::Injections, QueryDefinition {
+                    content: "",
+                    description: "TypeScript 注入查询",
+                });
+                queries.insert(QueryType::Locals, QueryDefinition {
+                    content: r#"
+(
+  (variable_declaration
+    (variable_declarator
+      name: (identifier) @definition.local
+    )
+  )
+)
+(
+  (function_declaration
+    parameters: (formal_parameters
+      (identifier) @definition.parameter
+    )
+  )
+)
+"#,
+                    description: "TypeScript 局部变量查询",
                 });
                 queries
             },

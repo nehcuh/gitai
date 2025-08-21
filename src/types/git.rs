@@ -138,6 +138,10 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "COMMIT")]
     pub commit2: Option<String>,
 
+    /// Review type (internal use only - for determining review type)
+    #[clap(skip)]
+    pub review_type: Option<String>,
+
     /// Stories associated with the review
     #[clap(long, value_name = "STORIES", require_equals = true)]
     pub stories: Option<CommaSeparatedU32List>,
@@ -173,6 +177,7 @@ impl Default for ReviewArgs {
             passthrough_args: Vec::new(),
             commit1: None,
             commit2: None,
+            review_type: None,
             stories: None,
             tasks: None,
             defects: None,
