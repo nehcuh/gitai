@@ -216,6 +216,45 @@ pub struct ScanArgs {
     /// Enable AI translation for scan results
     #[clap(long)]
     pub translate: bool,
+
+    /// Limit analysis to specific programming language
+    #[clap(long, value_name = "LANGUAGE")]
+    pub language: Option<String>,
+
+    /// Focus areas for the scan
+    #[clap(long, value_name = "AREA")]
+    pub focus: Option<String>,
+
+    /// Automatically install missing tools
+    #[clap(long)]
+    pub auto_install: bool,
+
+    /// Scan tool to use (semgrep|codeql|both)
+    #[clap(long, value_name = "TOOL")]
+    pub tool: Option<crate::types::scan::types::ScanTool>,
+
+    /// Allow all other flags and arguments to be passed through to git.
+    #[clap(allow_hyphen_values = true, last = true)]
+    pub passthrough_args: Vec<String>,
+}
+
+impl Default for ScanArgs {
+    fn default() -> Self {
+        Self {
+            path: None,
+            full: false,
+            remote: false,
+            update_rules: false,
+            output: None,
+            format: "json".to_string(),
+            translate: false,
+            language: None,
+            focus: None,
+            auto_install: false,
+            tool: None,
+            passthrough_args: Vec::new(),
+        }
+    }
 }
 
 /// Arguments for the `translate` subcommand

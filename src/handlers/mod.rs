@@ -6,3 +6,4 @@ pub mod help;
 pub mod intelligent_git;
 pub mod query_update;
 pub mod review;
+pub mod scan;

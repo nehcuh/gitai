@@ -967,3 +967,90 @@ The code has performance issues that need attention.
         assert_eq!(result, "#123 feat: add new feature");
     }
 }
+
+pub fn construct_scan_args(args: &[String]) -> crate::types::git::ScanArgs {
+    let mut scan_args = crate::types::git::ScanArgs::default();
+    let mut i = 1; // 跳过 "scan" 命令
+    
+    while i < args.len() {
+        match args[i].as_str() {
+            "--path" => {
+                if i + 1 < args.len() {
+                    scan_args.path = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--full" => {
+                scan_args.full = true;
+                i += 1;
+            }
+            "--remote" => {
+                scan_args.remote = true;
+                i += 1;
+            }
+            "--update-rules" => {
+                scan_args.update_rules = true;
+                i += 1;
+            }
+            "--output" => {
+                if i + 1 < args.len() {
+                    scan_args.output = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--format" => {
+                if i + 1 < args.len() {
+                    scan_args.format = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--translate" => {
+                scan_args.translate = true;
+                i += 1;
+            }
+            "--language" => {
+                if i + 1 < args.len() {
+                    scan_args.language = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--focus" => {
+                if i + 1 < args.len() {
+                    scan_args.focus = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--tool" => {
+                if i + 1 < args.len() {
+                    if let Ok(tool) = args[i + 1].parse::<crate::types::scan::types::ScanTool>() {
+                        scan_args.tool = Some(tool);
+                    }
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--" => {
+                // 剩余的参数都作为passthrough_args
+                scan_args.passthrough_args = args[i + 1..].to_vec();
+                break;
+            }
+            _ => {
+                // 未识别的参数，跳过
+                i += 1;
+            }
+        }
+    }
+    
+    scan_args
+}

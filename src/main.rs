@@ -10,7 +10,8 @@ use handlers::git::passthrough_to_git;
 use handlers::intelligent_git::handle_intelligent_git_command;
 use handlers::query_update::{handle_query_update, handle_query_cleanup, handle_query_status};
 use handlers::review::handle_review;
-use utils::{construct_commit_args, construct_review_args};
+use handlers::scan::entry::handle_scan;
+use utils::{construct_commit_args, construct_review_args, construct_scan_args};
 
 use crate::config::AppConfig;
 use crate::errors::{AppError, config_error};
@@ -48,6 +49,10 @@ async fn main() -> Result<(), AppError> {
         "commit" | "cm" => {
             let commit_args = construct_commit_args(&args);
             handle_commit(&config, commit_args).await?;
+        }
+        "scan" => {
+            let scan_args = construct_scan_args(&args);
+            handle_scan(&config, scan_args).await?;
         }
         "update-queries" => {
             handle_query_update().await?;

@@ -10,6 +10,7 @@ pub use common::{
     construct_commit_args,
     construct_review_args,
     construct_translate_args,
+    construct_scan_args,
 };
 
 pub use workspace_status::{

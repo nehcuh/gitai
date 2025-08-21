@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::{collections::HashMap, env, path::PathBuf};
+use dirs;
 use crate::errors::{AppError, config_error};
 
 use super::{
@@ -8,6 +9,56 @@ use super::{
     review_config::ReviewConfig,
     loader::ConfigLoader,
 };
+
+use crate::types::scan::types::*;
+
+/// 扫描配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScanConfig {
+    /// 默认扫描工具
+    pub default_tool: ScanTool,
+    /// Semgrep配置
+    pub semgrep_config: SemgrepConfig,
+    /// CodeQL配置
+    pub codeql_config: CodeQLConfig,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            default_tool: ScanTool::Semgrep,
+            semgrep_config: SemgrepConfig {
+                rules_path: dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".cache")
+                    .join("gitai")
+                    .join("scan-rules")
+                    .join("semgrep"),
+                depth: "medium".to_string(),
+                concurrency: 4,
+                exclude_patterns: vec![
+                    "*.test.*".to_string(),
+                    "*/tests/*".to_string(),
+                    "*/node_modules/*".to_string(),
+                    "*/target/*".to_string(),
+                ],
+                timeout: 300,
+            },
+            codeql_config: CodeQLConfig {
+                standard_library_path: dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".cache")
+                    .join("gitai")
+                    .join("scan-rules")
+                    .join("codeql"),
+                database_timeout: 30,
+                query_timeout: 15,
+                security_only: true,
+                memory_limit: 2048,
+            },
+        }
+    }
+}
 
 // Configuration location constants
 pub const USER_CONFIG_PATH: &str = "~/.config/gitai";
@@ -40,6 +91,7 @@ pub struct AppConfig {
     pub ai: ResolvedAIConfig,
     pub tree_sitter: TreeSitterConfig,
     pub review: ReviewConfig,
+    pub scan: ScanConfig,
     pub prompts: HashMap<String, String>,
 }
 
@@ -49,6 +101,7 @@ pub struct PartialAppConfig {
     pub ai: Option<AIConfig>,
     pub tree_sitter: Option<TreeSitterConfig>,
     pub review: Option<ReviewConfig>,
+    pub scan: Option<ScanConfig>,
 }
 
 impl AppConfig {
@@ -78,6 +131,7 @@ impl AppConfig {
         // 加载并解析其他配置
         let tree_sitter = partial.tree_sitter.unwrap_or_default();
         let review = partial.review.unwrap_or_default().resolve();
+        let scan = partial.scan.unwrap_or_default();
         
         // 验证必要的配置
         if ai.api_url.trim().is_empty() {
@@ -91,6 +145,7 @@ impl AppConfig {
             ai,
             tree_sitter,
             review,
+            scan,
             prompts,
         })
     }

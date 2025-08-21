@@ -6,8 +6,11 @@ const CACHE_EXPIRATION: std::time::Duration = std::time::Duration::from_secs(10 
 /// 最大并发下载数量
 const MAX_CONCURRENT_DOWNLOADS: usize = 5;
 
-/// 扫描规则下载地址
-const SCAN_RULES_URL: &str = "https://github.com/coderabbitai/ast-grep-essentials.git";
+/// Semgrep 规则下载地址
+const SEMGREP_RULES_URL: &str = "https://github.com/returntocorp/semgrep-rules.git";
+
+/// CodeQL 标准库下载地址
+const CODEQL_STANDARD_URL: &str = "https://github.com/github/codeql.git";
 
 /// 开源 tree-sitter-lang 规则下载模板
 const TREE_SITTER_URL: &str = "https://raw.githubusercontent.com/REPO/master/queries/FILE";
@@ -177,7 +180,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error_counts
     );
 
-    download_scan_rules(&scan_rules_cache_dir)?;
+    download_semgrep_rules(&scan_rules_cache_dir.join("semgrep"))?;
+    download_codeql_standard(&scan_rules_cache_dir.join("codeql"))?;
 
     Ok(())
 }
@@ -215,69 +219,123 @@ fn create_download_tasks(
     Ok(tasks)
 }
 
-/// 下载和管理代码扫描规则
-fn download_scan_rules(scan_rules_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    // 检查代码扫描规则目录是否已经存在
-    if scan_rules_dir.exists() && scan_rules_dir.join(".git").exists() {
-        build_log!(info, "更新现有的扫描规则库...");
-
-        // 获取远程更新
+/// 下载和管理 Semgrep 规则
+fn download_semgrep_rules(semgrep_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    build_log!(info, "下载 Semgrep 规则...");
+    
+    if semgrep_dir.exists() && semgrep_dir.join(".git").exists() {
+        build_log!(info, "更新现有的 Semgrep 规则库...");
         let status = std::process::Command::new("git")
             .arg("-C")
-            .arg(scan_rules_dir)
+            .arg(semgrep_dir)
             .arg("fetch")
             .arg("--depth=1")
             .arg("origin")
             .status()?;
-
+        
         if status.success() {
-            // 检查是否需要更新
             let output = std::process::Command::new("git")
                 .arg("-C")
-                .arg(scan_rules_dir)
+                .arg(semgrep_dir)
                 .arg("rev-list")
                 .arg("--count")
                 .arg("HEAD..origin/main")
                 .output()?;
             let commits_behind = String::from_utf8_lossy(&output.stdout);
             if commits_behind.trim() != "0" {
-                build_log!(info, "发现更新，正在拉取...");
+                build_log!(info, "发现 Semgrep 规则更新，正在拉取...");
                 std::process::Command::new("git")
                     .arg("-C")
-                    .arg(scan_rules_dir)
+                    .arg(semgrep_dir)
                     .arg("pull")
                     .arg("--ff-only")
                     .status()?;
-                build_log!(info, "扫描规则更新成功");
+                build_log!(info, "Semgrep 规则更新成功");
             } else {
-                build_log!(info, "扫描规则已是最新版本");
+                build_log!(info, "Semgrep 规则已是最新版本");
             }
         }
     } else {
-        build_log!(info, "克隆扫描规则仓库...");
-        // 如果目录存在但是不是 git 仓库，先删除
-        if scan_rules_dir.exists() {
-            let _ = std::fs::remove_dir_all(scan_rules_dir);
+        build_log!(info, "克隆 Semgrep 规则仓库...");
+        if semgrep_dir.exists() {
+            let _ = std::fs::remove_dir_all(semgrep_dir);
         }
-
-        // 使用浅克隆减少下载量
-        let parent_dir = scan_rules_dir
-            .parent()
-            .ok_or("Invalid scan rules directory path")?;
-
+        
+        let parent_dir = semgrep_dir.parent().ok_or("Invalid Semgrep directory path")?;
         let status = std::process::Command::new("git")
             .arg("clone")
             .arg("--depth=1")
             .arg("--branch=main")
-            .arg(SCAN_RULES_URL)
-            .arg(scan_rules_dir.file_name().unwrap())
+            .arg(SEMGREP_RULES_URL)
+            .arg(semgrep_dir.file_name().unwrap())
             .current_dir(parent_dir)
             .status()?;
-
+        
         if status.success() {
-            build_log!(info, "扫描规则克隆成功");
+            build_log!(info, "Semgrep 规则克隆成功");
         } else {
-            panic!("无法下载代码扫描规则")
+            build_log!(warn, "Semgrep 规则克隆失败，将使用内置规则");
+        }
+    }
+    Ok(())
+}
+
+/// 下载和管理 CodeQL 标准库
+fn download_codeql_standard(codeql_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    build_log!(info, "下载 CodeQL 标准库...");
+    
+    if codeql_dir.exists() && codeql_dir.join(".git").exists() {
+        build_log!(info, "更新现有的 CodeQL 标准库...");
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(codeql_dir)
+            .arg("fetch")
+            .arg("--depth=1")
+            .arg("origin")
+            .status()?;
+        
+        if status.success() {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(codeql_dir)
+                .arg("rev-list")
+                .arg("--count")
+                .arg("HEAD..origin/main")
+                .output()?;
+            let commits_behind = String::from_utf8_lossy(&output.stdout);
+            if commits_behind.trim() != "0" {
+                build_log!(info, "发现 CodeQL 标准库更新，正在拉取...");
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(codeql_dir)
+                    .arg("pull")
+                    .arg("--ff-only")
+                    .status()?;
+                build_log!(info, "CodeQL 标准库更新成功");
+            } else {
+                build_log!(info, "CodeQL 标准库已是最新版本");
+            }
+        }
+    } else {
+        build_log!(info, "克隆 CodeQL 标准库仓库...");
+        if codeql_dir.exists() {
+            let _ = std::fs::remove_dir_all(codeql_dir);
+        }
+        
+        let parent_dir = codeql_dir.parent().ok_or("Invalid CodeQL directory path")?;
+        let status = std::process::Command::new("git")
+            .arg("clone")
+            .arg("--depth=1")
+            .arg("--branch=main")
+            .arg(CODEQL_STANDARD_URL)
+            .arg(codeql_dir.file_name().unwrap())
+            .current_dir(parent_dir)
+            .status()?;
+        
+        if status.success() {
+            build_log!(info, "CodeQL 标准库克隆成功");
+        } else {
+            build_log!(warn, "CodeQL 标准库克隆失败，将使用内置规则");
         }
     }
     Ok(())
