@@ -9,7 +9,6 @@ pub use common::{
     generate_gitai_help,
     construct_commit_args,
     construct_review_args,
-    construct_scan_args,
     construct_translate_args,
 };
 

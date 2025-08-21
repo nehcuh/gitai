@@ -9,20 +9,8 @@ impl FromStr for CommaSeparatedU32List {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            // Handles cases like --stories=
-            Ok(CommaSeparatedU32List(Vec::new()))
-        } else {
-            s.split(',')
-                .map(|item_str| {
-                    item_str
-                        .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
-                })
-                .collect::<Result<Vec<u32>, String>>()
-                .map(CommaSeparatedU32List)
-        }
+        CommaSeparatedList::<u32>::from_str(s)
+            .map(|list| CommaSeparatedU32List(list.items))
     }
 }
 
@@ -97,6 +85,20 @@ pub struct CommitArgs {
     pub passthrough_args: Vec<String>,
 }
 
+impl Default for CommitArgs {
+    fn default() -> Self {
+        Self {
+            tree_sitter: false,
+            depth: None,
+            auto_stage: false,
+            message: None,
+            issue_id: None,
+            review: false,
+            passthrough_args: Vec::new(),
+        }
+    }
+}
+
 /// Arguments for the `review` subcommand
 #[derive(Args, Debug, Clone, PartialEq, Eq)]
 pub struct ReviewArgs {
@@ -105,8 +107,8 @@ pub struct ReviewArgs {
     pub path: Option<String>,
 
     /// Analysis depth level
-    #[clap(long, value_name = "LEVEL", default_value = "medium")]
-    pub depth: String,
+    #[clap(long, value_name = "LEVEL")]
+    pub depth: Option<String>,
 
     /// Focus areas for the review
     #[clap(long, value_name = "AREA")]
@@ -152,13 +154,31 @@ pub struct ReviewArgs {
     #[clap(long, value_name = "SPACE_ID")]
     pub space_id: Option<u32>,
 
-    /// Use scan results to assist review (specify scan result file path or commit ID)
-    #[clap(long, value_name = "SCAN_FILE_OR_COMMIT")]
-    pub scan_results: Option<String>,
-
+    
     /// Allow all other flags and arguments to be passed through to git.
     #[clap(allow_hyphen_values = true, last = true)]
     pub passthrough_args: Vec<String>,
+}
+
+impl Default for ReviewArgs {
+    fn default() -> Self {
+        Self {
+            path: None,
+            depth: Some("medium".to_string()),
+            focus: None,
+            language: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: false,
+            passthrough_args: Vec::new(),
+            commit1: None,
+            commit2: None,
+            stories: None,
+            tasks: None,
+            defects: None,
+            space_id: None,
+        }
+    }
 }
 
 /// Arguments for the `scan` subcommand
@@ -214,7 +234,7 @@ pub struct TranslateArgs {
 }
 
 // Represents the entire Git diff
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GitDiff {
     pub changed_files: Vec<ChangedFile>,
     pub metadata: Option<HashMap<String, String>>,
@@ -233,7 +253,7 @@ pub enum ChangeType {
     TypeChanged,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChangedFile {
     pub path: PathBuf,
     pub change_type: ChangeType,
@@ -242,14 +262,14 @@ pub struct ChangedFile {
 }
 
 // Represents a hunk range in git diff format (@@ -a,b +c,d @@)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HunkRange {
     pub start: usize,
     pub count: usize,
 }
 
 // Represents a single hunk in a Git diff
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DiffHunk {
     #[allow(dead_code)]
     pub old_range: HunkRange,
@@ -259,72 +279,33 @@ pub struct DiffHunk {
 }
 
 // DevOps work item types
+/// 通用的逗号分隔列表类型
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DefectList(pub Vec<u32>);
+pub struct CommaSeparatedList<T> {
+    pub items: Vec<T>,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoryList(pub Vec<u32>);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskList(pub Vec<u32>);
-
-// Implement FromStr for DevOps work item types
-impl FromStr for DefectList {
+impl<T: FromStr> FromStr for CommaSeparatedList<T> {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
-            Ok(DefectList(Vec::new()))
+            Ok(CommaSeparatedList { items: Vec::new() })
         } else {
             s.split(',')
                 .map(|item_str| {
                     item_str
                         .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
+                        .parse::<T>()
+                        .map_err(|_| format!("Invalid value '{}'", item_str.trim()))
                 })
-                .collect::<Result<Vec<u32>, String>>()
-                .map(DefectList)
+                .collect::<Result<Vec<T>, String>>()
+                .map(|items| CommaSeparatedList { items })
         }
     }
 }
 
-impl FromStr for StoryList {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            Ok(StoryList(Vec::new()))
-        } else {
-            s.split(',')
-                .map(|item_str| {
-                    item_str
-                        .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
-                })
-                .collect::<Result<Vec<u32>, String>>()
-                .map(StoryList)
-        }
-    }
-}
-
-impl FromStr for TaskList {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            Ok(TaskList(Vec::new()))
-        } else {
-            s.split(',')
-                .map(|item_str| {
-                    item_str
-                        .trim()
-                        .parse::<u32>()
-                        .map_err(|e| format!("Invalid u32 value '{}': {}", item_str.trim(), e))
-                })
-                .collect::<Result<Vec<u32>, String>>()
-                .map(TaskList)
-        }
-    }
-}
+/// 类型别名，保持向后兼容
+pub type DefectList = CommaSeparatedList<u32>;
+pub type StoryList = CommaSeparatedList<u32>;
+pub type TaskList = CommaSeparatedList<u32>;

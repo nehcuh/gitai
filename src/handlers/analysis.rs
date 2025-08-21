@@ -5,9 +5,8 @@ use crate::{
     types::{
         ai::{
             AnalysisRequest, AnalysisResult, CodeQualityAnalysis, Deviation,
-            DeviationSeverity, Recommendation, RequirementAnalysis, RiskAssessment,
+            DeviationSeverity, Recommendation, RequirementAnalysis, RiskAssessment, WorkItem,
         },
-        devops::AnalysisWorkItem,
     },
 };
 use serde_json;
@@ -159,7 +158,7 @@ impl AIAnalysisEngine {
     }
 
     /// Formats work items for inclusion in the analysis prompt
-    fn format_work_items_for_analysis(&self, work_items: &[AnalysisWorkItem]) -> Result<String, AppError> {
+    fn format_work_items_for_analysis(&self, work_items: &[WorkItem]) -> Result<String, AppError> {
         if work_items.is_empty() {
             return Ok("无关联的工作项信息".to_string());
         }
@@ -169,28 +168,12 @@ impl AIAnalysisEngine {
         for (index, item) in work_items.iter().enumerate() {
             formatted.push_str(&format!("\n### 工作项 {} - {}\n", 
                 index + 1, 
-                item.item_type_name.as_deref().unwrap_or("未知类型")
+                item.issue_type_detail.name.as_str()
             ));
             
-            if let Some(id) = item.id {
-                formatted.push_str(&format!("**ID**: {}\n", id));
-            }
-            
-            if let Some(code) = item.code {
-                formatted.push_str(&format!("**编号**: {}\n", code));
-            }
-            
-            if let Some(project) = &item.project_name {
-                formatted.push_str(&format!("**项目**: {}\n", project));
-            }
-            
-            if let Some(title) = &item.title {
-                formatted.push_str(&format!("**标题**: {}\n", title));
-            }
-            
-            if let Some(description) = &item.description {
-                formatted.push_str(&format!("**描述**:\n{}\n", description));
-            }
+            formatted.push_str(&format!("**ID**: {}\n", item.id));
+            formatted.push_str(&format!("**名称**: {}\n", item.name));
+            formatted.push_str(&format!("**描述**: {}\n", item.description));
             
             formatted.push('\n');
         }
@@ -369,14 +352,14 @@ mod tests {
         })
     }
 
-    fn create_test_work_item() -> AnalysisWorkItem {
-        AnalysisWorkItem {
-            id: Some(123),
-            code: Some(99),
-            project_name: Some("测试项目".to_string()),
-            item_type_name: Some("用户故事".to_string()),
-            title: Some("测试功能".to_string()),
-            description: Some("实现测试功能的详细描述".to_string()),
+    fn create_test_work_item() -> WorkItem {
+        WorkItem {
+            id: "123".to_string(),
+            name: "测试功能".to_string(),
+            description: "实现测试功能的详细描述".to_string(),
+            issue_type_detail: IssueTypeDetail {
+                name: "用户故事".to_string(),
+            },
         }
     }
 
@@ -464,13 +447,13 @@ mod tests {
         let engine = AIAnalysisEngine::new(create_test_config());
         let work_items = vec![
             create_test_work_item(),
-            AnalysisWorkItem {
-                id: Some(456),
-                code: Some(200),
-                project_name: Some("另一个项目".to_string()),
-                item_type_name: Some("缺陷".to_string()),
-                title: Some("修复错误".to_string()),
-                description: Some("修复一个重要错误".to_string()),
+            WorkItem {
+                id: "456".to_string(),
+                name: "修复错误".to_string(),
+                description: "修复一个重要错误".to_string(),
+                issue_type_detail: IssueTypeDetail {
+                    name: "缺陷".to_string(),
+                },
             }
         ];
         

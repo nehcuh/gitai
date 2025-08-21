@@ -2,115 +2,186 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, ScanArgs, TranslateArgs};
+use crate::types::git::{GitaiArgs, GitaiSubCommand, ReviewArgs, CommitArgs, TranslateArgs, CommaSeparatedU32List};
 use crate::errors::{AppError, file_error};
-use crate::scanner::{ScanResult, ScanMatch};
 
-pub fn construct_scan_args(args: &[String]) -> ScanArgs {
-    let mut scan_args_vec = vec!["gitai".to_string(), "scan".to_string()];
-    let scan_index = args.iter().position(|a| a == "scan").unwrap_or(0);
-    if scan_index + 1 < args.len() {
-        scan_args_vec.extend_from_slice(&args[scan_index + 1..]);
-    }
-    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&scan_args_vec) {
-        if let GitaiSubCommand::Scan(scan_args) = parsed_args.command {
-            return scan_args;
-        }
-    }
-    // Return default if parsing fails
-    ScanArgs {
-        path: None,
-        full: false,
-        remote: false,
-        update_rules: false,
-        output: None,
-        format: "json".to_string(),
-        translate: false,
-    }
-}
 
 pub fn construct_review_args(args: &[String]) -> ReviewArgs {
-    // 重构review命令参数以便使用clap解析
-    let mut review_args_vec = vec!["gitai".to_string(), "review".to_string()];
-
-    // 获取review之后的所有其他参数
-    let review_index = args
-        .iter()
-        .position(|a| a == "review" || a == "rv")
-        .unwrap_or(0);
-    if review_index + 1 < args.len() {
-        review_args_vec.extend_from_slice(&args[review_index + 1..]);
-    }
-
-    tracing::debug!("重构的review命令: {:?}", review_args_vec);
-
-    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&review_args_vec) {
-        match parsed_args.command {
-            GitaiSubCommand::Review(review_args) => {
-                tracing::debug!("解析出来的 review 结构为: {:?}", review_args);
-                return review_args;
+    let mut review_args = ReviewArgs::default();
+    let mut i = 1; // 跳过 "review" 或 "rv" 命令
+    
+    while i < args.len() {
+        match args[i].as_str() {
+            "--depth" => {
+                if i + 1 < args.len() {
+                    review_args.depth = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
             }
-            _ => panic!("无法解析 git review 命令,命令为: {:?}", args),
-        }
-    } else {
-        tracing::warn!("解析review命令失败");
-        // 创建默认的ReviewArgs
-        ReviewArgs {
-            path: None,
-            depth: "medium".to_string(),
-            focus: None,
-            language: None,
-            format: "text".to_string(),
-            output: None,
-            tree_sitter: false,
-            passthrough_args: vec![],
-            commit1: None,
-            commit2: None,
-            stories: None,
-            tasks: None,
-            defects: None,
-            space_id: None,
-            scan_results: None,
+            "--focus" => {
+                if i + 1 < args.len() {
+                    review_args.focus = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--language" => {
+                if i + 1 < args.len() {
+                    review_args.language = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--format" => {
+                if i + 1 < args.len() {
+                    review_args.format = args[i + 1].clone();
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--output" => {
+                if i + 1 < args.len() {
+                    review_args.output = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--tree-sitter" => {
+                review_args.tree_sitter = true;
+                i += 1;
+            }
+            "--commit1" => {
+                if i + 1 < args.len() {
+                    review_args.commit1 = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--commit2" => {
+                if i + 1 < args.len() {
+                    review_args.commit2 = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--stories" => {
+                if i + 1 < args.len() {
+                    if let Ok(stories) = args[i + 1].parse::<CommaSeparatedU32List>() {
+                        review_args.stories = Some(stories);
+                    }
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--tasks" => {
+                if i + 1 < args.len() {
+                    if let Ok(tasks) = args[i + 1].parse::<CommaSeparatedU32List>() {
+                        review_args.tasks = Some(tasks);
+                    }
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--defects" => {
+                if i + 1 < args.len() {
+                    if let Ok(defects) = args[i + 1].parse::<CommaSeparatedU32List>() {
+                        review_args.defects = Some(defects);
+                    }
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--space-id" => {
+                if i + 1 < args.len() {
+                    if let Ok(space_id) = args[i + 1].parse::<u32>() {
+                        review_args.space_id = Some(space_id);
+                    }
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--" => {
+                // 剩余的参数都作为passthrough_args
+                review_args.passthrough_args = args[i + 1..].to_vec();
+                break;
+            }
+            _ => {
+                // 未识别的参数，跳过
+                i += 1;
+            }
         }
     }
+    
+    review_args
 }
 
 pub fn construct_commit_args(args: &[String]) -> CommitArgs {
-    // 重构commit命令参数以便使用clap解析
-    let mut commit_args_vec = vec!["gitai".to_string(), "commit".to_string()];
-
-    // 获取commit之后的所有其他参数
-    let commit_index = args
-        .iter()
-        .position(|a| a == "commit" || a == "cm")
-        .unwrap_or(0);
-    if commit_index + 1 < args.len() {
-        commit_args_vec.extend_from_slice(&args[commit_index + 1..]);
-    }
-
-    tracing::debug!("重构的commit命令: {:?}", commit_args_vec);
-
-    if let Ok(parsed_args) = GitaiArgs::try_parse_from(&commit_args_vec) {
-        match parsed_args.command {
-            GitaiSubCommand::Commit(commit_args) => {
-                tracing::debug!("解析出来的 commit 结构为: {:?}", commit_args);
-                return commit_args;
+    let mut commit_args = CommitArgs::default();
+    let mut i = 1; // 跳过 "commit" 或 "cm" 命令
+    
+    while i < args.len() {
+        match args[i].as_str() {
+            "-t" | "--tree-sitter" => {
+                commit_args.tree_sitter = true;
+                i += 1;
             }
-            _ => panic!("无法解析 git commit 命令,命令为: {:?}", args),
-        }
-    } else {
-        tracing::warn!("解析commit命令失败");
-        // 创建默认的CommitArgs
-        CommitArgs {
-            tree_sitter: false,
-            depth: None,
-            auto_stage: false,
-            message: None,
-            issue_id: None,
-            review: false,
-            passthrough_args: vec![],
+            "-l" | "--depth" => {
+                if i + 1 < args.len() {
+                    commit_args.depth = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "-a" | "--all" => {
+                commit_args.auto_stage = true;
+                i += 1;
+            }
+            "-m" | "--message" => {
+                if i + 1 < args.len() {
+                    commit_args.message = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "--issue-id" => {
+                if i + 1 < args.len() {
+                    commit_args.issue_id = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    break;
+                }
+            }
+            "-r" | "--review" => {
+                commit_args.review = true;
+                i += 1;
+            }
+            "--" => {
+                // 剩余的参数都作为passthrough_args
+                commit_args.passthrough_args = args[i + 1..].to_vec();
+                break;
+            }
+            _ => {
+                // 未识别的参数，跳过
+                i += 1;
+            }
         }
     }
+    
+    commit_args
 }
 
 pub fn construct_translate_args(args: &[String]) -> TranslateArgs {
@@ -517,163 +588,7 @@ pub fn extract_review_insights(content: &str) -> String {
     }
 }
 
-/// Load scan results from file path or commit ID
-pub fn load_scan_results(scan_input: &str) -> Result<ScanResult, AppError> {
-    use std::fs;
 
-    // First, try to load as a direct file path
-    if Path::new(scan_input).exists() {
-        let content = fs::read_to_string(scan_input)
-            .map_err(|e| AppError::Generic(format!("Failed to read scan result file {}: {}", scan_input, e)))?;
-        let scan_result: ScanResult = serde_json::from_str(&content)
-            .map_err(|e| AppError::Generic(format!("Failed to parse scan result JSON: {}", e)))?;
-        return Ok(scan_result);
-    }
-
-    // If not a direct file path, try to find by commit ID in scan results directory
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| AppError::Generic("Unable to determine home directory".to_string()))?;
-    
-    let scan_results_dir = home_dir.join(".gitai").join("scan-results");
-    
-    // Get current repository name for searching in the right directory
-    let repo_name = get_repository_name()?;
-    let repo_scan_dir = scan_results_dir.join(&repo_name);
-    
-    if !repo_scan_dir.exists() {
-        return Err(AppError::Generic(format!("No scan results found for repository '{}'", repo_name)));
-    }
-
-    // Search for file that matches the commit ID (either as prefix or exact match)
-    let entries = fs::read_dir(&repo_scan_dir)
-        .map_err(|e| AppError::Generic(format!("Failed to read scan results directory: {}", e)))?;
-    
-    let mut matching_files = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|e| AppError::Generic(format!("Failed to read directory entry: {}", e)))?;
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        
-        // Check if file name starts with the commit ID or contains it
-        if file_name.starts_with(scan_input) || file_name.contains(scan_input) {
-            matching_files.push(entry.path());
-        }
-    }
-
-    if matching_files.is_empty() {
-        return Err(AppError::Generic(format!("No scan results found matching commit ID or file: {}", scan_input)));
-    }
-
-    // If multiple matches, use the most recent one
-    matching_files.sort_by_key(|path| {
-        path.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-    });
-    let latest_file = matching_files.last().unwrap();
-    
-    let content = fs::read_to_string(latest_file)
-        .map_err(|e| AppError::Generic(format!("Failed to read scan result file: {}", e)))?;
-    let scan_result: ScanResult = serde_json::from_str(&content)
-        .map_err(|e| AppError::Generic(format!("Failed to parse scan result JSON: {}", e)))?;
-    
-    Ok(scan_result)
-}
-
-/// Get current repository name for scan result lookup
-fn get_repository_name() -> Result<String, AppError> {
-    use git2::Repository;
-    
-    let repo = Repository::open_from_env()
-        .map_err(|e| AppError::Generic(format!("Not in a git repository: {}", e)))?;
-    
-    // Try to get repository name from remote URL first
-    if let Ok(remotes) = repo.remotes() {
-        for remote_name in remotes.iter() {
-            if let Some(remote_name) = remote_name {
-                if let Ok(remote) = repo.find_remote(remote_name) {
-                    if let Some(url) = remote.url() {
-                        // Extract repository name from URL
-                        let parts: Vec<&str> = url.split('/').collect();
-                        if let Some(last_part) = parts.last() {
-                            let repo_name = last_part.trim_end_matches(".git");
-                            if !repo_name.is_empty() {
-                                return Ok(repo_name.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Fall back to directory name
-    let workdir = repo.workdir()
-        .ok_or_else(|| AppError::Generic("Repository has no working directory".to_string()))?;
-    
-    let dir_name = workdir.file_name()
-        .ok_or_else(|| AppError::Generic("Unable to get directory name".to_string()))?
-        .to_string_lossy()
-        .to_string();
-    
-    Ok(dir_name)
-}
-
-/// Format scan results for inclusion in review prompts
-pub fn format_scan_results_for_review(scan_result: &ScanResult) -> String {
-    let mut formatted = String::new();
-    
-    formatted.push_str("## 🛡️ 安全扫描结果分析\n\n");
-    formatted.push_str(&format!("**扫描信息:**\n"));
-    formatted.push_str(&format!("- 扫描ID: {}\n", scan_result.scan_id));
-    formatted.push_str(&format!("- 仓库: {}\n", scan_result.repository));
-    formatted.push_str(&format!("- 提交: {}\n", scan_result.commit_id));
-    formatted.push_str(&format!("- 扫描类型: {}\n", scan_result.scan_type));
-    formatted.push_str(&format!("- 扫描时间: {}\n", scan_result.scan_time));
-    formatted.push_str(&format!("- 文件数量: {}\n", scan_result.files_scanned));
-    formatted.push_str(&format!("- 问题总数: {}\n\n", scan_result.summary.total_matches));
-
-    if !scan_result.matches.is_empty() {
-        formatted.push_str("**发现的安全问题:**\n\n");
-        
-        // Group by severity
-        let mut by_severity: std::collections::HashMap<String, Vec<&ScanMatch>> = std::collections::HashMap::new();
-        for scan_match in &scan_result.matches {
-            by_severity.entry(scan_match.severity.clone()).or_insert(Vec::new()).push(scan_match);
-        }
-        
-        // Sort by severity priority (critical, high, medium, low, warning, info)
-        let severity_order = ["critical", "high", "medium", "low", "warning", "info"];
-        for severity in &severity_order {
-            if let Some(matches) = by_severity.get(*severity) {
-                formatted.push_str(&format!("### {} 级别问题 ({}个)\n\n", severity.to_uppercase(), matches.len()));
-                
-                for scan_match in matches {
-                    formatted.push_str(&format!("**{}** ({}:{})\n", scan_match.rule_id, 
-                        scan_match.file_path.split('/').last().unwrap_or(&scan_match.file_path), 
-                        scan_match.line_number));
-                    formatted.push_str(&format!("- **问题描述**: {}\n", scan_match.message));
-                    formatted.push_str(&format!("- **匹配代码**: `{}`\n", scan_match.matched_text));
-                    if let Some(context) = &scan_match.context {
-                        formatted.push_str(&format!("- **代码上下文**: `{}`\n", context));
-                    }
-                    formatted.push_str("\n");
-                }
-            }
-        }
-    } else {
-        formatted.push_str("✅ **扫描结果**: 未发现安全问题\n\n");
-    }
-    
-    // Add summary statistics
-    if !scan_result.summary.by_severity.is_empty() {
-        formatted.push_str("**按严重程度统计:**\n");
-        for (severity, count) in &scan_result.summary.by_severity {
-            formatted.push_str(&format!("- {}: {} 个\n", severity, count));
-        }
-        formatted.push_str("\n");
-    }
-    
-    formatted.push_str("---\n\n");
-    formatted
-}
 
 #[cfg(test)]
 mod tests {
@@ -701,7 +616,6 @@ mod tests {
             tasks: None,
             defects: None,
             space_id: None,
-            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }
@@ -759,7 +673,6 @@ mod tests {
             tasks: None,
             defects: None,
             space_id: None,
-            scan_results: None,
         };
         assert_eq!(construct_review_args(&args), expected);
     }

@@ -4,10 +4,8 @@ use crate::errors::{AppError, config_error};
 
 use super::{
     ai_config::{AIConfig, ResolvedAIConfig},
-    devops_config::{AccountConfig, ResolvedAccountConfig},
     tree_sitter_config::TreeSitterConfig,
     review_config::ReviewConfig,
-    scan_config::ScanConfig,
     loader::ConfigLoader,
 };
 
@@ -42,9 +40,7 @@ pub struct AppConfig {
     pub ai: ResolvedAIConfig,
     pub tree_sitter: TreeSitterConfig,
     pub review: ReviewConfig,
-    pub account: Option<ResolvedAccountConfig>,
     pub prompts: HashMap<String, String>,
-    pub scan: ScanConfig,
 }
 
 /// 应用配置 - 简化版本，直接使用Option字段
@@ -53,8 +49,6 @@ pub struct PartialAppConfig {
     pub ai: Option<AIConfig>,
     pub tree_sitter: Option<TreeSitterConfig>,
     pub review: Option<ReviewConfig>,
-    pub account: Option<AccountConfig>,
-    pub scan: Option<ScanConfig>,
 }
 
 impl AppConfig {
@@ -80,14 +74,10 @@ impl AppConfig {
         // 验证AI配置
         ai_config.validate()?;
 
-        // 加载并解析DevOps账户配置（可选）
-        let account_config = partial.account.unwrap_or_default();
-        let account = account_config.merge_with_env(&env_map).resolve();
-
+        
         // 加载并解析其他配置
         let tree_sitter = partial.tree_sitter.unwrap_or_default();
         let review = partial.review.unwrap_or_default().resolve();
-        let scan = partial.scan.unwrap_or_default().resolve();
         
         // 验证必要的配置
         if ai.api_url.trim().is_empty() {
@@ -101,9 +91,7 @@ impl AppConfig {
             ai,
             tree_sitter,
             review,
-            account,
             prompts,
-            scan,
         })
     }
 

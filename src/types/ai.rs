@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use crate::types::devops::AnalysisWorkItem;
 
 /// Represents a chat message with a role and content
 ///
@@ -73,7 +72,7 @@ pub enum DeviationSeverity {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AnalysisRequest {
     /// Collection of work items to be analyzed together
-    pub work_items: Vec<AnalysisWorkItem>,
+    pub work_items: Vec<WorkItem>,
     /// Git diff content to analyze
     pub git_diff: String,
     /// Optional focus areas for analysis (e.g., "security", "performance")
@@ -168,4 +167,19 @@ pub struct RiskAssessment {
     pub technical_risks: Vec<String>,
     /// Mitigation strategies
     pub mitigation_strategies: Vec<String>,
+}
+
+/// Work item for analysis
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkItem {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub issue_type_detail: IssueTypeDetail,
+}
+
+/// Issue type detail
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct IssueTypeDetail {
+    pub name: String,
 }
