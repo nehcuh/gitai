@@ -4,7 +4,126 @@ mod git;
 mod ai;
 mod scan;
 
-/// 扫描参数结构体
+use std::path::{Path, PathBuf};
+use std::fs;
+use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Review结果缓存
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReviewCache {
+    /// 评审时间
+    timestamp: u64,
+    /// 评审的代码差异
+    diff_hash: String,
+    /// 评审结果
+    review_result: String,
+    /// 语言
+    language: Option<String>,
+    /// 关注点
+    focus_areas: Option<Vec<String>>,
+}
+
+impl ReviewCache {
+    fn new(diff: &str, review_result: String, language: Option<String>, focus_areas: Option<Vec<String>>) -> Self {
+        Self {
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            diff_hash: Self::hash_diff(diff),
+            review_result,
+            language,
+            focus_areas,
+        }
+    }
+    
+    fn hash_diff(diff: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        diff.hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    }
+    
+    fn is_expired(&self, max_age_seconds: u64) -> bool {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        now.saturating_sub(self.timestamp) > max_age_seconds
+    }
+}
+
+/// 获取缓存目录
+fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    get_cache_subdir("review")
+}
+
+/// 获取缓存子目录 - 减少重复代码
+fn get_cache_subdir(subdir: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let cache_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".cache")
+        .join("gitai")
+        .join(subdir);
+    
+    fs::create_dir_all(&cache_dir)?;
+    Ok(cache_dir)
+}
+
+/// 保存review结果到缓存
+fn save_review_cache(cache: &ReviewCache) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_dir = get_cache_dir()?;
+    let cache_file = cache_dir.join(format!("review_{}.json", cache.diff_hash));
+    
+    let json = serde_json::to_string_pretty(cache)?;
+    fs::write(&cache_file, json)?;
+    
+    println!("💾 Review结果已缓存到: {}", cache_file.display());
+    Ok(())
+}
+
+/// 从缓存加载review结果
+fn load_review_cache(diff_hash: &str, max_age_seconds: u64) -> Result<Option<ReviewCache>, Box<dyn std::error::Error>> {
+    let cache_dir = get_cache_dir()?;
+    let cache_file = cache_dir.join(format!("review_{}.json", diff_hash));
+    
+    if !cache_file.exists() {
+        return Ok(None);
+    }
+    
+    let content = fs::read_to_string(&cache_file)?;
+    let cache: ReviewCache = serde_json::from_str(&content)?;
+    
+    if cache.is_expired(max_age_seconds) {
+        println!("🕐 缓存已过期，重新评审");
+        fs::remove_file(&cache_file)?;
+        return Ok(None);
+    }
+    
+    println!("🎯 使用缓存的review结果");
+    Ok(Some(cache))
+}
+
+/// 清理过期的缓存
+fn cleanup_expired_cache(max_age_seconds: u64) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_dir = get_cache_dir()?;
+    
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(cache) = serde_json::from_str::<ReviewCache>(&content) {
+                        if cache.is_expired(max_age_seconds) {
+                            fs::remove_file(&path)?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// 扫描参数结构体 - 简化版本
 struct ScanParams<'a> {
     config: &'a Config,
     path: &'a std::path::Path,
@@ -18,36 +137,7 @@ struct ScanParams<'a> {
     auto_install: bool,
 }
 
-#[allow(dead_code)]
-impl<'a> ScanParams<'a> {
-    fn new(
-        config: &'a Config,
-        path: &'a std::path::Path,
-        tool: &'a str,
-        full: bool,
-        remote: bool,
-        update_rules: bool,
-        format: &'a str,
-        output: Option<std::path::PathBuf>,
-        translate: bool,
-        auto_install: bool,
-    ) -> Self {
-        Self {
-            config,
-            path,
-            tool,
-            full,
-            remote,
-            update_rules,
-            format,
-            output,
-            translate,
-            auto_install,
-        }
-    }
-}
-
-/// 代码评审参数结构体
+/// 代码评审参数结构体 - 简化版本
 struct ReviewParams<'a> {
     config: &'a Config,
     depth: Option<String>,
@@ -59,35 +149,6 @@ struct ReviewParams<'a> {
     security_scan: bool,
     scan_tool: Option<String>,
     block_on_critical: bool,
-}
-
-#[allow(dead_code)]
-impl<'a> ReviewParams<'a> {
-    fn new(
-        config: &'a Config,
-        depth: Option<String>,
-        focus: Option<String>,
-        language: Option<String>,
-        format: &'a str,
-        output: Option<std::path::PathBuf>,
-        tree_sitter: bool,
-        security_scan: bool,
-        scan_tool: Option<String>,
-        block_on_critical: bool,
-    ) -> Self {
-        Self {
-            config,
-            depth,
-            focus,
-            language,
-            format,
-            output,
-            tree_sitter,
-            security_scan,
-            scan_tool,
-            block_on_critical,
-        }
-    }
 }
 
 use args::{Args, Command};
@@ -114,28 +175,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             scan_tool,
             block_on_critical,
         } => {
-            let params = ReviewParams::new(
-                &config,
+            let params = ReviewParams {
+                config: &config,
                 depth,
                 focus,
                 language,
-                &format,
+                format: &format,
                 output,
                 tree_sitter,
                 security_scan,
                 scan_tool,
                 block_on_critical,
-            );
+            };
             handle_review(params).await?;
-        }
-        Command::Commit {
-            message,
-            tree_sitter,
-            auto_stage,
-            issue_id,
-            review,
-        } => {
-            handle_commit(&config, message, tree_sitter, auto_stage, issue_id, review).await?;
         }
         Command::Scan {
             path,
@@ -148,22 +200,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             translate,
             auto_install,
         } => {
-            let scan_params = ScanParams::new(
-                &config,
-                &path,
-                &tool,
+            let scan_params = ScanParams {
+                config: &config,
+                path: &path,
+                tool: &tool,
                 full,
                 remote,
                 update_rules,
-                &format,
+                format: &format,
                 output,
                 translate,
                 auto_install,
-            );
+            };
             handle_scan(scan_params).await?;
         }
         Command::ScanHistory { limit, format } => {
             handle_scan_history(limit, &format)?;
+        }
+        Command::Prompts { action } => {
+            handle_prompts_action(&config, &action).await?;
         }
         Command::Git(git_args) => {
             if args.noai {
@@ -184,15 +239,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn handle_review(params: ReviewParams<'_>) -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 正在进行代码评审...");
     
-    // 获取代码变更
-    let diff = git::get_diff()?;
-    if diff.trim().is_empty() {
-        println!("❌ 没有检测到代码变更");
-        return Ok(());
+    // 获取所有代码变更（包括工作区和暂存区）
+    let diff = match git::get_all_diff() {
+        Ok(diff) => diff,
+        Err(_) => {
+            println!("❌ 没有检测到任何代码变更");
+            return Ok(());
+        }
+    };
+    
+    // 检查暂存状态并给出智能提示
+    let has_unstaged = git::has_unstaged_changes().unwrap_or(false);
+    let has_staged = git::has_staged_changes().unwrap_or(false);
+    
+    if has_unstaged {
+        println!("💡 提示：检测到未暂存的代码变更");
+        println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
+        if has_staged {
+            println!("   当前已暂存的变更也会被评审");
+        }
+        println!();
+    } else if has_staged {
+        println!("✅ 已暂存的代码准备就绪");
     }
     
-    // AI评审
-    let review_result = ai::review_code(params.config, &diff).await?;
+    // 计算diff的hash用于缓存
+    let diff_hash = ReviewCache::hash_diff(&diff);
+    let cache_max_age = 3600; // 1小时缓存
+    
+    // 尝试从缓存加载
+    let review_result = if let Ok(Some(cache)) = load_review_cache(&diff_hash, cache_max_age) {
+        cache.review_result
+    } else {
+        // 执行AI评审
+        println!("🤖 正在进行AI代码评审...");
+        let result = ai::review_code(params.config, &diff).await?;
+        
+        // 保存到缓存
+        let cache = ReviewCache::new(
+            &diff,
+            result.clone(),
+            params.language.clone(),
+            params.focus.as_ref().map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+        );
+        
+        if let Err(e) = save_review_cache(&cache) {
+            eprintln!("⚠️ 无法保存缓存: {}", e);
+        }
+        
+        // 清理过期缓存
+        if let Err(e) = cleanup_expired_cache(cache_max_age) {
+            eprintln!("⚠️ 清理缓存失败: {}", e);
+        }
+        
+        result
+    };
     
     // 安全扫描
     if params.security_scan {
@@ -206,7 +307,7 @@ async fn handle_review(params: ReviewParams<'_>) -> Result<(), Box<dyn std::erro
                 if !result.findings.is_empty() {
                     println!("⚠️  发现安全问题:");
                     for finding in result.findings.iter().take(5) { // 只显示前5个
-                        println!("  - {title} ({}) ({rule_id})", finding.file_path.display(), title = finding.title, rule_id = finding.rule_id);
+                        println!("  - {} ({}) ({})", finding.title, finding.file_path.display(), finding.rule_id);
                     }
                     if result.findings.len() > 5 {
                         println!("  - ... 还有 {} 个问题", result.findings.len() - 5);
@@ -216,7 +317,7 @@ async fn handle_review(params: ReviewParams<'_>) -> Result<(), Box<dyn std::erro
                 }
             }
             Err(e) => {
-                println!("⚠️  安全扫描失败: {e}");
+                println!("⚠️  安全扫描失败: {}", e);
             }
         }
     }
@@ -246,59 +347,6 @@ async fn handle_review(params: ReviewParams<'_>) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-/// 处理提交
-async fn handle_commit(
-    config: &Config,
-    message: Option<String>,
-    _tree_sitter: bool,
-    auto_stage: bool,
-    issue_id: Option<String>,
-    review: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("📝 正在处理提交...");
-    
-    // 自动暂存
-    if auto_stage {
-        println!("📦 自动暂存变更...");
-        git::git_add_all()?;
-    }
-    
-    // 获取代码变更
-    let diff = git::get_diff()?;
-    if diff.trim().is_empty() {
-        println!("❌ 没有检测到代码变更");
-        return Ok(());
-    }
-    
-    // 生成提交信息
-    let commit_message = match message {
-        Some(msg) => msg,
-        None => {
-            println!("🤖 AI正在生成提交信息...");
-            ai::generate_commit_message(config, &diff).await?
-        }
-    };
-    
-    // 添加Issue ID前缀
-    let final_message = match issue_id {
-        Some(id) => format!("{id} {commit_message}"),
-        None => commit_message,
-    };
-    
-    // 代码评审
-    if review {
-        println!("🔍 正在评审代码...");
-        let review_result = ai::review_code(config, &diff).await?;
-        println!("📋 评审结果:\n{review_result}");
-    }
-    
-    // 执行提交
-    println!("✅ 执行提交...");
-    git::git_commit(&final_message)?;
-    
-    println!("🎉 提交成功: {final_message}");
-    Ok(())
-}
 
 /// 处理扫描
 async fn handle_scan(params: ScanParams<'_>) -> Result<(), Box<dyn std::error::Error>> {
@@ -352,11 +400,7 @@ async fn handle_scan(params: ScanParams<'_>) -> Result<(), Box<dyn std::error::E
 
 /// 处理扫描历史查看
 fn handle_scan_history(limit: usize, format: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let cache_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".cache")
-        .join("gitai")
-        .join("scan-results");
+    let cache_dir = get_cache_subdir("scan-results")?;
     
     if !cache_dir.exists() {
         println!("📁 扫描历史目录不存在: {}", cache_dir.display());
@@ -474,14 +518,7 @@ fn format_scan_results(result: &scan::ScanResult) -> String {
 fn save_scan_to_cache(result: &scan::ScanResult, scan_path: &std::path::Path, tool: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{SystemTime, UNIX_EPOCH};
     
-    // 创建缓存目录
-    let cache_dir = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".cache")
-        .join("gitai")
-        .join("scan-results");
-    
-    std::fs::create_dir_all(&cache_dir)?;
+    let cache_dir = get_cache_subdir("scan-results")?;
     
     // 生成文件名：时间戳_工具_路径hash.json
     let timestamp = SystemTime::now()
@@ -501,62 +538,130 @@ fn save_scan_to_cache(result: &scan::ScanResult, scan_path: &std::path::Path, to
     Ok(())
 }
 
-/// 打印扫描结果
-fn print_scan_results(result: &scan::ScanResult) {
-    println!("📋 扫描结果:");
-    println!("工具: {tool} (版本: {version})", tool = result.tool, version = result.version);
-    println!("执行时间: {:.2}秒", result.execution_time);
-    
-    if let Some(error) = &result.error {
-        println!("❌ 错误: {error}");
-        return;
-    }
-    
-    if result.findings.is_empty() {
-        println!("✅ 未发现安全问题");
-        return;
-    }
-    
-    println!("🔍 发现 {} 个问题:", result.findings.len());
-    
-    for (index, finding) in result.findings.iter().enumerate() {
-        println!("\n{}. {title}", index + 1, title = finding.title);
-        println!("   文件: {}", finding.file_path.display());
-        println!("   位置: 第{}行", finding.line);
-        println!("   严重程度: {:?}", finding.severity);
-        println!("   规则ID: {rule_id}", rule_id = finding.rule_id);
-        
-        if let Some(snippet) = &finding.code_snippet {
-            println!("   代码片段:");
-            for line in snippet.lines().take(3) {
-                println!("     {line}");
-            }
-        }
-    }
-}
 
 /// 处理带AI解释的Git命令
 async fn handle_git_with_ai(config: &Config, git_args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let output = git::run_git(git_args)?;
-    
-    // 如果输出为空，直接显示
-    if output.trim().is_empty() {
-        println!("命令执行完成，无输出");
-        return Ok(());
+    // 首先尝试执行git命令
+    match git::run_git(git_args) {
+        Ok(output) => {
+            // 命令执行成功，直接输出结果
+            print!("{output}");
+            
+            // 如果是commit命令，尝试显示相关的review结果
+            if git_args.first().map(|s| s == "commit").unwrap_or(false) {
+                if let Err(e) = show_related_review_results(config) {
+                    eprintln!("⚠️ 无法显示review结果: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            // 命令执行失败，提供AI解释和建议
+            println!("❌ Git命令执行失败: {}", e);
+            
+            // 构建AI提示词，询问解决方案
+            let prompt = format!(
+                "用户执行Git命令时遇到错误，请提供帮助：\n\n命令: git {}\n\n错误信息: {}\n\n请提供：\n1. 错误原因分析\n2. 正确的命令格式\n3. 解决方案建议\n4. 相关的最佳实践",
+                git_args.join(" "),
+                e
+            );
+            
+            match ai::call_ai(config, &prompt).await {
+                Ok(explanation) => {
+                    println!("\n🤖 AI建议:");
+                    println!("{}", explanation);
+                }
+                Err(ai_error) => {
+                    println!("\n⚠️ 无法获取AI建议: {}", ai_error);
+                    println!("请检查Git命令是否正确，或使用 --noai 参数直接执行Git命令。");
+                }
+            }
+        }
     }
     
-    // AI解释输出
-    let prompt = format!(
-        "解释以下Git命令输出的含义:\n\n命令: git {}\n\n输出:\n{output}",
-        git_args.join(" ")
-    );
+    Ok(())
+}
+
+/// 显示相关的review结果（在commit成功后调用）
+fn show_related_review_results(_config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_dir = get_cache_dir()?;
     
-    let explanation = ai::call_ai(config, &prompt).await?;
+    // 策略1：检查当前是否有未提交的变更
+    if let Ok(current_diff) = git::get_all_diff() {
+        let diff_hash = ReviewCache::hash_diff(&current_diff);
+        let cache_file = cache_dir.join(format!("review_{}.json", diff_hash));
+        
+        if cache_file.exists() {
+            println!("\n📋 当前代码的评审结果:");
+            println!("   (来自最近的review缓存)");
+            
+            let content = fs::read_to_string(&cache_file)?;
+            let cache: ReviewCache = serde_json::from_str(&content)?;
+            
+            if !cache.is_expired(3600) {
+                println!("{}", cache.review_result);
+            } else {
+                println!("   (缓存已过期，建议重新运行 gitai review)");
+            }
+            return Ok(());
+        }
+    }
     
-    println!("🔧 Git命令输出:");
-    println!("{output}");
-    println!("\n🤖 AI解释:");
-    println!("{explanation}");
+    // 策略2：查找最新的review缓存
+    if let Ok(entries) = fs::read_dir(&cache_dir) {
+        let mut most_recent_cache: Option<ReviewCache> = None;
+        let mut most_recent_time = std::time::SystemTime::UNIX_EPOCH;
+        
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") 
+                && path.file_name().and_then(|s| s.to_str()).map(|s| s.starts_with("review_")).unwrap_or(false) {
+                
+                if let Ok(metadata) = entry.metadata() {
+                    if let Ok(modified_time) = metadata.modified() {
+                        if modified_time > most_recent_time {
+                            if let Ok(content) = fs::read_to_string(&path) {
+                                if let Ok(cache) = serde_json::from_str::<ReviewCache>(&content) {
+                                    if !cache.is_expired(3600) {
+                                        most_recent_cache = Some(cache);
+                                        most_recent_time = modified_time;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if let Some(cache) = most_recent_cache {
+            println!("\n📋 相关的代码评审结果:");
+            println!("   (来自最近的review缓存)");
+            println!("{}", cache.review_result);
+            return Ok(());
+        }
+    }
+    
+    Ok(())
+}
+
+/// 处理提示词相关操作
+async fn handle_prompts_action(_config: &Config, action: &args::PromptAction) -> Result<(), Box<dyn std::error::Error>> {
+    use args::PromptAction;
+    
+    match action {
+        PromptAction::List => {
+            println!("📋 提示词管理功能暂未实现");
+        }
+        PromptAction::Show { name, language } => {
+            println!("📝 显示提示词 '{}' (语言: {:?}) - 功能暂未实现", name, language);
+        }
+        PromptAction::Update => {
+            println!("🔄 更新提示词 - 功能暂未实现");
+        }
+        PromptAction::Init => {
+            println!("✅ 初始化提示词目录 - 功能暂未实现");
+        }
+    }
     
     Ok(())
 }
