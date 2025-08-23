@@ -1,0 +1,44 @@
+# 代码扫描配置
+[scan]
+# 默认扫描工具 (opengrep|auto)
+default_tool = "auto"
+
+# OpenGrep配置
+[scan.opengrep_config]
+# 规则路径
+rules_path = "~/.cache/gitai/scan-rules"
+# 扫描深度 (low|medium|high)
+depth = "medium"
+# 并发数
+concurrency = 4
+# 超时时间（秒）
+timeout = 300
+# 排除模式
+exclude_patterns = [
+    "*.test.*",
+    "*/tests/*",
+    "*/node_modules/*",
+    "*/target/*"
+]
+# 自动安装
+auto_install = true
+
+# 扫描结果存储路径
+results_path = "~/.gitai/scan-results"
+
+# 是否在扫描失败时回退到其他工具
+fallback_enabled = true
+
+# 规则管理器配置
+[scan.rule_manager]
+# 规则缓存目录
+cache_dir = "~/.cache/gitai/scan-rules"
+# 自动更新规则
+auto_update = true
+# 更新间隔（小时）
+update_interval = 24
+# 规则来源
+rule_sources = [
+    "https://github.com/opengrep/opengrep",
+    "https://github.com/semgrep/semgrep-rules"
+]

@@ -55,7 +55,23 @@
       "Bash(git pull:*)",
       "Bash(git remote:*)",
       "Bash(/Users/huchen/Projects/gitai/target/release/gitai:*)",
-      "Bash(gitai review:*)"
+      "Bash(gitai review:*)",
+      "Bash(cp:*)",
+      "Bash(cat:*)",
+      "Bash(sed:*)",
+      "Bash(./target/debug/gitai:*)",
+      "Bash(semgrep:*)",
+      "Bash(opengrep:*)",
+      "WebSearch",
+      "Bash(PATH=\"/tmp:$PATH\" ./target/debug/gitai scan --tool opengrep --path .)",
+      "Bash(PATH=\"/tmp:$PATH\" ./target/debug/gitai scan:*)",
+      "Bash(GITAI_TEST_MODE=1 ./target/debug/gitai scan --tool auto --auto-install)",
+      "Bash(gh repo list:*)",
+      "Bash(gh api:*)",
+      "Bash(RUST_LOG=debug ./target/release/gitai scan:*)",
+      "Bash(time:*)",
+      "Bash(/dev/null)",
+      "Bash(RUST_LOG=info ./target/release/gitai scan:*)"
     ],
     "deny": []
   }

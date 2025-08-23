@@ -10,7 +10,7 @@
 api_url = "http://localhost:11434/v1/chat/completions"
 
 # 使用的 AI 模型名称
-model_name = "qwen2.5:7b"
+model = "qwen2.5:32b"
 
 # API 密钥（可选，某些服务需要）
 api_key = ""
@@ -95,11 +95,11 @@ include_in_commit = true
 # 代码扫描配置
 # ============================================================================
 [scan]
+# 默认扫描工具 (opengrep|auto)
+default_tool = "auto"
+
 # 扫描结果存储路径
 results_path = "~/.gitai/scan-results"
-
-# 默认扫描工具 (semgrep|codeql|both)
-default_tool = "semgrep"
 
 # 是否在扫描失败时回退到其他工具
 fallback_enabled = true
@@ -108,14 +108,14 @@ fallback_enabled = true
 timeout = 300
 
 # ============================================================================
-# Semgrep 配置
+# OpenGrep 配置
 # ============================================================================
-[scan.semgrep]
-# 是否启用 Semgrep 扫描
+[scan.opengrep]
+# 是否启用 OpenGrep 扫描
 enabled = true
 
 # 规则目录路径
-rules_path = "~/.cache/gitai/semgrep"
+rules_path = "~/.cache/gitai/scan-rules"
 
 # 扫描深度 (basic|medium|deep)
 depth = "medium"
@@ -126,27 +126,17 @@ concurrency = 4
 # 排除的文件模式
 exclude_patterns = ["*.test.*", "*/tests/*", "*/node_modules/*"]
 
-# ============================================================================
-# CodeQL 配置
-# ============================================================================
-[scan.codeql]
-# 是否启用 CodeQL 扫描
-enabled = true
+# 是否启用自动安装
+auto_install = true
 
-# 标准库路径
-standard_library_path = "~/.cache/gitai/codeql"
+# 扫描超时时间（秒）
+timeout = 300
 
-# 数据库创建超时（分钟）
-database_timeout = 30
+# 官方网站
+website = "https://opengrep.dev/"
 
-# 查询超时（分钟）
-query_timeout = 15
-
-# 是否只运行安全查询
-security_only = true
-
-# 内存限制（MB）
-memory_limit = 2048
+# GitHub仓库
+repository = "https://github.com/opengrep/opengrep"
 
 # ============================================================================
 # MCP 服务配置
