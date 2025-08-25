@@ -58,8 +58,8 @@ impl PromptManager {
             .join("prompts")
     }
     
-    /// 根据语言获取模板文件路径
-    fn get_template_path(&self, template_name: &str, language: Option<&str>) -> Option<PathBuf> {
+    /// 获取模板文件路径
+    fn get_template_path(&self, template_name: &str) -> Option<PathBuf> {
         let prompts_dir = self.get_prompts_dir();
         let assets_dir = self.get_assets_prompts_dir();
         
@@ -67,18 +67,9 @@ impl PromptManager {
         let search_dirs = vec![prompts_dir, assets_dir];
         
         for base_dir in search_dirs {
-            // 如果指定了语言，优先查找语言子目录
-            if let Some(lang) = language {
-                let lang_path = base_dir.join(lang).join(format!("{}.md", template_name));
-                if lang_path.exists() {
-                    return Some(lang_path);
-                }
-            }
-            
-            // 查找默认模板
-            let default_path = base_dir.join(format!("{}.md", template_name));
-            if default_path.exists() {
-                return Some(default_path);
+            let template_path = base_dir.join(format!("{}.md", template_name));
+            if template_path.exists() {
+                return Some(template_path);
             }
         }
         
@@ -86,8 +77,8 @@ impl PromptManager {
     }
     
     /// 加载提示词模板
-    pub fn load_template(&self, template_name: &str, language: Option<&str>) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let template_path = self.get_template_path(template_name, language)
+    pub fn load_template(&self, template_name: &str, _language: Option<&str>) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let template_path = self.get_template_path(template_name)
             .ok_or_else(|| format!("未找到提示词模板: {}", template_name))?;
         
         log::debug!("加载提示词模板: {:?}", template_path);
