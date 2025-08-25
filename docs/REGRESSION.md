@@ -1,12 +1,17 @@
 # GitAI 回归测试手册
 
-> 目标：每次改动后，2-10 分钟内验证关键功能，确保“Never break userspace”。
+> 目标：每次改动后，2-10 分钟内验证关键功能，确保GitAI的即时性和非强制性设计原则。
 
 ## 0. 前置条件
 - Mac/Linux/WSL 任一环境
 - Rust 工具链（用于构建与自动安装 OpenGrep）
 - 可用的 AI 服务（可用本地 Ollama 或任意 OpenAI 兼容端点），按 README 配置 ~/.config/gitai/config.toml
 - 可选测试仓库：java-sec-code（或任意含已知问题的演示仓库）
+
+### 测试原则
+- **即时性验证**：确保工具在任何时刻都能立即可用
+- **非强制性验证**：确保所有功能都是可选的，不强制用户流程
+- **兼容性验证**：确保与原生Git命令完全兼容
 
 ## 1. 快速冒烟（2 分钟）
 
@@ -31,8 +36,59 @@ cargo build
 
 预期：
 - 构建成功
-- status 正常输出；--ai 模式在原始输出后追加“🤖 AI解释”
+- status 正常输出；--ai 模式在原始输出后追加"🤖 AI解释"
 - prompts 目录初始化并可列出/查看模板
+
+## 2. 即时性和非强制性验证（3 分钟）
+
+GitAI的核心设计是即时性和非强制性，必须验证：
+
+### 即时性验证 - 任何时刻都能使用
+```bash path=null start=null
+# 在没有任何变更的情况下使用
+./target/debug/gitai review
+./target/debug/gitai scan --path=. --no-history
+./target/debug/gitai commit --dry-run
+
+# 在有未暂存变更的情况下使用
+echo "// test" > src/test.rs
+./target/debug/gitai review
+./target/debug/gitai commit --dry-run --issue-id="#123"
+```
+
+### 非强制性验证 - 不强制用户流程
+```bash path=null start=null
+# 验证gitai review只是提供建议，不强制修改
+./target/debug/gitai review
+# 应该输出分析结果，但不要求用户必须修改代码
+
+# 验证gitai commit不强制必须使用AI
+echo "manual commit message" | git commit -F - 
+# 应该可以正常提交，不依赖gitai
+
+# 验证gitai scan不影响现有工作流
+./target/debug/gitai scan --path=. --no-history --format=json
+# 应该输出扫描结果，但不改变任何文件
+```
+
+### 兼容性验证 - 与原生Git完全兼容
+```bash path=null start=null
+# 验证gitai作为git代理时的零破坏性
+./target/debug/gitai log --oneline -5
+# 应该与原生 git log --oneline -5 输出完全相同
+
+./target/debug/gitai --ai log --oneline -5
+# 应该在原生输出后追加AI解释，不改变原始输出
+
+# 验证错误处理保持原生态
+./target/debug/gitai rebase definitely-not-a-branch || echo "non-zero as expected"
+# 应该保持原生的错误输出和非零退出码
+```
+
+预期：
+- 所有工具在任何时刻都能立即可用，不依赖特定状态
+- 工具只是提供建议，不强制用户必须采纳
+- 与原生Git命令完全兼容，不改变现有行为
 
 ## 2. 扫描（OpenGrep 集成与规则加载）
 
@@ -204,8 +260,26 @@ hyperfine --warmup 3 \
 
 ---
 
-维护原则：
-- 默认“直通”原生行为，增强功能全部显式开启
+## 维护原则
+
+### 即时性维护
+- 确保所有工具在任何时刻都能立即可用
+- 不依赖特定的开发状态或前置条件
+- 提供即时反馈，不强制等待
+
+### 非强制性维护  
+- 所有增强功能都必须是可选的
+- 不改变用户现有的Git工作流
+- 保持与原生Git命令的完全兼容
+
+### 文档维护
+- 默认"直通"原生行为，增强功能全部显式开启
 - 文档中的每条命令都必须在当前版本可直接运行
+- 优先体现即时性和非强制性的设计理念
 - 若有行为变更，先更新本文档与 README，再合并代码
+
+### 质量保证
+- 每次改动后必须运行完整的回归测试
+- 确保不破坏现有的即时性和非强制性特性
+- 保持性能优化，特别是缓存系统的有效性
 
