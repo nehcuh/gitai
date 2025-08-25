@@ -3,6 +3,14 @@ name = "gitai"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "gitai"
+path = "src/main.rs"
+
+[lib]
+name = "gitai"
+path = "src/lib.rs"
+
 [dependencies]
 clap = { version = "4.5.38", features = ["derive"] }
 dirs = "6.0.0"
@@ -18,6 +26,18 @@ walkdir = "2.5.0"
 tempfile = "3.20.0"
 md5 = "0.7.0"
 chrono = { version = "0.4.40", features = ["serde"] }
+log = "0.4.22"
+env_logger = "0.11.6"
+async-trait = "0.1.86"
+tree-sitter = "0.20"
+tree-sitter-java = "0.20"
+tree-sitter-rust = "0.20"
+tree-sitter-c = "0.20"
+tree-sitter-cpp = "0.20"
+tree-sitter-python = "0.20"
+tree-sitter-go = "0.20"
+tree-sitter-javascript = "0.20"
+tree-sitter-typescript = "0.20"
 
 [dev-dependencies]
 tempfile = "3.20.0"

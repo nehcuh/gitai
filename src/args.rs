@@ -4,27 +4,25 @@ use std::path::PathBuf;
 /// GitAI - 简化的参数解析
 #[derive(Parser, Debug)]
 #[command(name = "gitai")]
-#[command(about = "Git with AI assistance")]
+#[command(about = "AI驱动的Git工作流助手 - 智能提交、代码评审、安全扫描")]
 pub struct Args {
     /// 子命令
     #[command(subcommand)]
     pub command: Command,
     
-    /// 禁用AI功能
+    /// 启用AI解释（为Git命令输出提供智能解释和建议）
+    #[arg(long)]
+    pub ai: bool,
+
+    /// 显式禁用AI（用于覆盖默认或别名设置）
     #[arg(long)]
     pub noai: bool,
 }
 
 #[derive(Parser, Debug)]
 pub enum Command {
-    /// 代码评审
+    /// AI驱动的代码评审（支持安全扫描集成）
     Review {
-        /// 分析深度
-        #[arg(long)]
-        depth: Option<String>,
-        /// 关注点
-        #[arg(long)]
-        focus: Option<String>,
         /// 语言
         #[arg(long)]
         language: Option<String>,
@@ -46,26 +44,14 @@ pub enum Command {
         /// 阻止严重问题
         #[arg(long)]
         block_on_critical: bool,
-    },
-    /// 提交
-    Commit {
-        /// 自定义提交信息
-        #[arg(short, long)]
-        message: Option<String>,
-        /// 启用Tree-sitter
-        #[arg(short, long)]
-        tree_sitter: bool,
-        /// 自动暂存
-        #[arg(short, long)]
-        auto_stage: bool,
-        /// 关联Issue ID
+        /// 关联的Issue ID
         #[arg(long)]
         issue_id: Option<String>,
-        /// 启用审查
+        /// 启用偏离度分析
         #[arg(long)]
-        review: bool,
+        deviation_analysis: bool,
     },
-    /// 安全扫描
+    /// 代码安全扫描（基于OpenGrep）
     Scan {
         /// 扫描路径
         #[arg(short, long, default_value = ".")]
@@ -94,8 +80,20 @@ pub enum Command {
         /// 自动安装缺失的工具
         #[arg(long)]
         auto_install: bool,
+        /// 指定规则语言（例如：java、python），将直接使用对应子目录，跳过自动检测
+        #[arg(long)]
+        lang: Option<String>,
+        /// 不保存扫描历史（用于基准测试/提高性能）
+        #[arg(long)]
+        no_history: bool,
+        /// 覆盖超时时间（秒），直通 opengrep --timeout
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// 基准模式：禁用历史、跳过版本查询等非必要逻辑
+        #[arg(long)]
+        benchmark: bool,
     },
-    /// 查看扫描历史
+    /// 查看历史扫描记录
     ScanHistory {
         /// 显示最近N次扫描
         #[arg(long, default_value = "10")]
@@ -104,9 +102,63 @@ pub enum Command {
         #[arg(long, default_value = "text")]
         format: String,
     },
+    /// 管理AI提示词模板
+    Prompts {
+        #[command(subcommand)]
+        action: PromptAction,
+    },
+    /// 智能提交（自动生成信息，支持Issue关联）
+    Commit {
+        /// 提交信息
+        #[arg(short, long)]
+        message: Option<String>,
+        /// 关联的Issue ID
+        #[arg(long)]
+        issue_id: Option<String>,
+        /// 添加所有变更文件
+        #[arg(short, long)]
+        all: bool,
+        /// 启用代码评审
+        #[arg(long)]
+        review: bool,
+        /// 启用Tree-sitter结构分析
+        #[arg(long)]
+        tree_sitter: bool,
+        /// 测试运行，不实际提交
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// 更新安全扫描规则库
+    Update {
+        /// 仅检查状态，不执行更新
+        #[arg(long)]
+        check: bool,
+        /// 输出格式（text|json）
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
     /// 通用Git命令（带AI解释）
     #[command(external_subcommand)]
     Git(Vec<String>),
+}
+
+/// 提示词操作
+#[derive(Parser, Debug)]
+pub enum PromptAction {
+    /// 列出可用提示词
+    List,
+    /// 显示提示词内容
+    Show { 
+        /// 提示词名称
+        name: String,
+        /// 语言
+        #[arg(long)]
+        language: Option<String>,
+    },
+    /// 更新所有提示词
+    Update,
+    /// 初始化提示词目录
+    Init,
 }
 
 impl Args {

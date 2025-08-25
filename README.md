@@ -16,42 +16,27 @@ GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工
 - **企业级项目** - 集成DevOps流程，自动化质量控制
 - **开源项目** - 维护代码质量，吸引贡献者参与
 
+> 状态声明：当前版本专注于可用的 CLI 功能（review/commit/scan/update 与 Git AI 解释）。README 中涉及 Tree-sitter 深度分析、完整 docs 站点与部分 DevOps 集成属于“规划中/逐步实现”，以本文件的“快速开始/配置/命令示例”为准。
+
 ## 📚 文档导航
 
-### 🏃 快速开始
-- **[📚 完整文档导航](docs/README.md)** - 全面的文档索引和学习路径
-- **[5分钟快速入门](docs/user-guide/QUICK_START.md)** - 立即体验GitAI的核心功能
-- [安装指南](docs/user-guide/INSTALLATION_GUIDE.md) - 详细的安装和配置说明
-- [配置参考](docs/user-guide/CONFIGURATION_REFERENCE.md) - 完整的配置选项说明
+当前版本以本 README 为主要文档。以下文档与站点尚未提供，属规划中：
+- 完整文档导航 / 用户指南 / 开发指南 / 运维部署（规划中）
+- MCP 与外部集成指南（规划中）
 
-### 📖 用户指南  
-- [API文档](docs/user-guide/API_DOCUMENTATION.md) - 完整的CLI命令参考
-- [故障排除](docs/user-guide/TROUBLESHOOTING.md) - 常见问题解决方案
-
-### 🛠️ 开发指南
-- [开发指南](docs/developer-guide/DEVELOPMENT_GUIDE.md) - 开发环境搭建和开发流程
-- [架构分析](docs/developer-guide/ARCHITECTURE_ANALYSIS.md) - 项目架构和技术设计  
-- [贡献指南](docs/developer-guide/CONTRIBUTING.md) - 参与项目开发的指南
-
-### 🏭 运维部署
-- [部署指南](docs/operations/DEPLOYMENT_GUIDE.md) - 生产环境部署和运维
-
-### 🔧 集成指南
-- [MCP集成指南](docs/integration/MCP_INTEGRATION_GUIDE.md) - 通用MCP服务配置和使用  
-- [ChatWise配置](docs/integration/MCP_CHATWISE_SETUP.md) - ChatWise客户端专用配置
+请直接参考下方“快速开始”“详细功能指南”“配置”等章节。
 
 ## ✨ 核心功能
 
 ### 🔍 智能代码评审 (`gitai review`)
 - **AI 驱动分析**：深度理解代码变更的业务逻辑和技术影响
-- **Tree-sitter 语法分析**：支持 Rust、Java、Python、Go、JavaScript、C/C++ 等多种语言
-- **DevOps 集成**：自动获取工作项需求，分析代码与需求的一致性
+- **Tree-sitter 支持**：--tree-sitter 标志已添加（功能实现中）
+- **安全扫描集成**：可与 OpenGrep 安全扫描工具无缝集成
 - **多维度评估**：代码质量、安全性、性能、可维护性全方位分析
 - **量化评分**：提供 0-100 分的客观评分和详细改进建议
 
 ### 🤖 智能提交助手 (`gitai commit`)
 - **AI 生成提交信息**：基于代码变更自动生成规范的提交信息
-- **Tree-sitter 增强**：深度分析代码结构变化，生成更精准的描述
 - **Issue ID 关联**：自动在提交信息前添加关联的 issue 编号前缀
 - **审查结果集成**：自动整合代码评审要点到提交信息
 - **自定义信息支持**：保留用户输入，AI 提供补充建议
@@ -63,19 +48,22 @@ GitAI 是一个现代化的AI驱动Git工作流助手，旨在通过智能化工
 - **命令学习助手**：帮助理解复杂的 Git 命令和输出
 - **无缝集成**：完全兼容原生 Git 命令和工作流
 
-### 🎯 DevOps 工作流集成
-- **需求追踪**：自动关联代码变更与用户故事、任务、缺陷
-- **完整性验证**：验证代码实现是否满足业务需求
-- **偏离检测**：识别代码实现与原始需求的偏差
-- **团队协作**：支持多平台 DevOps 工具集成
+### 🎯 DevOps 工作流集成（部分实现）
+- **Issue关联**：支持在提交信息中关联 Issue ID
+- **需求追踪**：通过 issue-id 参数关联代码变更
+- **偏离度分析**：--deviation-analysis 标志（实现中）
+- **团队协作**：基础框架已建立
 
 ### 🛡️ 代码安全扫描 (`gitai scan`)
 - **专注OpenGrep**：集成 OpenGrep 高性能安全扫描工具，支持30+种编程语言
-- **智能规则管理**：自动下载和更新安全扫描规则库
+- **智能规则管理**：自动下载和更新安全扫描规则库（首次建议执行 `gitai update` 或在扫描时加 `--update-rules`）
 - **灵活配置**：支持全量扫描、增量扫描、远程扫描等多种模式
-- **自动安装**：一键自动安装OpenGrep工具，无需手动配置
+- **自动安装**：一键自动安装 OpenGrep（`--auto-install`，通过 cargo 安装，需要 Rust 工具链）
 - **实时进度反馈**：显示扫描进度和发现的问题统计
 - **开源中立**：基于LGPL 2.1许可证，由多个安全组织共同维护
+
+> 环境变量：`GITAI_RULES_URL` 可覆盖默认规则包地址（支持 http(s):// 与 file://）。
+> 快速检查：`gitai update --check` 或 `gitai update --check --format=json` 查看规则是否就绪。
 
 ### 🔗 安全扫描与代码评审集成
 - **一键安全评审**：在代码评审时自动运行安全扫描 (`--security-scan`)
@@ -147,38 +135,30 @@ gitai review --commit1=HEAD~1 --commit2=HEAD
 gitai review --commit1=abc123 --commit2=def456
 ```
 
-#### Tree-sitter 增强分析
+#### Tree-sitter 支持（开发中）
 ```bash
-# 启用 Tree-sitter 深度分析
+# Tree-sitter 标志已添加（功能开发中）
 gitai review --tree-sitter
 
-# 指定分析深度
-gitai review --tree-sitter --depth=1  # 基础分析
-gitai review --tree-sitter --depth=2  # 中级分析
-gitai review --tree-sitter --depth=3  # 深度分析
+# 注意：当前版本 Tree-sitter 功能尚未完全实现
 ```
 
-#### DevOps 工作项集成
+#### Issue 关联（当前支持）
 ```bash
-# 分析用户故事实现
-gitai review --space-id=726226 --stories=99,100,101
+# 通过 issue-id 参数关联
+gitai review --issue-id="#123"
 
-# 分析任务完成情况
-gitai review --space-id=726226 --tasks=200,201
+# 多个 issues 关联
+gitai review --issue-id="#123,#456"
 
-# 分析缺陷修复
-gitai review --space-id=726226 --defects=301,302
-
-# 混合工作项分析
-gitai review --space-id=726226 --stories=99 --tasks=200 --defects=301
+# 偏离度分析（开发中）
+gitai review --deviation-analysis
 ```
 
 #### 高级配置
 ```bash
-# 指定分析深度和关注点
-gitai review --space-id=726226 --stories=99 \
-  --depth=deep \
-  --focus="安全性,性能,可维护性"
+# 集成工作项分析
+gitai review --space-id=726226 --stories=99
 
 # 生成不同格式的报告
 gitai review --format=json --output=report.json
@@ -197,16 +177,16 @@ gitai commit
 gitai cm
 ```
 
-#### Tree-sitter 增强提交
+#### AI 增强提交
 ```bash
-# 启用 Tree-sitter 分析
-gitai commit --tree-sitter
+# AI 自动生成提交信息
+gitai commit
 
-# 指定分析级别
-gitai commit -t -l 2
+# 结合代码评审
+gitai commit --review
 
-# 完整参数形式
-gitai commit --tree-sitter --level 3
+# 使用别名
+gitai cm
 ```
 
 #### 自定义提交信息
@@ -282,15 +262,15 @@ gitai --ai merge --strategy=recursive origin/main
 
 #### 智能错误处理
 ```bash
-# 正常执行，错误时提供 AI 解释
-gitai status         # 如果有错误，自动提供解决方案
-gitai push origin    # 推送失败时，AI 分析原因和解决方法
-gitai rebase main    # 冲突时，AI 提供解决建议
+# 显式开启 AI 解释；错误时亦会给出建议，同时保留原始输出
+gitai --ai status
+gitai --ai push origin
+gitai --ai rebase main
 ```
 
-#### 禁用 AI 功能
+#### 显式禁用 AI（默认即禁用）
 ```bash
-# 完全禁用 AI，使用原生 Git
+# 默认不启用 AI，如使用了 alias 等强制开启时，可用 --noai 显式禁用
 gitai --noai status
 gitai --noai commit -m "正常提交"
 ```
@@ -386,13 +366,19 @@ gitai --noai commit -m "正常提交"
 
 ## ⚙️ 配置
 
+### Shell 别名推荐（非必需）
+```bash
+# Zsh/Bash
+alias ga='gitai --ai'      # 显式启用 AI 解释
+alias gnx='gitai --noai'   # 显式禁用 AI（即使用原生 git 行为）
+
+# Fish
+alias ga 'gitai --ai'
+alias gnx 'gitai --noai'
+```
+
 ### 环境变量
 ```bash
-# DevOps API 配置
-export GITAI_DEVOPS_PLATFORM="coding"
-export GITAI_DEVOPS_BASE_URL="https://your-org.coding.net"
-export GITAI_DEVOPS_TOKEN="your_api_token"
-
 # AI 服务配置
 export GITAI_AI_API_URL="http://localhost:11434/v1/chat/completions"
 export GITAI_AI_MODEL="qwen2.5:32b"
@@ -403,39 +389,34 @@ export GITAI_AI_API_KEY="your_openai_key"  # 可选
 ```toml
 [ai]
 api_url = "http://localhost:11434/v1/chat/completions"
-model_name = "qwen2.5:32b"
+model = "qwen2.5:32b"
 temperature = 0.3
 api_key = "your_api_key"  # 可选
 
-[account]
-devops_platform = "coding"
-base_url = "https://your-org.coding.net"
-token = "your_devops_token"
-timeout = 30000
-retry_count = 3
-
-[tree_sitter]
-enabled = true
-cache_enabled = true
-languages = ["rust", "python", "javascript", "typescript", "go", "java", "c", "cpp"]
-
-[review]
-auto_save = true
-storage_path = "~/review_results"
-format = "markdown"
-max_age_hours = 168
-include_in_commit = true
+[scan]
+default_path = "/path/to/project"  # 可选，默认为当前目录
+timeout = 300
+jobs = 4
 ```
 
 ### Prompt 模板自定义
 ```bash
-# 自定义提示词模板
+# 初始化模板目录（如不存在则创建，并写入默认模板）
+gitai prompts init
+
+# 查看可用模板
+gitai prompts list
+
+# 查看某个模板内容
+gitai prompts show --name commit-generator
+
+# 从远程/预置源更新模板（非强制，按需使用）
+gitai prompts update
+
+# 模板目录结构（可手工编辑）
 ~/.config/gitai/prompts/
 ├── commit-generator.md      # 提交信息生成模板
-├── general-helper.md        # 通用 AI 助手模板
-├── review.md               # 代码评审模板
-├── translator.md           # 翻译模板
-└── commit-deviation.md     # 偏离检测模板
+├── review.md                # 代码评审模板
 ```
 
 ## 🛠️ 支持的技术栈
@@ -466,8 +447,8 @@ include_in_commit = true
 ### 个人开发者
 ```bash
 # 每日开发流程
-gitai review --tree-sitter          # 代码质量检查
-gitai commit -a -t --issue-id="#123" # 关联 issue 的智能提交
+gitai review                        # 代码质量检查
+gitai commit -a --issue-id="#123"  # 关联 issue 的智能提交
 gitai --ai push origin main         # 推送时的智能提示
 
 # 处理多个相关 issues
@@ -477,14 +458,13 @@ gitai commit --issue-id="#123,#456" -m "修复登录和权限问题"
 ### 团队协作
 ```bash
 # 团队评审流程
-gitai review --space-id=PROJECT_ID --stories=STORY_IDS \
-  --format=html --output=team-review.html
+gitai review --format=html --output=team-review.html
 
 # 标准化提交流程（关联工作项）
-gitai commit -t --review --issue-id="#STORY-123" -m "实现用户认证功能"
+gitai commit --review --issue-id="#STORY-123" -m "实现用户认证功能"
 
 # 团队协作中的 issue 追踪
-gitai commit --issue-id="#BUG-456,#TASK-789" -t --review
+gitai commit --issue-id="#BUG-456,#TASK-789" --review
 
 # 发布分支的批量关联
 gitai commit --issue-id="#FEAT-001,#FEAT-002,#BUG-003" -m "发布 v1.2.0"
@@ -495,24 +475,24 @@ gitai commit --issue-id="#FEAT-001,#FEAT-002,#BUG-003" -m "发布 v1.2.0"
 # GitHub Actions 示例
 - name: AI Code Review
   run: |
-    gitai review --space-id=${{ vars.SPACE_ID }} \
-      --stories=${{ github.event.pull_request.body }} \
+    gitai review --format=json --output=ci-review.json
+    
+    # 如果需要关联 issues
+    gitai review --issue-id="${{ github.event.pull_request.body }}" \
       --format=json --output=ci-review.json
-
-    gitai commit -a -t --review
 ```
 
 ### 代码质量治理
 ```bash
 # 技术债务分析
-gitai review --focus="技术债务,可维护性" --depth=deep
+gitai review
 
 # 安全审计
-gitai review --focus="安全性" --tree-sitter --format=markdown \
+gitai review --security-scan --format=markdown \
   --output=security-audit-$(date +%Y%m%d).md
 
-# 性能分析
-gitai review --focus="性能,优化" --tree-sitter
+# 代码质量分析
+gitai review --format=json --output=quality-report.json
 ```
 
 ## 🧪 高级功能
@@ -531,24 +511,24 @@ git rebase -i HEAD~10 --exec "gitai commit --amend"
 
 ### 自定义分析规则
 ```bash
-# 使用自定义关注点
-gitai review --focus="内存安全,并发安全,API 设计"
+# 指定语言分析
+gitai review --language=rust
 
-# 特定文件类型分析
-gitai review --tree-sitter --files="*.rs,*.py"
+# 指定输出格式
+gitai review --format=json
 
-# 排除特定目录
-gitai review --exclude="tests/*,examples/*"
+# 保存分析结果
+gitai review --output=review-report.md
 ```
 
 ### 集成外部工具
 ```bash
 # 与 git hooks 集成
-echo 'gitai commit -a -t --review' > .git/hooks/pre-commit
+echo 'gitai commit -a --review' > .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 
 # 与编辑器集成（VS Code）
-echo '{"command": "gitai commit -t"}' > .vscode/tasks.json
+echo '{"command": "gitai commit"}' > .vscode/tasks.json
 ```
 
 ## 🔧 故障排除
@@ -571,7 +551,7 @@ gitai review --dry-run --space-id=726226
 export GITAI_AI_MODEL="qwen2.5:7b"
 
 # 调整分析深度
-gitai review --depth=basic
+gitai review
 
 # 检查本地 AI 服务
 curl http://localhost:11434/api/tags
@@ -579,14 +559,12 @@ curl http://localhost:11434/api/tags
 
 **Q: Tree-sitter 分析失败**
 ```bash
-# 启用详细日志
-RUST_LOG=debug gitai review --tree-sitter
+# Tree-sitter 功能尚在开发中
+# 当前可使用基础 AI 分析
+gitai review
 
-# 检查语言支持
-gitai review --tree-sitter --languages=rust,python
-
-# 回退到基础分析
-gitai review  # 不使用 --tree-sitter
+# 启用详细日志调试
+RUST_LOG=debug gitai review
 ```
 
 **Q: 提交信息生成质量不佳**
@@ -602,6 +580,18 @@ vim ~/.config/gitai/prompts/commit-generator.md
 gitai commit --dry-run
 ```
 
+### OpenGrep 安装说明
+```bash
+# 推荐方式（需要安装 Rust 工具链 https://rustup.rs ）
+cargo install opengrep
+
+# 若执行后无法找到命令，添加 cargo bin 到 PATH（临时）
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# 使用 gitai 自动安装（内部也是调用 cargo）
+gitai scan --auto-install --update-rules
+```
+
 ### 调试模式
 ```bash
 # 启用详细日志
@@ -611,7 +601,7 @@ RUST_LOG=debug gitai review
 RUST_LOG=gitai::handlers::ai=trace gitai commit
 
 # 性能分析
-time gitai review --tree-sitter --depth=deep
+time gitai review --tree-sitter
 ```
 
 ## 🏗️ 项目架构
@@ -673,7 +663,7 @@ RUST_LOG=debug cargo run -- help
 ### 提交规范
 ```bash
 # 使用 GitAI 自己生成提交信息
-cargo run -- commit -t --review
+cargo run -- commit --review
 
 # 手动提交的格式规范
 git commit -m "feat(review): 添加 Tree-sitter 增强分析
@@ -690,8 +680,8 @@ Closes #123"
 1. **Fork 项目**
 2. **创建特性分支** (`git checkout -b feature/amazing-feature`)
 3. **开发和测试** (`cargo test`)
-4. **使用 GitAI 评审** (`gitai review --tree-sitter`)
-5. **智能提交** (`gitai commit -t --review`)
+4. **使用 GitAI 评审** (`gitai review`)
+5. **智能提交** (`gitai commit --review`)
 6. **创建 Pull Request**
 
 ### 代码规范
