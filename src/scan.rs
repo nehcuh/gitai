@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
+use log::debug;
 
 /// 扫描结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +104,22 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
     
     // 解析结果
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let findings = parse_opengrep_output(&stdout)?;
+    debug!("📄 OpenGrep stdout: {}", stdout);
+    
+    let findings = match parse_opengrep_output(&stdout) {
+        Ok(f) => f,
+        Err(e) => {
+            debug!("❌ JSON 解析失败: {}", e);
+            return Ok(ScanResult {
+                tool: "opengrep".to_string(),
+                version: if include_version { get_opengrep_version().unwrap_or_else(|_| "unknown".to_string()) } else { "unknown".to_string() },
+                execution_time,
+                findings: vec![],
+                error: Some(format!("JSON 解析失败: {}", e)),
+                rules_info,
+            });
+        }
+    };
     
     Ok(ScanResult {
         tool: "opengrep".to_string(),
@@ -131,14 +147,43 @@ fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + S
 
 /// 解析OpenGrep输出（整块 JSON，遍历 results 数组）
 fn parse_opengrep_output(output: &str) -> Result<Vec<Finding>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let v: serde_json::Value = serde_json::from_str(output)?;
+    debug!("🔍 解析OpenGrep输出: {}", output);
+    
+    if output.trim().is_empty() {
+        debug!("⚠️ OpenGrep 输出为空");
+        return Ok(Vec::new());
+    }
+    
+    let v: serde_json::Value = serde_json::from_str(output)
+        .map_err(|e| format!("JSON 解析失败: {}, 输入: {}", e, output))?;
+    
+    debug!("📄 JSON 结构: {:?}", v);
+    
     let mut findings = Vec::new();
     if let Some(results) = v.get("results").and_then(|r| r.as_array()) {
-        for item in results {
-            let finding = create_finding_from_result(item)?;
-            findings.push(finding);
+        debug!("📋 找到 {} 个结果", results.len());
+        for (i, item) in results.iter().enumerate() {
+            match create_finding_from_result(item) {
+                Ok(finding) => {
+                    findings.push(finding);
+                }
+                Err(e) => {
+                    debug!("❌ 解析第 {} 个结果失败: {}", i, e);
+                }
+            }
+        }
+    } else {
+        debug!("⚠️ 未找到 results 数组");
+        // 检查是否有错误信息
+        if let Some(errors) = v.get("errors").and_then(|e| e.as_array()) {
+            debug!("❌ OpenGrep 报告错误: {:?}", errors);
+        }
+        // 检查扫描的路径
+        if let Some(paths) = v.get("paths").and_then(|p| p.as_object()) {
+            debug!("📂 扫描的路径: {:?}", paths);
         }
     }
+    
     Ok(findings)
 }
 
