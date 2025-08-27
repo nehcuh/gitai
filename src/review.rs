@@ -143,9 +143,14 @@ impl ReviewExecutor {
             if has_staged {
                 println!("   当前已暂存的变更也会被评审");
             }
+            println!("   📝 GitAI将分析所有变更（已暂存 + 未暂存）");
             println!();
         } else if has_staged {
             println!("✅ 已暂存的代码准备就绪");
+            println!("   📝 GitAI将分析已暂存的变更");
+        } else {
+            println!("🔍 检查未推送的提交...");
+            println!("   📝 GitAI将分析最近的提交变更");
         }
         
         Ok(())
@@ -232,11 +237,31 @@ impl ReviewExecutor {
         // 输出安全扫描结果
         println!("\n🛡️ 安全扫描结果：");
         if !result.security_findings.is_empty() {
+            let critical_count = result.security_findings.iter()
+                .filter(|f| matches!(self.parse_severity(&f.severity), crate::scan::Severity::Error))
+                .count();
+            let warning_count = result.security_findings.iter()
+                .filter(|f| matches!(self.parse_severity(&f.severity), crate::scan::Severity::Warning))
+                .count();
+            
+            if critical_count > 0 {
+                println!("  🚨 严重问题: {} 个", critical_count);
+            }
+            if warning_count > 0 {
+                println!("  ⚠️  警告问题: {} 个", warning_count);
+            }
+            
+            println!("  📝 详细问题：");
             for finding in result.security_findings.iter().take(5) {
-                println!("  - {} ({}) ({})", finding.title, finding.file_path, finding.rule_id);
+                let severity_icon = match self.parse_severity(&finding.severity) {
+                    crate::scan::Severity::Error => "🚨",
+                    crate::scan::Severity::Warning => "⚠️ ",
+                    crate::scan::Severity::Info => "ℹ️ ",
+                };
+                println!("    {} {} ({})", severity_icon, finding.title, finding.file_path);
             }
             if result.security_findings.len() > 5 {
-                println!("  - ... 还有 {} 个问题", result.security_findings.len() - 5);
+                println!("    ... 还有 {} 个问题", result.security_findings.len() - 5);
             }
         } else {
             println!("  ✅ 未发现安全问题");
@@ -245,8 +270,11 @@ impl ReviewExecutor {
         // 输出偏离度分析
         if let Some(deviation) = &result.deviation_analysis {
             println!("\n📊 偏离度分析：");
-            println!("  需求覆盖率: {:.1}%", deviation.requirement_coverage * 100.0);
-            println!("  质量评分: {:.1}%", deviation.quality_score * 100.0);
+            let coverage_color = if deviation.requirement_coverage >= 0.8 { "🟢" } else if deviation.requirement_coverage >= 0.6 { "🟡" } else { "🔴" };
+            let quality_color = if deviation.quality_score >= 0.8 { "🟢" } else if deviation.quality_score >= 0.6 { "🟡" } else { "🔴" };
+            
+            println!("  {} 需求覆盖率: {:.1}%", coverage_color, deviation.requirement_coverage * 100.0);
+            println!("  {} 质量评分: {:.1}%", quality_color, deviation.quality_score * 100.0);
         }
         
         self.output_result(&result.review_result, config)?;
@@ -285,7 +313,8 @@ impl ReviewExecutor {
         // 从diff中提取代码内容
         let code_content = self.extract_code_from_diff(diff);
         if code_content.is_empty() {
-            println!("⚠️ 未能从diff中提取到代码内容");
+            println!("  💡 提示：当前变更中没有可分析的代码内容");
+            println!("     这可能是文档、配置文件或二进制文件的变更");
             return Ok(None);
         }
         
@@ -297,11 +326,12 @@ impl ReviewExecutor {
         };
         
         let Some(supported_lang) = language else {
-            println!("⚠️ 不支持的语言或无法推断语言类型");
+            println!("  💡 提示：当前变更的语言类型不支持Tree-sitter分析");
+            println!("     支持的语言：Rust, Java, JavaScript, Python, Go, C, C++");
             return Ok(None);
         };
         
-        println!("  检测到语言: {:?}", supported_lang);
+        println!("  📝 检测到语言: {:?}", supported_lang);
         
         // 创建Tree-sitter管理器并分析
         match TreeSitterManager::new().await {
@@ -309,19 +339,21 @@ impl ReviewExecutor {
                 match manager.analyze_structure(&code_content, supported_lang) {
                     Ok(summary) => {
                         println!("  ✅ 结构分析完成");
-                        println!("     函数数量: {}", summary.functions.len());
-                        println!("     类数量: {}", summary.classes.len());
-                        println!("     注释数量: {}", summary.comments.len());
+                        println!("     🔢 函数数量: {}", summary.functions.len());
+                        println!("     🏗️  类数量: {}", summary.classes.len());
+                        println!("     💬 注释数量: {}", summary.comments.len());
                         Ok(Some(summary))
                     }
                     Err(e) => {
-                        println!("  ⚠️ 结构分析失败: {}", e);
+                        println!("  ⚠️  结构分析失败，将使用传统文本分析模式");
+                        log::debug!("Tree-sitter分析详情: {}", e);
                         Ok(None)
                     }
                 }
             }
             Err(e) => {
-                println!("  ⚠️ Tree-sitter管理器初始化失败: {}", e);
+                println!("  ⚠️  Tree-sitter初始化失败，将使用传统文本分析模式");
+                log::debug!("Tree-sitter初始化详情: {}", e);
                 Ok(None)
             }
         }
@@ -330,26 +362,43 @@ impl ReviewExecutor {
     /// 从diff中提取代码内容
     fn extract_code_from_diff(&self, diff: &str) -> String {
         let mut code_lines = Vec::new();
+        let mut in_file_section = false;
         
         for line in diff.lines() {
+            // 检测文件变更开始
+            if line.starts_with("diff --git") {
+                in_file_section = true;
+                continue;
+            }
+            
             // 跳过diff元数据行
-            if line.starts_with("diff --git") 
-                || line.starts_with("index")
+            if line.starts_with("index")
                 || line.starts_with("+++")
                 || line.starts_with("---")
                 || line.starts_with("@@") {
                 continue;
             }
             
+            // 空行表示文件变更结束
+            if line.is_empty() && in_file_section {
+                in_file_section = false;
+                // 添加文件分隔符，保持代码结构
+                code_lines.push("\n// === 文件分隔符 ===\n");
+                continue;
+            }
+            
             // 提取添加的行（+开头）和上下文行（没有+/-前缀）
             if line.starts_with('+') {
                 code_lines.push(&line[1..]);
-            } else if !line.starts_with('-') && !line.is_empty() {
+            } else if !line.starts_with('-') && !line.trim().is_empty() {
                 code_lines.push(line);
             }
         }
         
-        code_lines.join("\n")
+        let result = code_lines.join("\n");
+        
+        // 清理多余的分隔符
+        result.trim_matches('\n').to_string()
     }
     
     /// 检测支持的语言
@@ -369,6 +418,8 @@ impl ReviewExecutor {
     
     /// 从diff中推断语言
     fn infer_language_from_diff(&self, diff: &str) -> Option<SupportedLanguage> {
+        let mut detected_files = Vec::new();
+        
         // 查找文件路径以推断语言
         for line in diff.lines() {
             if line.starts_with("diff --git") || line.starts_with("+++") {
@@ -376,12 +427,32 @@ impl ReviewExecutor {
                     if let Some(extension) = std::path::Path::new(path)
                         .extension()
                         .and_then(|ext| ext.to_str()) {
-                        return SupportedLanguage::from_extension(extension);
+                        detected_files.push((path.to_string(), extension.to_string()));
                     }
                 }
             }
         }
         
+        // 如果没有检测到文件，返回None
+        if detected_files.is_empty() {
+            return None;
+        }
+        
+        // 优先返回第一个支持的语言
+        for (file_path, extension) in &detected_files {
+            if let Some(lang) = SupportedLanguage::from_extension(extension) {
+                log::debug!("从文件 {} 检测到语言: {:?}", file_path, lang);
+                return Some(lang);
+            }
+        }
+        
+        // 如果没有支持的语言，记录日志
+        let unsupported_files: Vec<String> = detected_files
+            .into_iter()
+            .map(|(path, ext)| format!("{} ({})", path, ext))
+            .collect();
+        
+        log::debug!("检测到不支持的文件类型: {:?}", unsupported_files);
         None
     }
     

@@ -138,12 +138,14 @@ impl Analyzer {
     
     /// 执行完整分析
     pub async fn analyze(&self, context: AnalysisContext) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
-        let review_result = self.analyze_review(&context).await?;
         let security_findings = if context.config.security_scan {
             self.analyze_security().await?
         } else {
             Vec::new()
         };
+        
+        let review_result = self.analyze_review(&context, &security_findings).await?;
+        
         let deviation_analysis = if context.config.deviation_analysis && context.has_issues() {
             Some(self.analyze_deviation(&context).await?)
         } else {
@@ -158,7 +160,7 @@ impl Analyzer {
     }
     
     /// 分析代码评审
-    async fn analyze_review(&self, context: &AnalysisContext) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_review(&self, context: &AnalysisContext, security_findings: &[SecurityFinding]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // 准备tree-sitter结构信息
         let tree_sitter_info = if let Some(ref structural_info) = context.structural_info {
             structural_info.clone()
@@ -166,9 +168,44 @@ impl Analyzer {
             "无结构分析信息".to_string()
         };
         
+        // 准备安全扫描结果
+        let security_scan_results = if security_findings.is_empty() {
+            "✅ 未发现安全问题".to_string()
+        } else {
+            let mut result = String::new();
+            for finding in security_findings {
+                result.push_str(&format!(
+                    "- {} ({}) ({})\n",
+                    finding.title, finding.file_path, finding.rule_id
+                ));
+            }
+            result
+        };
+        
+        // 准备DevOps Issue上下文
+        let devops_issue_context = if context.has_issues() {
+            context.issue_context()
+        } else {
+            "无相关Issue上下文".to_string()
+        };
+        
         // 尝试使用模板，如果失败则降级为硬编码提示词
-        match crate::ai::review_code_with_template(&self.config, &context.diff, Some(&tree_sitter_info)).await {
-            Ok(result) => Ok(result),
+        log::debug!("准备使用模板进行AI评审");
+        log::debug!("Tree-sitter信息长度: {}", tree_sitter_info.len());
+        log::debug!("安全扫描结果: {}", security_scan_results);
+        log::debug!("DevOps Issue上下文: {}", devops_issue_context);
+        
+        match crate::ai::review_code_with_template(
+            &self.config, 
+            &context.diff, 
+            Some(&tree_sitter_info),
+            &security_scan_results,
+            &devops_issue_context
+        ).await {
+            Ok(result) => {
+                log::debug!("模板AI调用成功，结果长度: {}", result.len());
+                Ok(result)
+            },
             Err(template_error) => {
                 log::warn!("使用模板失败，降级为硬编码提示词: {}", template_error);
                 
