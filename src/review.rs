@@ -230,14 +230,16 @@ impl ReviewExecutor {
         println!("{}", result.review_result);
         
         // 输出安全扫描结果
+        println!("\n🛡️ 安全扫描结果：");
         if !result.security_findings.is_empty() {
-            println!("\n🛡️ 安全扫描结果：");
             for finding in result.security_findings.iter().take(5) {
                 println!("  - {} ({}) ({})", finding.title, finding.file_path, finding.rule_id);
             }
             if result.security_findings.len() > 5 {
                 println!("  - ... 还有 {} 个问题", result.security_findings.len() - 5);
             }
+        } else {
+            println!("  ✅ 未发现安全问题");
         }
         
         // 输出偏离度分析
