@@ -410,22 +410,56 @@ impl ResourceManager {
 }
 
 /// Load resource configuration from file
-pub async fn load_resource_config(config_path: &Path) -> Result<ResourceConfig> {
+pub fn load_resource_config(config_path: &Path) -> Result<ResourceConfig> {
     let content = fs::read_to_string(config_path)?;
     let config: toml::Value = toml::from_str(&content)?;
     
-    // Extract relevant sections
-    let sources = config.get("sources")
-        .ok_or_else(|| anyhow::anyhow!("Missing 'sources' section in config"))?;
-    let network = config.get("network")
-        .ok_or_else(|| anyhow::anyhow!("Missing 'network' section in config"))?;
-    let cache = config.get("cache")
-        .ok_or_else(|| anyhow::anyhow!("Missing 'cache' section in config"))?;
+    // Provide defaults if sections are missing
+    let default_sources = toml::Value::Table({
+        let mut table = toml::Table::new();
+        table.insert("config_url".to_string(), toml::Value::String(
+            "https://raw.githubusercontent.com/nehcuh/gitai/main/assets/config.enhanced.toml".to_string()));
+        table.insert("rules_url".to_string(), toml::Value::String(
+            "https://github.com/nehcuh/gitai-rules.git".to_string()));
+        table.insert("tree_sitter_url".to_string(), toml::Value::String(
+            "https://github.com/nehcuh/gitai-tree-sitter.git".to_string()));
+        table.insert("fallback_sources".to_string(), toml::Value::Array(vec![]));
+        table.insert("update_check_interval".to_string(), toml::Value::Integer(86400));
+        table.insert("auto_update".to_string(), toml::Value::Boolean(false));
+        table
+    });
+    
+    let default_network = toml::Value::Table({
+        let mut table = toml::Table::new();
+        table.insert("proxy".to_string(), toml::Value::String(String::new()));
+        table.insert("timeout".to_string(), toml::Value::Integer(30));
+        table.insert("retry_times".to_string(), toml::Value::Integer(3));
+        table.insert("offline_mode".to_string(), toml::Value::Boolean(false));
+        table
+    });
+    
+    let default_cache = toml::Value::Table({
+        let mut table = toml::Table::new();
+        table.insert("enabled".to_string(), toml::Value::Boolean(true));
+        table.insert("path".to_string(), toml::Value::String("~/.cache/gitai".to_string()));
+        table.insert("max_size".to_string(), toml::Value::String("1GB".to_string()));
+        table.insert("ttl".to_string(), toml::Value::Integer(604800));
+        table
+    });
+    
+    let sources = config.get("sources").unwrap_or(&default_sources);
+    let network = config.get("network").unwrap_or(&default_network);
+    let cache = config.get("cache").unwrap_or(&default_cache);
+    
+    // Try to deserialize from TOML values
+    let sources_str = toml::to_string(sources)?;
+    let network_str = toml::to_string(network)?;
+    let cache_str = toml::to_string(cache)?;
     
     let resource_config = ResourceConfig {
-        sources: sources.clone().try_into()?,
-        network: network.clone().try_into()?,
-        cache: cache.clone().try_into()?,
+        sources: toml::from_str(&sources_str)?,
+        network: toml::from_str(&network_str)?,
+        cache: toml::from_str(&cache_str)?,
     };
     
     Ok(resource_config)

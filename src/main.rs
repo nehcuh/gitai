@@ -14,7 +14,7 @@ mod mcp;
 
 use std::path::PathBuf;
 use std::fs;
-use args::{Args, Command, PromptAction};
+use args::{Args, Command, PromptAction, ConfigAction};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 fn init_logger() {
@@ -60,6 +60,16 @@ async fn main() -> Result<()> {
     
     let args = Args::parse();
     
+    // 处理 Init 命令（不需要配置）
+    if let Command::Init { config_url, offline, resources_dir, dev } = &args.command {
+        return handle_init(
+            config_url.clone(),
+            *offline || args.offline,
+            resources_dir.clone(),
+            *dev
+        ).await;
+    }
+    
     // 加载配置文件，提供友好错误信息
     let config = match config::Config::load() {
         Ok(config) => {
@@ -69,7 +79,7 @@ async fn main() -> Result<()> {
         Err(e) => {
             eprintln!("❌ 配置加载失败: {}", e);
             eprintln!("💡 提示: 请检查 ~/.config/gitai/config.toml 文件");
-            eprintln!("💡 可以参考 config.example.toml 创建配置文件");
+            eprintln!("💡 可以使用 'gitai init' 初始化配置");
             return Err(format!("配置加载失败: {}", e).into());
         }
     };
@@ -147,6 +157,13 @@ async fn main() -> Result<()> {
         }
         Command::Mcp { transport, addr } => {
             handle_mcp(&config, &transport, &addr).await?;
+        }
+        Command::Init { .. } => {
+            // 已在上面处理
+            unreachable!()
+        }
+        Command::Config { action } => {
+            handle_config(&config, &action, args.offline).await?;
         }
     }
     
@@ -443,6 +460,184 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
         }
         PromptAction::Update => {
             println!("🔄 更新提示词模板功能暂未实现");
+        }
+    }
+    
+    Ok(())
+}
+
+async fn handle_init(
+    config_url: Option<String>,
+    offline: bool,
+    _resources_dir: Option<PathBuf>,
+    _dev: bool,
+) -> Result<()> {
+    use gitai::config_init::ConfigInitializer;
+    
+    println!("🚀 初始化 GitAI 配置...");
+    
+    let mut initializer = ConfigInitializer::new();
+    
+    if let Some(url) = config_url {
+        println!("📥 使用配置URL: {}", url);
+        initializer = initializer.with_config_url(Some(url));
+    }
+    
+    if offline {
+        println!("🔌 离线模式初始化");
+        initializer = initializer.with_offline_mode(true);
+    }
+    
+    match initializer.initialize().await {
+        Ok(config_path) => {
+            println!("✅ 配置初始化成功!");
+            println!("📁 配置文件: {}", config_path.display());
+            println!();
+            println!("🎉 您现在可以使用 GitAI 了:");
+            println!("  gitai review     - 代码评审");
+            println!("  gitai commit     - 智能提交");
+            println!("  gitai scan       - 安全扫描");
+            println!("  gitai --help     - 查看更多命令");
+        }
+        Err(e) => {
+            eprintln!("❌ 初始化失败: {}", e);
+            return Err(e.into());
+        }
+    }
+    
+    Ok(())
+}
+
+async fn handle_config(config: &config::Config, action: &ConfigAction, offline: bool) -> Result<()> {
+    use gitai::resource_manager::{ResourceManager, load_resource_config};
+    
+    match action {
+        ConfigAction::Check => {
+            println!("🔍 检查配置状态...");
+            
+            // 检查配置文件
+            let config_dir = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config/gitai");
+            let config_path = config_dir.join("config.toml");
+            
+            if config_path.exists() {
+                println!("✅ 配置文件: {}", config_path.display());
+            } else {
+                println!("❌ 配置文件不存在");
+            }
+            
+            // 检查缓存目录
+            let cache_dir = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".cache/gitai");
+            
+            if cache_dir.exists() {
+                println!("✅ 缓存目录: {}", cache_dir.display());
+                
+                // 检查规则
+                let rules_dir = cache_dir.join("rules");
+                if rules_dir.exists() {
+                    println!("  ✅ 规则缓存: 已就绪");
+                } else {
+                    println!("  ⚠️  规则缓存: 未找到");
+                }
+                
+                // 检查 Tree-sitter
+                let ts_dir = cache_dir.join("tree-sitter");
+                if ts_dir.exists() {
+                    println!("  ✅ Tree-sitter缓存: 已就绪");
+                } else {
+                    println!("  ⚠️  Tree-sitter缓存: 未找到");
+                }
+            } else {
+                println!("❌ 缓存目录不存在");
+            }
+        }
+        ConfigAction::Show { format } => {
+            match format.as_str() {
+                "json" => {
+                    // Config 可能没有实现 Serialize，暂时用简单格式
+                    println!("{{");
+                    println!("  \"ai\": {{");
+                    println!("    \"api_url\": \"{}\",", config.ai.api_url);
+                    println!("    \"model\": \"{}\"", config.ai.model);
+                    println!("  }},");
+                    println!("  \"scan\": {{");
+                    println!("    \"default_path\": \"{}\"", config.scan.default_path.as_deref().unwrap_or("."));
+                    println!("  }}");
+                    println!("}}");
+                }
+                "toml" => {
+                    // Config 类型可能没有实现 Serialize，暂时显示简单信息
+                    println!("📋 TOML 格式输出暂不可用");
+                }
+                _ => {
+                    println!("📋 当前配置:");
+                    println!("  AI服务: {}", config.ai.api_url);
+                    println!("  AI模型: {}", config.ai.model);
+                    // config.scan 是 ScanConfig 类型，不是 Option
+                    println!("  扫描路径: {}", config.scan.default_path.as_deref().unwrap_or("."));
+                }
+            }
+        }
+        ConfigAction::Update { force } => {
+            println!("🔄 更新资源...");
+            
+            let config_path = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config/gitai/config.toml");
+            
+            if let Ok(resource_config) = load_resource_config(&config_path) {
+                let manager = ResourceManager::new(resource_config)?;
+                
+                if offline {
+                    eprintln!("⚠️  离线模式下无法更新资源");
+                    return Ok(());
+                }
+                
+                if *force {
+                    println!("🚀 强制更新所有资源...");
+                }
+                
+                manager.update_all().await?;
+                println!("✅ 资源更新完成");
+            } else {
+                eprintln!("❌ 无法加载资源配置");
+            }
+        }
+        ConfigAction::Reset { no_backup } => {
+            println!("🔄 重置配置...");
+            
+            let config_path = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config/gitai/config.toml");
+            
+            if !no_backup && config_path.exists() {
+                let backup_path = config_path.with_extension("toml.backup");
+                fs::copy(&config_path, &backup_path)?;
+                println!("💾 已备份到: {}", backup_path.display());
+            }
+            
+            // 写入默认配置
+            let default_config = include_str!("../assets/config.enhanced.toml");
+            fs::write(&config_path, default_config)?;
+            println!("✅ 配置已重置到默认值");
+        }
+        ConfigAction::Clean => {
+            println!("🧹 清理缓存...");
+            
+            let config_path = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config/gitai/config.toml");
+            
+            if let Ok(resource_config) = load_resource_config(&config_path) {
+                let manager = ResourceManager::new(resource_config)?;
+                manager.clean_cache().await?;
+                println!("✅ 缓存清理完成");
+            } else {
+                eprintln!("❌ 无法加载资源配置");
+            }
         }
     }
     
