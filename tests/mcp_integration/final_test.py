@@ -15,7 +15,8 @@ def main():
         "/Users/huchen/Projects/gitai/test_java.java"
     ]
     
-    result1 = subprocess.run(cmd1, capture_output=True, text=True)
+    # 使用 shell=False 防止命令注入
+    result1 = subprocess.run(cmd1, capture_output=True, text=True, shell=False)
     data1 = json.loads(result1.stdout)
     print(f"   结果数量: {len(data1.get('results', []))}")
     
@@ -27,7 +28,8 @@ def main():
         "/Users/huchen/Projects/gitai/security_test.java"
     ]
     
-    result2 = subprocess.run(cmd2, capture_output=True, text=True)
+    # 使用 shell=False 防止命令注入
+    result2 = subprocess.run(cmd2, capture_output=True, text=True, shell=False)
     data2 = json.loads(result2.stdout)
     print(f"   结果数量: {len(data2.get('results', []))}")
     

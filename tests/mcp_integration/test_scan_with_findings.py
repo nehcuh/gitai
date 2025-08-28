@@ -16,7 +16,8 @@ def test_scan_with_findings():
     ]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        # 使用 shell=False 防止命令注入
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, shell=False)
         print(f"📤 返回码: {result.returncode}")
         
         if result.stdout:

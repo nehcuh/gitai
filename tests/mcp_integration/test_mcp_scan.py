@@ -4,6 +4,10 @@ import subprocess
 import time
 import os
 
+# 可以通过环境变量设置等待时间
+SERVER_STARTUP_WAIT = float(os.environ.get('MCP_SERVER_STARTUP_WAIT', '2.0'))
+SERVER_SHUTDOWN_WAIT = float(os.environ.get('MCP_SERVER_SHUTDOWN_WAIT', '1.0'))
+
 def test_mcp_scan():
     """测试 MCP 扫描功能"""
     print("🔍 测试 MCP 扫描功能...")
@@ -11,7 +15,8 @@ def test_mcp_scan():
     # 确保 MCP 服务器在后台运行
     # 先停止可能存在的服务器
     subprocess.run(["pkill", "-f", "gitai mcp"], capture_output=True)
-    time.sleep(1)
+    # 等待旧进程完全终止
+    time.sleep(SERVER_SHUTDOWN_WAIT)
     
     # 启动 MCP 服务器
     print("🚀 启动 MCP 服务器...")
@@ -22,8 +27,8 @@ def test_mcp_scan():
         text=True
     )
     
-    # 等待服务器启动
-    time.sleep(2)
+    # 等待服务器启动，可通过环境变量 MCP_SERVER_STARTUP_WAIT 调整
+    time.sleep(SERVER_STARTUP_WAIT)
     
     try:
         # 创建一个简单的 MCP 请求
