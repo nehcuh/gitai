@@ -59,6 +59,14 @@ pub enum Severity {
 pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeout_override: Option<u64>, include_version: bool) -> Result<ScanResult, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let start_time = std::time::Instant::now();
     
+    // 检查路径是否存在
+    if !path.exists() {
+        log::error!("扫描路径不存在: {}", path.display());
+        return Err(format!("扫描路径不存在: {}", path.display()).into());
+    }
+    
+    log::info!("开始扫描: {}", path.display());
+    
     // 构建命令（不要把可执行名放入 args）
     let mut args = vec![
         "--json".to_string(),
@@ -92,15 +100,21 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
     }
     
     // 执行命令
+    log::debug!("执行命令: opengrep {} {}", args.join(" "), path.display());
     let output = Command::new("opengrep")
         .args(&args)
         .arg(path)
-        .output()?;
+        .output()
+        .map_err(|e| {
+            log::error!("执行 OpenGrep 失败: {}", e);
+            format!("执行 OpenGrep 失败: {}\n💡 请确保 OpenGrep 已安装并在 PATH 中", e)
+        })?;
     
     let execution_time = start_time.elapsed().as_secs_f64();
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        log::warn!("OpenGrep 返回非零状态码: {}", stderr);
         return Ok(ScanResult {
             tool: "opengrep".to_string(),
             version: if include_version { get_opengrep_version()? } else { "unknown".to_string() },

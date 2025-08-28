@@ -18,8 +18,28 @@ use args::{Args, Command, PromptAction};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 fn init_logger() {
+    use std::io::Write;
+    
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
+        .format(|buf, record| {
+            let level_style = match record.level() {
+                log::Level::Error => "\x1b[31m", // 红色
+                log::Level::Warn => "\x1b[33m",  // 黄色
+                log::Level::Info => "\x1b[32m",  // 绿色
+                log::Level::Debug => "\x1b[36m", // 青色
+                log::Level::Trace => "\x1b[90m", // 灰色
+            };
+            
+            writeln!(
+                buf,
+                "{}{} [{}] {}",
+                level_style,
+                chrono::Local::now().format("%H:%M:%S"),
+                record.level(),
+                record.args()
+            )
+        })
         .init();
 }
 
@@ -39,7 +59,20 @@ async fn main() -> Result<()> {
     init_logger();
     
     let args = Args::parse();
-    let config = config::Config::load()?;
+    
+    // 加载配置文件，提供友好错误信息
+    let config = match config::Config::load() {
+        Ok(config) => {
+            log::debug!("配置文件加载成功");
+            config
+        }
+        Err(e) => {
+            eprintln!("❌ 配置加载失败: {}", e);
+            eprintln!("💡 提示: 请检查 ~/.config/gitai/config.toml 文件");
+            eprintln!("💡 可以参考 config.example.toml 创建配置文件");
+            return Err(format!("配置加载失败: {}", e).into());
+        }
+    };
     
     match args.command {
         Command::Review {
