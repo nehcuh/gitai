@@ -216,6 +216,7 @@ impl CommitExecutor {
     }
     
     /// 构建AI提示词
+    #[allow(dead_code)]
     async fn build_commit_prompt(&self, diff: &str, issues: &[Issue], commit_config: &CommitConfig) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // 尝试使用模板
         match crate::ai::generate_commit_message_with_template(&self.config, diff).await {
@@ -276,6 +277,7 @@ impl CommitExecutor {
     }
     
     /// 执行代码评审
+    #[allow(dead_code)]
     async fn perform_review(&self, diff: &str, issues: &[Issue]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("🔍 正在进行代码评审...");
         
@@ -307,6 +309,7 @@ impl CommitExecutor {
     }
     
     /// 执行Git操作
+    #[allow(dead_code)]
     async fn execute_git_operations(
         &self,
         message: &str,

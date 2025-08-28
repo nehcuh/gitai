@@ -384,10 +384,6 @@ impl StructureAnalyzer {
                     log::warn!("Failed to load Go comment query");
                 }
             }
-            _ => {
-                // 对于其他语言，使用基本的通用查询
-                log::debug!("Using generic queries for {:?}", self.language);
-            }
         }
 
         Ok(())

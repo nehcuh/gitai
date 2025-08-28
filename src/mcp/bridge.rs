@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 
 /// GitAI MCP 服务器处理器
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct GitAiMcpServer {
     /// MCP 服务管理器
     manager: Arc<RwLock<crate::mcp::GitAiMcpManager>>,
@@ -16,6 +17,7 @@ pub struct GitAiMcpServer {
 
 impl GitAiMcpServer {
     /// 创建新的 MCP 服务器
+    #[allow(dead_code)]
     pub fn new(config: Config) -> Self {
         let manager = Arc::new(RwLock::new(crate::mcp::GitAiMcpManager::new(config)));
         Self { manager }
@@ -272,6 +274,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
 }
 
 /// 启动 TCP MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()> {
     // TCP 传输需要额外的实现，目前 rmcp 主要支持 stdio
     eprintln!("⚠️  TCP transport not fully implemented in current rmcp version");
@@ -280,6 +283,7 @@ pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()>
 }
 
 /// 启动 SSE MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_websocket_server(_config: Config, _addr: &str) -> McpResult<()> {
     eprintln!("⚠️  SSE transport not fully implemented in current rmcp version");
     eprintln!("   Please use stdio transport instead");

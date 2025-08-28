@@ -76,7 +76,7 @@ impl PerformanceCollector {
     }
     
     /// 记录工具调用开始
-    pub fn record_call_start(&self, tool_name: &str) -> Instant {
+    pub fn record_call_start(&self, _tool_name: &str) -> Instant {
         self.total_calls.fetch_add(1, Ordering::Relaxed);
         Instant::now()
     }
@@ -246,43 +246,53 @@ impl From<tokio::time::error::Elapsed> for McpError {
 }
 
 // 错误创建辅助函数
+#[allow(dead_code)]
 pub fn invalid_parameters_error<T: Into<String>>(msg: T) -> McpError {
     McpError::InvalidParameters(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn execution_failed_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ExecutionFailed(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn configuration_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ConfigurationError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn file_operation_error<T: Into<String>>(msg: T) -> McpError {
     McpError::FileOperationError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn network_error<T: Into<String>>(msg: T) -> McpError {
     McpError::NetworkError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn external_tool_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ExternalToolError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn permission_error<T: Into<String>>(msg: T) -> McpError {
     McpError::PermissionError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn timeout_error<T: Into<String>>(msg: T) -> McpError {
     McpError::TimeoutError(msg.into())
 }
 
+#[allow(dead_code)]
 pub fn unknown_error<T: Into<String>>(msg: T) -> McpError {
     McpError::Unknown(msg.into())
 }
 
 // 向后兼容的辅助函数
+#[allow(dead_code)]
 pub fn service_error(msg: String) -> ServiceError {
     ServiceError::Transport(std::io::Error::new(std::io::ErrorKind::Other, msg))
 }
@@ -290,6 +300,7 @@ pub fn service_error(msg: String) -> ServiceError {
 /// GitAI MCP 服务管理器
 pub struct GitAiMcpManager {
     /// GitAI 配置
+    #[allow(dead_code)]
     config: crate::config::Config,
     /// 活跃的服务实例
     services: std::collections::HashMap<String, Box<dyn GitAiMcpService + Send + Sync>>,
@@ -392,6 +403,7 @@ impl GitAiMcpManager {
     }
     
     /// 获取所有工具
+    #[allow(dead_code)]
     pub fn get_all_tools(&self) -> Vec<Tool> {
         let mut tools = Vec::new();
         for service in self.services.values() {
@@ -440,17 +452,20 @@ impl GitAiMcpManager {
     }
     
     /// 获取性能统计
+    #[allow(dead_code)]
     pub fn get_performance_stats(&self) -> PerformanceStats {
         self.performance_collector.get_stats()
     }
     
     /// 重置性能统计
+    #[allow(dead_code)]
     pub fn reset_performance_stats(&self) {
         self.performance_collector.reset();
         info!("📊 性能统计已重置");
     }
     
     /// 获取服务器信息
+    #[allow(dead_code)]
     pub fn get_server_info(&self) -> Implementation {
         let config = self.config.mcp.as_ref().unwrap();
         Implementation {

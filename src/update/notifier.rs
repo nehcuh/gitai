@@ -4,6 +4,7 @@ use crate::update::types::UpdateItem;
 use std::process::Command;
 
 pub struct UpdateNotifier {
+    #[allow(dead_code)]
     config: Config,
 }
 
