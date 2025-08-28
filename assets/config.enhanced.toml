@@ -1,0 +1,108 @@
+# GitAI Configuration File
+# Version: 1.0.0
+# This is the default configuration template for GitAI
+version = "1.0.0"
+
+[sources]
+# Resource download sources - can be overridden for internal mirrors
+config_url = "https://raw.githubusercontent.com/nehcuh/gitai/main/assets/config.example.toml"
+rules_url = "https://github.com/nehcuh/gitai-rules.git"
+tree_sitter_url = "https://github.com/nehcuh/gitai-tree-sitter.git"
+
+# Fallback sources (used when primary sources are unavailable)
+fallback_sources = [
+    "https://gitee.com/nehcuh/gitai-mirror",
+    # Add your internal mirrors here:
+    # "https://internal.company.com/gitai-resources"
+]
+
+# Update strategy
+update_check_interval = 86400  # Check for updates every 24 hours (in seconds)
+auto_update = false            # Auto-update resources
+
+[ai]
+# AI service configuration
+api_url = "http://localhost:11434/v1/chat/completions"
+model = "qwen2.5:32b"
+temperature = 0.3
+api_key = ""  # Optional, for OpenAI-compatible APIs
+timeout = 30  # Request timeout in seconds
+
+[scan]
+# Code scanning configuration
+default_path = "."  # Default to current directory
+timeout = 300      # Scan timeout in seconds
+jobs = 4          # Number of parallel jobs
+
+# OpenGrep rules configuration
+rules_path = "~/.cache/gitai/rules"  # Rules storage path
+auto_install_opengrep = true         # Auto-install OpenGrep if not found
+
+[tree_sitter]
+# Tree-sitter configuration (experimental)
+enabled = false  # Currently experimental
+grammar_path = "~/.cache/gitai/tree-sitter"  # Grammar files storage
+supported_languages = ["rust", "python", "javascript", "typescript", "go", "java", "c", "cpp"]
+
+[cache]
+# Cache configuration
+enabled = true
+path = "~/.cache/gitai"
+max_size = "1GB"  # Maximum cache size
+ttl = 604800      # Cache TTL in seconds (7 days)
+
+[network]
+# Network configuration
+proxy = ""        # HTTP/HTTPS proxy (e.g., "http://proxy:8080")
+timeout = 30      # Network timeout in seconds
+retry_times = 3   # Number of retries for failed requests
+offline_mode = false  # Enable offline mode (no network requests)
+
+[mcp]
+# Model Context Protocol server configuration
+enabled = true
+
+[mcp.server]
+# Server configuration
+transport = "stdio"  # Transport protocol (stdio, tcp, sse)
+# listen_addr = "127.0.0.1:8080"  # For tcp/sse transports
+name = "gitai-mcp"
+version = "0.1.0"
+
+[mcp.services]
+# Enabled services
+enabled = ["review", "commit", "scan", "analysis"]
+
+[mcp.services.review]
+# Review service configuration
+default_format = "text"
+default_tree_sitter = false  # Currently experimental
+default_security_scan = true
+
+[mcp.services.commit]
+# Commit service configuration
+default_add_all = false
+default_review = false
+default_tree_sitter = false
+
+[mcp.services.scan]
+# Scan service configuration
+default_tool = "opengrep"
+default_timeout = 300
+
+[mcp.services.analysis]
+# Analysis service configuration
+verbosity = 1  # Output verbosity (0-2)
+
+[logging]
+# Logging configuration
+level = "info"  # Log level: debug, info, warn, error
+file = "~/.cache/gitai/gitai.log"
+max_size = "10MB"  # Maximum log file size
+max_backups = 3    # Number of log backups to keep
+color = true       # Enable colored output
+
+[prompts]
+# Prompt templates configuration
+path = "~/.config/gitai/prompts"  # Custom prompts directory
+use_builtin = true  # Fall back to built-in prompts if custom not found

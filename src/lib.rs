@@ -2,6 +2,8 @@
 // 提供AI驱动的Git工作流功能
 
 pub mod config;
+pub mod config_init;
+pub mod resource_manager;
 pub mod args;
 pub mod git;
 pub mod ai;

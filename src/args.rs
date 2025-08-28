@@ -17,6 +17,14 @@ pub struct Args {
     /// 显式禁用AI（用于覆盖默认或别名设置）
     #[arg(long)]
     pub noai: bool,
+    
+    /// 离线模式（不进行网络请求）
+    #[arg(long, global = true)]
+    pub offline: bool,
+    
+    /// 自定义配置URL
+    #[arg(long, global = true)]
+    pub config_url: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -149,6 +157,26 @@ pub enum Command {
         #[arg(long, default_value = "127.0.0.1:8080")]
         addr: String,
     },
+    /// 初始化GitAI配置
+    Init {
+        /// 配置URL（用于企业内网）
+        #[arg(long)]
+        config_url: Option<String>,
+        /// 离线模式初始化
+        #[arg(long)]
+        offline: bool,
+        /// 资源目录（离线模式使用）
+        #[arg(long)]
+        resources_dir: Option<PathBuf>,
+        /// 开发模式（使用项目内资源）
+        #[arg(long)]
+        dev: bool,
+    },
+    /// 配置管理
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
 }
 
 /// 提示词操作
@@ -168,6 +196,33 @@ pub enum PromptAction {
     Update,
     /// 初始化提示词目录
     Init,
+}
+
+/// 配置管理操作
+#[derive(Parser, Debug)]
+pub enum ConfigAction {
+    /// 检查配置状态
+    Check,
+    /// 显示当前配置
+    Show {
+        /// 显示格式 (text|json|toml)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// 更新所有资源
+    Update {
+        /// 强制更新，即使未过期
+        #[arg(long)]
+        force: bool,
+    },
+    /// 重置配置到默认值
+    Reset {
+        /// 不创建备份
+        #[arg(long)]
+        no_backup: bool,
+    },
+    /// 清理过期缓存
+    Clean,
 }
 
 impl Args {
