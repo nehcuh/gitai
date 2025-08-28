@@ -71,6 +71,29 @@ GitAI 是一组AI驱动的Git辅助工具，专注于在开发过程中提供即
 
 > **配置提示**：使用`gitai update --check`检查规则状态，环境变量`GITAI_RULES_URL`可覆盖默认规则源。
 
+### 🌐 MCP 服务器集成 (`gitai mcp`)
+- **完整MCP协议支持**：实现Model Context Protocol (MCP) 服务器，支持与LLM客户端的无缝集成
+- **四大核心服务**：提供代码评审、智能提交、安全扫描、代码分析四个核心工具
+- **错误处理优化**：完善的错误类型系统和用户友好的错误信息
+- **性能监控**：内置性能统计和监控功能，实时跟踪工具调用情况
+- **配置验证**：完整的配置验证机制，确保服务器稳定运行
+- **日志记录**：结构化日志系统，便于调试和监控
+
+**启动MCP服务器**：
+```bash
+# 启动stdio传输的MCP服务器
+gitai mcp --transport stdio
+
+# 独立运行MCP服务器
+gitai-mcp serve
+```
+
+> **MCP工具列表**：
+> - `execute_review` - 代码评审
+> - `execute_commit` - 智能提交  
+> - `execute_scan` - 安全扫描
+> - `execute_analysis` - 代码分析
+
 ## ⚡ 即时辅助工具的使用方式
 
 GitAI的设计理念是**即时性**和**非强制性** - 在你需要的时候提供帮助，不强制改变你的工作流。
@@ -161,6 +184,9 @@ gitai review --security-scan --block-on-critical
 
 # 启用全局 AI 模式
 gitai --ai status
+
+# 启动MCP服务器
+gitai mcp --transport stdio
 
 # 获取帮助
 gitai help
@@ -444,6 +470,31 @@ api_key = "your_api_key"  # 可选
 default_path = "/path/to/project"  # 可选，默认为当前目录
 timeout = 300
 jobs = 4
+
+[mcp]
+enabled = true
+
+[mcp.server]
+name = "gitai-mcp"
+version = "0.1.0"
+
+[mcp.services]
+enabled = ["review", "commit", "scan", "analysis"]
+
+[mcp.services.review]
+default_language = "auto"
+include_security_scan = false
+
+[mcp.services.commit]
+auto_stage = false
+include_review = false
+
+[mcp.services.scan]
+default_tool = "opengrep"
+default_timeout = 300
+
+[mcp.services.analysis]
+verbosity = 1
 ```
 
 ### Prompt 模板自定义

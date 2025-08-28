@@ -13,6 +13,7 @@ pub mod commit;
 pub mod review;
 pub mod tree_sitter;
 pub mod prompts;
+pub mod mcp;
 
 pub use config::Config;
 pub use tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};

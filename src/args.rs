@@ -140,6 +140,15 @@ pub enum Command {
     /// 通用Git命令（带AI解释）
     #[command(external_subcommand)]
     Git(Vec<String>),
+    /// 启动MCP服务器
+    Mcp {
+        /// 传输协议 (stdio|tcp|sse)
+        #[arg(long, default_value = "stdio")]
+        transport: String,
+        /// 监听地址 (tcp/sse)
+        #[arg(long, default_value = "127.0.0.1:8080")]
+        addr: String,
+    },
 }
 
 /// 提示词操作

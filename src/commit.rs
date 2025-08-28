@@ -2,6 +2,36 @@ use crate::config::Config;
 use crate::devops::Issue;
 use crate::analysis::{AnalysisConfig, Analyzer};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+/// 提交结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitResult {
+    /// 是否成功
+    pub success: bool,
+    /// 结果消息
+    pub message: String,
+    /// 提交哈希 (如果成功)
+    pub commit_hash: Option<String>,
+    /// 变更数量
+    pub changes_count: usize,
+    /// 评审结果 (如果执行了评审)
+    pub review_results: Option<ReviewResults>,
+    /// 详细信息
+    pub details: HashMap<String, String>,
+}
+
+/// 评审结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewResults {
+    /// 发现的问题数量
+    pub issues_found: usize,
+    /// 严重问题数量
+    pub critical_issues: usize,
+    /// 评审报告
+    pub report: Option<String>,
+}
 
 /// 解析issue ID字符串为列表
 fn parse_issue_ids(issue_id: Option<String>) -> Vec<String> {
@@ -68,24 +98,62 @@ impl CommitExecutor {
     
     /// 执行提交流程
     pub async fn execute(&self, commit_config: CommitConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        println!("📝 正在处理智能提交...");
-        
+        let result = self.execute_with_result(commit_config).await?;
+        if !result.success {
+            return Err("提交失败".into());
+        }
+        Ok(())
+    }
+    
+    /// 执行提交流程并返回结构化结果
+    pub async fn execute_with_result(&self, commit_config: CommitConfig) -> Result<CommitResult, Box<dyn std::error::Error + Send + Sync>> {
         let diff = self.get_changes()?;
         if diff.is_empty() {
-            println!("❌ 没有代码变更需要提交");
-            return Ok(());
+            return Ok(CommitResult {
+                success: true,
+                message: "没有代码变更需要提交".to_string(),
+                commit_hash: None,
+                changes_count: 0,
+                review_results: None,
+                details: HashMap::new(),
+            });
         }
         
         let issues = self.get_issue_context(&commit_config.issue_ids).await?;
         let commit_message = self.generate_commit_message(&diff, &issues, &commit_config).await?;
         
+        let mut review_results = None;
         if commit_config.review {
-            self.perform_review(&diff, &issues).await?;
+            review_results = self.perform_review_with_result(&diff, &issues).await?;
         }
         
-        self.execute_git_operations(&commit_message, &commit_config).await?;
+        let commit_hash = self.execute_git_operations_with_result(&commit_message, &commit_config).await?;
         
-        Ok(())
+        // 计算变更数量
+        let changes_count = self.count_changes(&diff)?;
+        
+        let mut details = HashMap::new();
+        details.insert("review".to_string(), commit_config.review.to_string());
+        details.insert("tree_sitter".to_string(), commit_config.tree_sitter.to_string());
+        details.insert("add_all".to_string(), commit_config.add_all.to_string());
+        details.insert("dry_run".to_string(), commit_config.dry_run.to_string());
+        
+        if !commit_config.issue_ids.is_empty() {
+            details.insert("issue_ids".to_string(), commit_config.issue_ids.join(", "));
+        }
+        
+        if let Some(ref message) = commit_config.message {
+            details.insert("message".to_string(), message.clone());
+        }
+        
+        Ok(CommitResult {
+            success: true,
+            message: "提交完成".to_string(),
+            commit_hash,
+            changes_count,
+            review_results,
+            details,
+        })
     }
     
     /// 获取代码变更
@@ -397,5 +465,86 @@ impl CommitExecutor {
         }
         
         info.join("\n")
+    }
+}
+
+impl CommitExecutor {
+    /// 执行评审并返回结构化结果
+    async fn perform_review_with_result(&self, _diff: &str, issues: &[Issue]) -> Result<Option<ReviewResults>, Box<dyn std::error::Error + Send + Sync>> {
+        // 创建评审配置
+        let review_config = crate::review::ReviewConfig {
+            language: None,
+            format: "text".to_string(),
+            output: None,
+            tree_sitter: true,
+            security_scan: true,
+            scan_tool: None,
+            block_on_critical: false,
+            issue_ids: issues.iter().map(|i| i.id.clone()).collect(),
+            deviation_analysis: true,
+        };
+        
+        // 执行评审
+        let review_executor = crate::review::ReviewExecutor::new(self.config.clone());
+        match review_executor.execute_with_result(review_config).await {
+            Ok(result) => {
+                let critical_count = result.findings.iter()
+                    .filter(|f| matches!(f.severity, crate::review::Severity::Error))
+                    .count();
+                
+                Ok(Some(ReviewResults {
+                    issues_found: result.findings.len(),
+                    critical_issues: critical_count,
+                    report: Some(result.message),
+                }))
+            }
+            Err(_) => {
+                // 评审失败不影响提交，只是不包含评审结果
+                Ok(None)
+            }
+        }
+    }
+    
+    /// 执行Git操作并返回提交哈希
+    async fn execute_git_operations_with_result(&self, commit_message: &str, config: &CommitConfig) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        if config.dry_run {
+            println!("🔍 干运行模式 - 不会实际提交");
+            return Ok(None);
+        }
+        
+        // 添加文件到暂存区
+        if config.add_all {
+            println!("📝 添加所有变更到暂存区...");
+            crate::git::git_add_all()?;
+        }
+        
+        // 执行提交
+        println!("📝 执行提交: {}", commit_message);
+        match crate::git::git_commit(commit_message) {
+            Ok(hash) => {
+                println!("✅ 提交成功: {}", hash);
+                Ok(Some(hash))
+            }
+            Err(e) => {
+                eprintln!("❌ 提交失败: {}", e);
+                Err(e)
+            }
+        }
+    }
+    
+    /// 计算变更数量
+    fn count_changes(&self, diff: &str) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let mut added_lines = 0;
+        let mut removed_lines = 0;
+        
+        for line in diff.lines() {
+            if line.starts_with('+') && !line.starts_with("+++") {
+                added_lines += 1;
+            } else if line.starts_with('-') && !line.starts_with("---") {
+                removed_lines += 1;
+            }
+        }
+        
+        Ok(added_lines + removed_lines)
     }
 }

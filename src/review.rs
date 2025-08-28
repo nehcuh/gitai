@@ -1,6 +1,48 @@
 use crate::config::Config;
 use crate::analysis::{AnalysisConfig, AnalysisContext, Analyzer};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+/// 评审结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewResult {
+    /// 是否成功
+    pub success: bool,
+    /// 结果消息
+    pub message: String,
+    /// 详细信息
+    pub details: HashMap<String, String>,
+    /// 发现的问题
+    pub findings: Vec<Finding>,
+    /// 评分 (可选)
+    pub score: Option<u8>,
+    /// 建议列表
+    pub recommendations: Vec<String>,
+}
+
+/// 发现的问题
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Finding {
+    /// 问题描述
+    pub title: String,
+    /// 文件路径
+    pub file_path: Option<String>,
+    /// 行号
+    pub line: Option<u32>,
+    /// 严重程度
+    pub severity: Severity,
+    /// 详细描述
+    pub description: String,
+}
+
+/// 严重程度
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Severity {
+    Error,
+    Warning,
+    Info,
+}
 
 /// 评审配置
 #[derive(Debug, Clone)]
@@ -66,13 +108,26 @@ impl ReviewExecutor {
     
     /// 执行评审流程
     pub async fn execute(&self, review_config: ReviewConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        println!("🔍 正在进行代码评审...");
-        
+        let result = self.execute_with_result(review_config).await?;
+        if !result.success {
+            return Err("评审失败".into());
+        }
+        Ok(())
+    }
+    
+    /// 执行评审流程并返回结构化结果
+    pub async fn execute_with_result(&self, review_config: ReviewConfig) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
         // 1. 获取代码变更
         let diff = self.get_changes()?;
         if diff.is_empty() {
-            println!("❌ 没有检测到任何代码变更");
-            return Ok(());
+            return Ok(ReviewResult {
+                success: true,
+                message: "没有检测到任何代码变更".to_string(),
+                details: HashMap::new(),
+                findings: Vec::new(),
+                score: None,
+                recommendations: Vec::new(),
+            });
         }
         
         // 2. 检查暂存状态
@@ -81,9 +136,8 @@ impl ReviewExecutor {
         // 3. 检查缓存（包含配置维度）
         let cache_key = self.build_cache_key(&diff, &review_config);
         if let Some(cached_result) = self.check_cache(&cache_key)? {
-            println!("📋 使用缓存的评审结果");
-            self.output_result(&cached_result, &review_config)?;
-            return Ok(());
+            // 从缓存的文本结果中提取结构化信息
+            return self.parse_cached_result(&cached_result, &review_config);
         }
         
         // 4. Tree-sitter结构分析（如果启用）
@@ -112,19 +166,25 @@ impl ReviewExecutor {
         let analyzer = Analyzer::new(self.config.clone());
         let result = analyzer.analyze(context).await?;
         
-        // 6. 保存缓存
+        // 7. 保存缓存
         self.save_cache(&cache_key, &result.review_result, &review_config.language)?;
         
-        // 7. 输出结果
-        self.output_analysis_result(&result, &review_config)?;
+        // 8. 转换为结构化结果
+        let review_result = self.convert_analysis_result(&result, &review_config);
         
-        // 8. 检查是否阻止提交
+        // 9. 检查是否阻止提交
         if review_config.block_on_critical && self.has_critical_issues(&result) {
-            eprintln!("🚨 发现严重问题，已阻止提交");
-            return Err("发现严重安全问题".into());
+            return Ok(ReviewResult {
+                success: false,
+                message: "发现严重安全问题，已阻止提交".to_string(),
+                details: review_result.details,
+                findings: review_result.findings,
+                score: review_result.score,
+                recommendations: review_result.recommendations,
+            });
         }
         
-        Ok(())
+        Ok(review_result)
     }
     
     /// 获取代码变更
@@ -538,5 +598,113 @@ impl ReviewCache {
             .unwrap()
             .as_secs();
         now.saturating_sub(self.timestamp) > max_age_seconds
+    }
+}
+
+impl ReviewExecutor {
+    /// 从缓存的文本结果中解析结构化信息
+    fn parse_cached_result(&self, cached_result: &str, _config: &ReviewConfig) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
+        let mut details = HashMap::new();
+        details.insert("cached".to_string(), "true".to_string());
+        
+        // 简单的文本解析，提取关键信息
+        let score = if cached_result.contains("优秀") || cached_result.contains("Excellent") {
+            Some(90)
+        } else if cached_result.contains("良好") || cached_result.contains("Good") {
+            Some(75)
+        } else if cached_result.contains("一般") || cached_result.contains("Average") {
+            Some(60)
+        } else {
+            None
+        };
+        
+        Ok(ReviewResult {
+            success: true,
+            message: "使用缓存的评审结果".to_string(),
+            details,
+            findings: Vec::new(), // 缓存结果不包含详细的问题信息
+            score,
+            recommendations: vec!["建议定期更新缓存以获得最新的分析结果".to_string()],
+        })
+    }
+    
+    /// 将分析结果转换为结构化的ReviewResult
+    fn convert_analysis_result(&self, result: &crate::analysis::AnalysisResult, config: &ReviewConfig) -> ReviewResult {
+        let mut details = HashMap::new();
+        let mut findings = Vec::new();
+        let mut recommendations = Vec::new();
+        
+        // 转换安全发现
+        for finding in &result.security_findings {
+            findings.push(Finding {
+                title: finding.title.clone(),
+                file_path: Some(finding.file_path.clone()),
+                line: Some(finding.line as u32),
+                severity: match self.parse_severity(&finding.severity) {
+                    crate::scan::Severity::Error => Severity::Error,
+                    crate::scan::Severity::Warning => Severity::Warning,
+                    crate::scan::Severity::Info => Severity::Info,
+                },
+                description: finding.code_snippet.clone().unwrap_or_else(|| "发现安全问题的代码段".to_string()),
+            });
+        }
+        
+        // 添加配置信息
+        details.insert("tree_sitter".to_string(), config.tree_sitter.to_string());
+        details.insert("security_scan".to_string(), config.security_scan.to_string());
+        details.insert("deviation_analysis".to_string(), config.deviation_analysis.to_string());
+        details.insert("issue_ids_count".to_string(), config.issue_ids.len().to_string());
+        
+        if !config.issue_ids.is_empty() {
+            details.insert("issue_ids".to_string(), config.issue_ids.join(", "));
+        }
+        
+        // 添加偏离分析结果
+        if let Some(deviation) = &result.deviation_analysis {
+            details.insert("requirement_coverage".to_string(), format!("{:.1}%", deviation.requirement_coverage * 100.0));
+            details.insert("quality_score".to_string(), format!("{:.1}%", deviation.quality_score * 100.0));
+            
+            // 根据质量评分给出建议
+            if deviation.quality_score < 0.6 {
+                recommendations.push("代码质量评分较低，建议进行重构".to_string());
+            } else if deviation.quality_score < 0.8 {
+                recommendations.push("代码质量有待提升，建议优化关键部分".to_string());
+            }
+        }
+        
+        // 根据安全问题给出建议
+        let critical_count = findings.iter()
+            .filter(|f| matches!(f.severity, Severity::Error))
+            .count();
+        let warning_count = findings.iter()
+            .filter(|f| matches!(f.severity, Severity::Warning))
+            .count();
+        
+        if critical_count > 0 {
+            recommendations.push(format!("发现 {} 个严重安全问题，必须立即修复", critical_count));
+        }
+        if warning_count > 0 {
+            recommendations.push(format!("发现 {} 个警告问题，建议修复", warning_count));
+        }
+        
+        // 计算总体评分
+        let score = if critical_count > 0 {
+            Some(30)
+        } else if warning_count > 0 {
+            Some(60)
+        } else if let Some(deviation) = &result.deviation_analysis {
+            Some((deviation.quality_score * 100.0) as u8)
+        } else {
+            Some(80)
+        };
+        
+        ReviewResult {
+            success: true,
+            message: "代码评审完成".to_string(),
+            details,
+            findings,
+            score,
+            recommendations,
+        }
     }
 }

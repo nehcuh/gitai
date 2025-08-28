@@ -10,6 +10,7 @@ mod tree_sitter;
 mod scan;
 mod prompts;
 mod review;
+mod mcp;
 
 use std::path::PathBuf;
 use std::fs;
@@ -110,6 +111,9 @@ async fn main() -> Result<()> {
                 let output = git::run_git(&git_args)?;
                 print!("{output}");
             }
+        }
+        Command::Mcp { transport, addr } => {
+            handle_mcp(&config, &transport, &addr).await?;
         }
     }
     
@@ -406,6 +410,38 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
         }
         PromptAction::Update => {
             println!("🔄 更新提示词模板功能暂未实现");
+        }
+    }
+    
+    Ok(())
+}
+
+async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Result<()> {
+    // 检查 MCP 是否启用
+    if !config.mcp.as_ref().map_or(false, |mcp| mcp.enabled) {
+        eprintln!("❌ MCP 服务未启用，请在配置文件中启用 MCP");
+        std::process::exit(1);
+    }
+    
+    println!("🚀 启动 GitAI MCP 服务器");
+    println!("📡 传输协议: {}", transport);
+    
+    match transport {
+        "stdio" => {
+            println!("🔌 使用 stdio 传输");
+            mcp::bridge::start_mcp_server(config.clone()).await?;
+        }
+        "tcp" => {
+            println!("🌐 监听地址: {}", addr);
+            eprintln!("⚠️  TCP 传输暂未实现");
+        }
+        "sse" => {
+            println!("🌐 监听地址: {}", addr);
+            eprintln!("⚠️  SSE 传输暂未实现");
+        }
+        _ => {
+            eprintln!("❌ 不支持的传输协议: {}", transport);
+            std::process::exit(1);
         }
     }
     
