@@ -2,16 +2,21 @@
 import json
 import subprocess
 import time
-import os
 import sys
+import os
+
+# 可以通过环境变量设置等待时间
+SERVER_STARTUP_WAIT = float(os.environ.get('MCP_SERVER_STARTUP_WAIT', '2.0'))
+SERVER_SHUTDOWN_WAIT = float(os.environ.get('MCP_SERVER_SHUTDOWN_WAIT', '1.0'))
 
 def test_direct_mcp():
     """直接测试 MCP 服务器"""
     print("🧪 直接测试 MCP 服务器...")
     
     # 清理旧进程
-    subprocess.run(["pkill", "-f", "gitai mcp"], capture_output=True)
-    time.sleep(1)
+    subprocess.run(["pkill", "-f", "gitai mcp"], capture_output=True, shell=False)
+    # 等待旧进程完全终止
+    time.sleep(SERVER_SHUTDOWN_WAIT)
     
     # 启动 MCP 服务器
     env = os.environ.copy()
@@ -27,8 +32,8 @@ def test_direct_mcp():
         env=env
     )
     
-    # 等待服务器启动
-    time.sleep(2)
+    # 等待服务器启动，可通过环境变量 MCP_SERVER_STARTUP_WAIT 调整
+    time.sleep(SERVER_STARTUP_WAIT)
     
     try:
         # 发送初始化请求
@@ -86,6 +91,7 @@ def test_direct_mcp():
                 stderr_output.append(line.strip())
                 print(f"  STDERR: {line.strip()}")
             else:
+                time.sleep(0.1)  # 短暂等待以避免CPU过载
                 break
         
         # 解析扫描响应

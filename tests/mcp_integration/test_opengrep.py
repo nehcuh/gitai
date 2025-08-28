@@ -21,7 +21,8 @@ def test_opengrep_scan():
     ]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        # 使用 shell=False (默认值) 确保安全，防止命令注入
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, shell=False)
         print(f"📤 OpenGrep 命令: {' '.join(cmd)}")
         print(f"📤 返回码: {result.returncode}")
         print(f"📤 标准输出: {result.stdout}")
