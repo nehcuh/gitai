@@ -4,6 +4,15 @@ use crate::config::Config;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 use log::debug;
+use std::sync::Arc;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+
+// 全局版本缓存，避免重复调用
+lazy_static::lazy_static! {
+    static ref VERSION_CACHE: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref RULES_CACHE: Arc<RwLock<HashMap<std::path::PathBuf, RulesInfo>>> = Arc::new(RwLock::new(HashMap::new()));
+}
 
 /// 扫描结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,18 +140,34 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
     })
 }
 
-/// 获取OpenGrep版本
+/// 获取OpenGrep版本（使用缓存）
 fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // 先检查缓存
+    {
+        let cache = VERSION_CACHE.read();
+        if let Some(version) = cache.get("opengrep") {
+            return Ok(version.clone());
+        }
+    }
+    
+    // 缓存未命中，执行命令
     let output = Command::new("opengrep")
         .arg("--version")
         .output()?;
     
-    if output.status.success() {
-        let version = String::from_utf8_lossy(&output.stdout);
-        Ok(version.trim().to_string())
+    let version = if output.status.success() {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
-        Ok("unknown".to_string())
+        "unknown".to_string()
+    };
+    
+    // 写入缓存
+    {
+        let mut cache = VERSION_CACHE.write();
+        cache.insert("opengrep".to_string(), version.clone());
     }
+    
+    Ok(version)
 }
 
 /// 解析OpenGrep输出（整块 JSON，遍历 results 数组）
@@ -224,58 +249,106 @@ pub fn is_opengrep_installed() -> bool {
 
 pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
     use std::fs;
+    
+    // 先检查缓存
+    {
+        let cache = RULES_CACHE.read();
+        if let Some(info) = cache.get(rules_dir) {
+            return Some(info.clone());
+        }
+    }
+    
     let meta_path = rules_dir.join(".rules.meta");
-    if let Ok(content) = fs::read_to_string(&meta_path) {
+    let rules_info = if let Ok(content) = fs::read_to_string(&meta_path) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
             let sources = v["sources"].as_array()
                 .map(|a| a.iter().filter_map(|s| s.as_str().map(|x| x.to_string())).collect())
                 .unwrap_or_else(|| Vec::new());
             let total = v["total_rules"].as_u64().unwrap_or(0) as usize;
             let updated_at = v["updated_at"].as_str().map(|s| s.to_string());
-            return Some(RulesInfo {
+            Some(RulesInfo {
                 dir: rules_dir.display().to_string(),
                 sources,
                 total_rules: total,
                 updated_at,
-            });
+            })
+        } else {
+            // 回退：仅提供目录
+            Some(RulesInfo { 
+                dir: rules_dir.display().to_string(), 
+                sources: Vec::new(), 
+                total_rules: 0, 
+                updated_at: None 
+            })
         }
+    } else {
+        // 回退：仅提供目录
+        Some(RulesInfo { 
+            dir: rules_dir.display().to_string(), 
+            sources: Vec::new(), 
+            total_rules: 0, 
+            updated_at: None 
+        })
+    };
+    
+    // 写入缓存
+    if let Some(ref info) = rules_info {
+        let mut cache = RULES_CACHE.write();
+        cache.insert(rules_dir.to_path_buf(), info.clone());
     }
-    // 回退：仅提供目录
-    Some(RulesInfo { dir: rules_dir.display().to_string(), sources: Vec::new(), total_rules: 0, updated_at: None })
+    
+    rules_info
 }
 
 /// 根据扫描目录中的主要语言，优先选择对应的规则子目录
 fn select_language_rules(rules_dir: &std::path::Path, scan_path: &std::path::Path) -> Option<std::path::PathBuf> {
-    // 统计常见语言扩展出现次数（最多查看前 500 个文件）
+    // 统计常见语言扩展出现次数（优化：更早终止，更少文件）
     let mut counts: std::collections::HashMap<&'static str, usize> = Default::default();
     let mut seen = 0usize;
-    for entry in WalkDir::new(scan_path).into_iter().filter_map(|e| e.ok()) {
+    const MAX_FILES_TO_CHECK: usize = 100; // 减少检查文件数量
+    const CONFIDENCE_THRESHOLD: usize = 20; // 当某种语言达到这个数量就提前终止
+    
+    for entry in WalkDir::new(scan_path)
+        .max_depth(3) // 限制扫描深度，避免深层目录
+        .into_iter()
+        .filter_map(|e| e.ok()) 
+    {
         if entry.file_type().is_file() {
             if let Some(ext) = entry.path().extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()) {
                 let key = match ext.as_str() {
                     "java" => "java",
                     "py" => "python",
-                    "js" => "javascript",
-                    "ts" => "typescript",
+                    "js" | "mjs" | "cjs" => "javascript",
+                    "ts" | "tsx" => "typescript",
                     "go" => "go",
                     "rs" => "rust",
                     "rb" => "ruby",
                     "php" => "php",
-                    "kt" => "kotlin",
+                    "kt" | "kts" => "kotlin",
                     "scala" => "scala",
                     "swift" => "swift",
                     "c" | "h" => "c",
-                    "cpp" | "cxx" | "hpp" => "c",
+                    "cpp" | "cxx" | "hpp" | "cc" => "cpp",
                     _ => "",
                 };
                 if !key.is_empty() {
-                    *counts.entry(key).or_insert(0) += 1;
+                    let count = counts.entry(key).or_insert(0);
+                    *count += 1;
+                    
+                    // 当某种语言达到阈值，提前返回
+                    if *count >= CONFIDENCE_THRESHOLD {
+                        let candidate = rules_dir.join(key);
+                        if candidate.exists() {
+                            return Some(candidate);
+                        }
+                    }
                 }
             }
             seen += 1;
-            if seen >= 500 { break; }
+            if seen >= MAX_FILES_TO_CHECK { break; }
         }
     }
+    
     if counts.is_empty() { return None; }
     let (lang, _) = counts.into_iter().max_by_key(|(_, c)| *c).unwrap();
     let candidate = rules_dir.join(lang);
