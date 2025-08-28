@@ -2,7 +2,7 @@
 //
 // 提供安全扫描功能的 MCP 服务实现
 
-use crate::{config::Config, scan, mcp::*, update::AutoUpdater};
+use crate::{config::Config, scan, mcp::*};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -70,16 +70,17 @@ impl ScanService {
                     return Err("OpenGrep 未安装，请先安装: cargo install opengrep".into());
                 }
                 
-                // 自动下载规则（与 CLI 逻辑一致）
-                debug!("🔄 检查扫描规则...");
-                let updater = AutoUpdater::new(self.config.clone());
-                if let Err(e) = updater.update_scan_rules().await {
-                    warn!("⚠️ 规则更新失败: {}", e);
-                    // 不返回错误，继续使用现有规则
-                }
+                // MCP 服务不应自动更新规则，避免超时
+                // 规则更新应由用户通过 'gitai update' 命令显式触发
+                debug!("🔄 使用现有扫描规则...");
+                // let updater = AutoUpdater::new(self.config.clone());
+                // if let Err(e) = updater.update_scan_rules().await {
+                //     warn!("⚠️ 规则更新失败: {}", e);
+                //     // 不返回错误，继续使用现有规则
+                // }
                 
                 // 使用与 CLI 完全一致的调用方式
-                let include_version = false; // CLI 默认不显示版本信息以提高性能
+                let include_version = false; // 不获取版本信息以提高性能
                 
                 debug!("🔍 开始扫描: path={:?}, lang={:?}, timeout={:?}", path, lang, Some(timeout));
                 let result = scan::run_opengrep_scan(&self.config, path, lang, Some(timeout), include_version);
@@ -146,12 +147,21 @@ impl ScanService {
         let findings_count = findings.len();
         let severity_counts = self.count_by_severity(&findings);
         
+        // 改进成功判断逻辑：只要能得到扫描结果就算成功
+        // stderr 输出不应该导致扫描失败
+        let success = scan_result.error.is_none() || !findings.is_empty();
+        
         ScanResult {
-            success: scan_result.error.is_none(),
+            success,
             message: if let Some(error) = scan_result.error {
-                format!("扫描完成，但有错误: {}", error)
+                // 如果有发现但也有错误，说明扫描部分成功
+                if !findings.is_empty() {
+                    format!("扫描完成，发现 {} 个问题（有警告: {}）", findings_count, error)
+                } else {
+                    format!("扫描完成，但有错误: {}", error)
+                }
             } else {
-                "扫描完成".to_string()
+                format!("扫描完成，发现 {} 个问题", findings_count)
             },
             findings,
             summary: ScanSummary {
