@@ -133,7 +133,7 @@ impl PromptManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+    // use tempfile::TempDir;  // 暂时未使用
     
     #[test]
     fn test_prompt_context() {

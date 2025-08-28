@@ -3,7 +3,7 @@
 // 提供 GitAI MCP 服务器的桥接层，将 GitAI 核心功能封装为 MCP 兼容接口
 
 use crate::config::Config;
-use crate::mcp::{McpResult, GitAiMcpManager};
+use crate::mcp::McpResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -89,7 +89,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     // 创建并初始化服务管理器
     let manager = std::sync::Arc::new(tokio::sync::RwLock::new(crate::mcp::GitAiMcpManager::new(config.clone())));
     
-    let mut stdin = io::stdin();
+    let stdin = io::stdin();
     let mut stdout = io::stdout();
     
     // 简单的 MCP 协议处理循环
@@ -272,7 +272,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
 }
 
 /// 启动 TCP MCP 服务器
-pub async fn start_mcp_tcp_server(config: Config, addr: &str) -> McpResult<()> {
+pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()> {
     // TCP 传输需要额外的实现，目前 rmcp 主要支持 stdio
     eprintln!("⚠️  TCP transport not fully implemented in current rmcp version");
     eprintln!("   Please use stdio transport instead");
@@ -280,7 +280,7 @@ pub async fn start_mcp_tcp_server(config: Config, addr: &str) -> McpResult<()> {
 }
 
 /// 启动 SSE MCP 服务器
-pub async fn start_mcp_sse_server(config: Config, addr: &str) -> McpResult<()> {
+pub async fn start_mcp_websocket_server(_config: Config, _addr: &str) -> McpResult<()> {
     eprintln!("⚠️  SSE transport not fully implemented in current rmcp version");
     eprintln!("   Please use stdio transport instead");
     Ok(())
