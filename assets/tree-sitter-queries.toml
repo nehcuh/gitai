@@ -1,0 +1,260 @@
+# Tree-sitter 查询配置
+# 将各语言的查询模式统一管理，减少代码重复
+
+[java]
+function_query = """
+(method_declaration
+  name: (identifier) @function.name
+  parameters: (formal_parameters) @function.parameters
+  type: (type_identifier)? @function.return_type
+) @function.definition
+
+(constructor_declaration
+  name: (identifier) @function.name
+  parameters: (formal_parameters) @function.parameters
+) @function.definition
+"""
+
+class_query = """
+(class_declaration
+  name: (identifier) @class.name
+  superclass: (superclass (type_identifier) @class.extends)?
+  interfaces: (super_interfaces (interface_type_list (type_identifier) @class.implements))?
+) @class.definition
+
+(interface_declaration
+  name: (identifier) @class.name
+) @class.definition
+"""
+
+comment_query = """
+(line_comment) @comment
+(block_comment) @comment
+"""
+
+[rust]
+function_query = """
+(function_item
+  name: (identifier) @function.name
+  parameters: (parameters) @function.parameters
+) @function.definition
+
+(impl_item
+  body: (declaration_list
+    (function_item
+      name: (identifier) @function.name
+      parameters: (parameters) @function.parameters
+    ) @function.definition
+  )
+)
+"""
+
+class_query = """
+(struct_item
+  name: (type_identifier) @class.name
+) @class.definition
+
+(impl_item
+  type: (type_identifier) @class.name
+) @class.definition
+
+(enum_item
+  name: (type_identifier) @class.name
+) @class.definition
+"""
+
+comment_query = """
+(line_comment) @comment
+(block_comment) @comment
+"""
+
+[python]
+function_query = """
+(function_definition
+  name: (identifier) @function.name
+  parameters: (parameters) @function.parameters
+  return_type: (type)? @function.return_type
+) @function.definition
+
+(async_function_definition
+  name: (identifier) @function.name
+  parameters: (parameters) @function.parameters
+  return_type: (type)? @function.return_type
+) @function.definition
+"""
+
+class_query = """
+(class_definition
+  name: (identifier) @class.name
+  superclasses: (argument_list (identifier) @class.extends)?
+) @class.definition
+"""
+
+comment_query = """
+(comment) @comment
+(string
+  (string_content) @comment
+) @comment
+"""
+
+[javascript]
+function_query = """
+(function_declaration
+  name: (identifier) @function.name
+  parameters: (formal_parameters) @function.parameters
+  return_type: (type_annotation)? @function.return_type
+) @function.definition
+
+(arrow_function
+  parameters: (formal_parameters) @function.parameters
+  return_type: (type_annotation)? @function.return_type
+) @function.definition
+
+(method_definition
+  name: (property_identifier) @function.name
+  value: (function_expression
+    parameters: (formal_parameters) @function.parameters
+  )
+) @function.definition
+"""
+
+class_query = """
+(class_declaration
+  name: (identifier) @class.name
+  superclass: (class_heritage (identifier) @class.extends)?
+) @class.definition
+"""
+
+comment_query = """
+(comment) @comment
+"""
+
+[typescript]
+function_query = """
+(function_declaration
+  name: (identifier) @function.name
+  parameters: (formal_parameters) @function.parameters
+  return_type: (type_annotation)? @function.return_type
+) @function.definition
+
+(arrow_function
+  parameters: (formal_parameters) @function.parameters
+  return_type: (type_annotation)? @function.return_type
+) @function.definition
+
+(method_definition
+  name: (property_identifier) @function.name
+  value: (function_expression
+    parameters: (formal_parameters) @function.parameters
+  )
+) @function.definition
+"""
+
+class_query = """
+(class_declaration
+  name: (type_identifier) @class.name
+  superclass: (class_heritage (identifier) @class.extends)?
+) @class.definition
+
+(interface_declaration
+  name: (type_identifier) @class.name
+) @class.definition
+"""
+
+comment_query = """
+(comment) @comment
+"""
+
+[c]
+function_query = """
+(function_definition
+  declarator: (function_declarator
+    declarator: (identifier) @function.name
+  )
+) @function.definition
+"""
+
+class_query = """
+(struct_specifier
+  name: (type_identifier) @class.name
+) @class.definition
+
+(typedef_declaration
+  declarator: (type_identifier) @class.name
+) @class.definition
+
+(union_specifier
+  name: (type_identifier) @class.name
+) @class.definition
+
+(enum_specifier
+  name: (type_identifier) @class.name
+) @class.definition
+"""
+
+comment_query = """
+(comment) @comment
+"""
+
+[cpp]
+function_query = """
+(function_definition
+  declarator: (function_declarator
+    declarator: (identifier) @function.name
+  )
+) @function.definition
+"""
+
+class_query = """
+(class_specifier
+  name: (type_identifier) @class.name
+) @class.definition
+
+(struct_specifier
+  name: (type_identifier) @class.name
+) @class.definition
+
+(namespace_definition
+  name: (identifier) @class.name
+) @class.definition
+"""
+
+comment_query = """
+(comment) @comment
+"""
+
+[go]
+function_query = """
+(function_declaration
+  name: (identifier) @function.name
+  parameters: (parameter_list) @function.parameters
+  result: (type_identifier)? @function.return_type
+) @function.definition
+
+(method_declaration
+  receiver: (parameter_list) @function.receiver
+  name: (field_identifier) @function.name
+  parameters: (parameter_list) @function.parameters
+  result: (type_identifier)? @function.return_type
+) @function.definition
+"""
+
+class_query = """
+(type_declaration
+  (type_spec
+    name: (type_identifier) @class.name
+    type: (struct_type) @class.definition
+  )
+)
+
+(type_declaration
+  (type_spec
+    name: (type_identifier) @class.name
+    type: (interface_type) @class.definition
+  )
+)
+"""
+
+comment_query = """
+(comment) @comment
+"""

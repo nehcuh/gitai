@@ -166,10 +166,8 @@ impl PerformanceCollector {
 
 // 重新导出核心类型
 pub use rmcp::{
-    handler::server::ServerHandler,
     service::ServiceError,
-    model::{Tool, Resource, ServerInfo, InitializeResult, ServerCapabilities, Implementation},
-    transport,
+    model::{Tool, Implementation},
 };
 
 // 类型别名
@@ -466,11 +464,32 @@ impl GitAiMcpManager {
     
     /// 获取服务器信息
     #[allow(dead_code)]
-    pub fn get_server_info(&self) -> Implementation {
-        let config = self.config.mcp.as_ref().unwrap();
-        Implementation {
+    pub fn get_server_info(&self) -> Option<Implementation> {
+        self.config.mcp.as_ref().map(|config| Implementation {
             name: config.server.name.clone(),
             version: config.server.version.clone(),
-        }
+        })
     }
+}
+
+// =============================================================================
+// MCP Error Conversion Helpers - Eliminate repetition following Linus's taste
+// =============================================================================
+
+/// Convert parameter parsing error to MCP error
+/// Linus principle: eliminate the pattern "Failed to parse XXX parameters: {}"
+pub fn parse_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
+    invalid_parameters_error(format!("Failed to parse {} parameters: {}", service_name, e))
+}
+
+/// Convert execution error to MCP error 
+/// Linus principle: eliminate the pattern "XXX execution failed: {}"
+pub fn execution_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
+    execution_failed_error(format!("{} execution failed: {}", service_name, e))
+}
+
+/// Convert serialization error to MCP error
+/// Linus principle: eliminate the pattern "Failed to serialize XXX result: {}"
+pub fn serialize_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
+    execution_failed_error(format!("Failed to serialize {} result: {}", service_name, e))
 }

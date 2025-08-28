@@ -11,10 +11,12 @@ mod scan;
 mod prompts;
 mod review;
 mod mcp;
+mod project_insights;
+mod metrics;
 
 use std::path::PathBuf;
 use std::fs;
-use args::{Args, Command, PromptAction, ConfigAction};
+use args::{Args, Command, PromptAction, ConfigAction, MetricsAction};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 fn init_logger() {
@@ -100,8 +102,7 @@ async fn main() -> Result<()> {
                 language, format, output, tree_sitter, security_scan,
                 scan_tool, block_on_critical, issue_id, deviation_analysis,
             );
-            let executor = review::ReviewExecutor::new(config);
-            executor.execute(review_config).await?;
+            review::execute_review(&config, review_config).await?;
         }
         Command::Scan {
             path,
@@ -135,8 +136,7 @@ async fn main() -> Result<()> {
             dry_run,
         } => {
             let commit_config = commit::CommitConfig::from_args(message, issue_id, all, review, tree_sitter, dry_run);
-            let executor = commit::CommitExecutor::new(config);
-            executor.execute(commit_config).await?;
+            commit::execute_commit(&config, commit_config).await?;
         }
         Command::Update { check, format } => {
             if check {
@@ -164,6 +164,9 @@ async fn main() -> Result<()> {
         }
         Command::Config { action } => {
             handle_config(&config, &action, args.offline).await?;
+        }
+        Command::Metrics { action } => {
+            handle_metrics(&config, &action).await?;
         }
     }
     
@@ -674,4 +677,293 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
     }
     
     Ok(())
+}
+
+async fn handle_metrics(config: &config::Config, action: &MetricsAction) -> Result<()> {
+    use metrics::QualityTracker;
+    use project_insights::InsightsGenerator;
+    use tree_sitter::TreeSitterManager;
+    
+    match action {
+        MetricsAction::Record { tags, force } => {
+            println!("📊 记录代码质量快照...");
+            
+            // 检查是否有代码变化（除非强制记录）
+            if !force {
+                let status = git::run_git(&["status".to_string(), "--porcelain".to_string()])?;
+                if status.trim().is_empty() {
+                    println!("ℹ️  没有检测到代码变化");
+                    println!("💡 使用 --force 强制记录快照");
+                    return Ok(());
+                }
+            }
+            
+            // 创建质量追踪器
+            let mut tracker = QualityTracker::new()?;
+            
+            // 分析当前代码
+            println!("🔍 分析代码结构...");
+            let mut manager = TreeSitterManager::new().await?;
+            
+            // 获取当前目录的代码文件并分析
+            let mut summary = tree_sitter::StructuralSummary::default();
+            let code_files = find_code_files(".")?;
+            
+            for file_path in &code_files {
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
+                        if let Some(lang) = tree_sitter::SupportedLanguage::from_extension(ext) {
+                            if let Ok(file_summary) = manager.analyze_structure(&content, lang) {
+                                // 合并结果
+                                summary.functions.extend(file_summary.functions);
+                                summary.classes.extend(file_summary.classes);
+                                summary.comments.extend(file_summary.comments);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 生成项目洞察
+            println!("💡 生成项目洞察...");
+            let insights = InsightsGenerator::generate(&summary, None);
+            
+            // 记录快照
+            let mut snapshot = tracker.record_snapshot(&summary, &insights)?;
+            
+            // 添加标签
+            if !tags.is_empty() {
+                snapshot.tags = tags.clone();
+            }
+            
+            println!("✅ 质量快照已记录");
+            println!("   Commit: {}", &snapshot.commit_hash[..7]);
+            println!("   分支: {}", snapshot.branch);
+            println!("   代码行数: {}", snapshot.lines_of_code);
+            println!("   技术债务: {:.1}", snapshot.technical_debt.debt_score);
+            println!("   复杂度: {:.1}", snapshot.complexity_metrics.avg_cyclomatic_complexity);
+        }
+        MetricsAction::Analyze { days, format, output } => {
+            println!("📈 分析质量趋势...");
+            
+            let tracker = QualityTracker::new()?;
+            let analysis = tracker.analyze_trends(*days)?;
+            
+            let result = match format.as_str() {
+                "json" => serde_json::to_string_pretty(&analysis)?,
+                "markdown" | "html" => {
+                    let visualizer = metrics::visualizer::TrendVisualizer::new();
+                    if format == "html" {
+                        visualizer.generate_html_report(&analysis, tracker.get_snapshots())?
+                    } else {
+                        visualizer.generate_report(&analysis, tracker.get_snapshots())?
+                    }
+                }
+                _ => {
+                    // 文本格式
+                    format!(
+                        "质量趋势分析\n\n\
+                        整体趋势: {:?}\n\
+                        时间范围: {} 到 {}\n\
+                        快照数量: {}\n\
+                        关键发现: {}\n\
+                        改进建议: {}\n",
+                        analysis.overall_trend,
+                        analysis.time_range.start.format("%Y-%m-%d"),
+                        analysis.time_range.end.format("%Y-%m-%d"),
+                        analysis.time_range.snapshots_count,
+                        analysis.key_findings.len(),
+                        analysis.recommendations.len()
+                    )
+                }
+            };
+            
+            if let Some(output_path) = output {
+                std::fs::write(output_path, result)?;
+                println!("📁 分析结果已保存到: {}", output_path.display());
+            } else {
+                println!("{}", result);
+            }
+        }
+        MetricsAction::Report { report_type, output, html } => {
+            println!("📄 生成质量报告...");
+            
+            let tracker = QualityTracker::new()?;
+            
+            let report = if *html {
+                let analysis = tracker.analyze_trends(None)?;
+                let visualizer = metrics::visualizer::TrendVisualizer::new();
+                visualizer.generate_html_report(&analysis, tracker.get_snapshots())?
+            } else {
+                tracker.generate_report(output.as_deref())?
+            };
+            
+            if let Some(output_path) = output {
+                std::fs::write(output_path, report)?;
+                println!("✅ 报告已生成: {}", output_path.display());
+            } else {
+                println!("{}", report);
+            }
+        }
+        MetricsAction::List { limit, branch, format } => {
+            let tracker = QualityTracker::new()?;
+            let snapshots = tracker.get_snapshots();
+            
+            // 过滤分支
+            let filtered: Vec<_> = if let Some(branch_name) = branch {
+                snapshots.iter()
+                    .filter(|s| s.branch == *branch_name)
+                    .collect()
+            } else {
+                snapshots.iter().collect()
+            };
+            
+            match format.as_str() {
+                "json" => {
+                    let json = serde_json::to_string_pretty(&filtered.into_iter().take(*limit).collect::<Vec<_>>())?;
+                    println!("{}", json);
+                }
+                "table" | _ => {
+                    println!("📋 历史快照 (最近{}个):", limit);
+                    println!("┌────┬──────────────┬─────────┬──────┬─────────┬────────┬────────┐");
+                    println!("│ #  │ 时间         │ Commit  │ LOC  │ 债务    │ 复杂度 │ API稳定│");
+                    println!("├────┼──────────────┼─────────┼──────┼─────────┼────────┼────────┤");
+                    
+                    for (i, snapshot) in filtered.iter().rev().take(*limit).enumerate() {
+                        println!(
+                            "│{:3} │ {} │ {:7} │{:5} │{:8.1} │{:7.1} │{:7.0}%│",
+                            i + 1,
+                            snapshot.timestamp.format("%m-%d %H:%M"),
+                            &snapshot.commit_hash[..7],
+                            snapshot.lines_of_code,
+                            snapshot.technical_debt.debt_score,
+                            snapshot.complexity_metrics.avg_cyclomatic_complexity,
+                            snapshot.api_metrics.stability_score,
+                        );
+                    }
+                    println!("└────┴──────────────┴─────────┴──────┴─────────┴────────┴────────┘");
+                }
+            }
+        }
+        MetricsAction::Compare { from, to, format } => {
+            let tracker = QualityTracker::new()?;
+            let snapshots = tracker.get_snapshots();
+            
+            // 查找快照
+            let from_snapshot = if from == "latest" {
+                snapshots.last()
+            } else if let Ok(index) = from.parse::<usize>() {
+                snapshots.get(index.saturating_sub(1))
+            } else {
+                snapshots.iter().find(|s| s.commit_hash.starts_with(from))
+            };
+            
+            let to_snapshot = if let Some(to_ref) = to {
+                if to_ref == "latest" {
+                    snapshots.last()
+                } else if let Ok(index) = to_ref.parse::<usize>() {
+                    snapshots.get(index.saturating_sub(1))
+                } else {
+                    snapshots.iter().find(|s| s.commit_hash.starts_with(to_ref))
+                }
+            } else {
+                snapshots.last()
+            };
+            
+            match (from_snapshot, to_snapshot) {
+                (Some(from_s), Some(to_s)) => {
+                    let changes = tracker.compare_snapshots(from_s, to_s);
+                    
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(&changes)?);
+                    } else {
+                        println!("📊 快照比较:");
+                        println!("   从: {} ({})", &from_s.commit_hash[..7], from_s.timestamp.format("%Y-%m-%d"));
+                        println!("   到: {} ({})", &to_s.commit_hash[..7], to_s.timestamp.format("%Y-%m-%d"));
+                        println!();
+                        println!("   变化:");
+                        for (key, value) in &changes {
+                            let emoji = if *value > 0.0 { "📈" } else if *value < 0.0 { "📉" } else { "➡️" };
+                            println!("     {} {}: {:+.2}", emoji, key, value);
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("❌ 未找到指定的快照");
+                }
+            }
+        }
+        MetricsAction::Clean { keep_days, yes } => {
+            if !yes {
+                println!("⚠️  确认清理超过{}天的历史数据？使用 --yes 确认", keep_days);
+                return Ok(());
+            }
+            
+            let mut tracker = QualityTracker::new()?;
+            let removed = tracker.cleanup_old_snapshots(*keep_days)?;
+            println!("🧹 已清理 {} 个旧快照", removed);
+        }
+        MetricsAction::Export { format, output, branches } => {
+            println!("📤 导出质量数据...");
+            
+            let tracker = QualityTracker::new()?;
+            let snapshots = if branches.is_empty() {
+                tracker.get_snapshots().to_vec()
+            } else {
+                tracker.get_snapshots()
+                    .iter()
+                    .filter(|s| branches.contains(&s.branch))
+                    .cloned()
+                    .collect()
+            };
+            
+            match format.as_str() {
+                "csv" => {
+                    metrics::storage::export_to_csv(&snapshots, output)?;
+                    println!("✅ 已导出到: {}", output.display());
+                }
+                "json" => {
+                    let json = serde_json::to_string_pretty(&snapshots)?;
+                    std::fs::write(output, json)?;
+                    println!("✅ 已导出到: {}", output.display());
+                }
+                _ => {
+                    eprintln!("❌ 不支持的导出格式: {}", format);
+                }
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+// 辅助函数：查找代码文件
+fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let supported_extensions = vec!["rs", "java", "py", "js", "ts", "go", "c", "cpp"];
+    
+    for entry in walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| !e.file_type().is_dir())
+    {
+        let path = entry.path();
+        
+        // 跳过隐藏目录和常见的排除目录
+        if path.components().any(|c| {
+            c.as_os_str().to_str().map_or(false, |s| {
+                s.starts_with('.') || s == "target" || s == "node_modules" || s == "build"
+            })
+        }) {
+            continue;
+        }
+        
+        if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+            if supported_extensions.contains(&ext) {
+                files.push(path.to_path_buf());
+            }
+        }
+    }
+    
+    Ok(files)
 }

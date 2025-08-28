@@ -12,6 +12,7 @@ use log::{debug, info, warn, error};
 
 /// Analysis 服务
 pub struct AnalysisService {
+    #[allow(dead_code)]
     config: Config,
     verbosity: u32,
 }
@@ -351,6 +352,7 @@ impl AnalysisService {
     }
 
       // 这个方法暂时不需要，因为我们在 convert_analysis_result 中已经简化了计算
+    #[allow(dead_code)]
     fn calculate_maintainability_index(_summary: &tree_sitter::StructuralSummary) -> f64 {
         85.0 // 简化返回固定值
     }
@@ -398,7 +400,7 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
         match name {
             "execute_analysis" => {
                 let mut params: AnalysisParams = serde_json::from_value(arguments)
-                    .map_err(|e| invalid_parameters_error(format!("Failed to parse analysis parameters: {}", e)))?;
+                    .map_err(|e| crate::mcp::parse_error("analysis", e))?;
                 
                 // 使用服务配置的默认详细程度
                 if params.verbosity.is_none() {
@@ -406,10 +408,10 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                 }
                 
                 let result = self.execute_analysis(params).await
-                    .map_err(|e| execution_failed_error(format!("Analysis execution failed: {}", e)))?;
+                    .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
                 
                 Ok(serde_json::to_value(result)
-                    .map_err(|e| execution_failed_error(format!("Failed to serialize analysis result: {}", e)))?)
+                    .map_err(|e| crate::mcp::serialize_error("analysis", e))?)
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }

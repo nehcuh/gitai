@@ -1,68 +1,98 @@
 use crate::config::Config;
 use crate::devops::Issue;
+use crate::tree_sitter::StructuralSummary;
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
-/// 分析配置 - 消除嵌套条件
+/// 统一操作上下文 - Linus式数据结构优先设计
 #[derive(Debug, Clone)]
-pub struct AnalysisConfig {
-    pub issue_ids: Vec<String>,
-    pub deviation_analysis: bool,
-    pub security_scan: bool,
-}
-
-impl AnalysisConfig {
-    pub fn from_flags(
-        issue_id: Option<String>,
-        deviation_analysis: bool,
-        security_scan: bool,
-    ) -> Self {
-        let issue_ids = issue_id
-            .map(|ids| ids.split(',').map(|s| s.trim().to_string()).collect())
-            .unwrap_or_default();
-        
-        Self {
-            issue_ids,
-            deviation_analysis,
-            security_scan,
-        }
-    }
-    
-    pub fn needs_issue_context(&self) -> bool {
-        !self.issue_ids.is_empty() || self.deviation_analysis
-    }
-    
-    pub fn deviation_analysis(&self) -> bool {
-        self.deviation_analysis
-    }
-    
-    pub fn has_issues(&self) -> bool {
-        !self.issue_ids.is_empty()
-    }
-}
-
-/// 分析上下文 - 包含所有必要信息
-#[derive(Debug, Clone)]
-pub struct AnalysisContext {
+pub struct OperationContext {
+    /// 应用配置
+    pub config: Config,
+    /// 代码变更内容
     pub diff: String,
+    /// 相关的Issue列表
     pub issues: Vec<Issue>,
-    pub config: AnalysisConfig,
-    pub structural_info: Option<String>,
+    /// Tree-sitter结构分析结果
+    pub structural_info: Option<StructuralSummary>,
+    /// 操作特定的选项
+    pub options: OperationOptions,
 }
 
-impl AnalysisContext {
-    pub fn new(diff: String, issues: Vec<Issue>, config: AnalysisConfig) -> Self {
-        Self { 
-            diff, 
-            issues, 
-            config, 
+/// 操作选项 - 统一所有操作的配置选项
+#[derive(Debug, Clone, Default)]
+pub struct OperationOptions {
+    // 通用选项
+    pub dry_run: bool,
+    pub language: Option<String>,
+    pub output: Option<PathBuf>,
+    pub issue_ids: Vec<String>,
+    // 分析选项
+    pub tree_sitter: bool,
+    pub security_scan: bool,
+    pub scan_tool: Option<String>,
+    pub deviation_analysis: bool,
+    // 评审选项
+    pub format: Option<String>,
+    pub block_on_critical: bool,
+    // 提交选项
+    pub message: Option<String>,
+    pub add_all: bool,
+    pub review_before_commit: bool,
+}
+
+impl OperationContext {
+    /// 创建新的操作上下文
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
+            diff: String::new(),
+            issues: Vec::new(),
             structural_info: None,
+            options: OperationOptions::default(),
         }
     }
     
+    /// 设置代码变更
+    pub fn with_diff(mut self, diff: String) -> Self {
+        self.diff = diff;
+        self
+    }
+    
+    /// 设置相关Issue
+    pub fn with_issues(mut self, issues: Vec<Issue>) -> Self {
+        self.issues = issues;
+        self
+    }
+    
+    /// 设置结构分析信息
+    pub fn with_structural_info(mut self, info: StructuralSummary) -> Self {
+        self.structural_info = Some(info);
+        self
+    }
+    
+    /// 设置操作选项
+    pub fn with_options(mut self, options: OperationOptions) -> Self {
+        self.options = options;
+        self
+    }
+    
+    /// 是否有变更需要处理
+    pub fn has_changes(&self) -> bool {
+        !self.diff.trim().is_empty()
+    }
+    
+    /// 是否有相关Issue
     pub fn has_issues(&self) -> bool {
         !self.issues.is_empty()
     }
     
+    /// 是否需要Issue上下文
+    pub fn needs_issue_context(&self) -> bool {
+        !self.options.issue_ids.is_empty() || self.options.deviation_analysis
+    }
+    
+    /// 获取Issue上下文字符串
     pub fn issue_context(&self) -> String {
         if self.issues.is_empty() {
             return String::new();
@@ -76,16 +106,6 @@ impl AnalysisContext {
             ))
             .collect::<Vec<_>>()
             .join("\n")
-    }
-    
-    /// 添加结构分析信息
-    pub fn add_structural_info(&mut self, info: String) {
-        self.structural_info = Some(info);
-    }
-    
-    /// 获取结构分析信息
-    pub fn structural_info(&self) -> &Option<String> {
-        &self.structural_info
     }
 }
 
@@ -126,28 +146,22 @@ pub struct Deviation {
     pub suggestion: String,  // 建议
 }
 
-/// 分析器 - 专门负责代码分析
-pub struct Analyzer {
-    config: Config,
-}
+/// 代码分析器 - 使用统一的OperationContext
+pub struct Analyzer;
 
 impl Analyzer {
-    pub fn new(config: Config) -> Self {
-        Self { config }
-    }
-    
-    /// 执行完整分析
-    pub async fn analyze(&self, context: AnalysisContext) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
-        let security_findings = if context.config.security_scan {
-            self.analyze_security().await?
+    /// 执行完整分析 - 使用统一上下文
+    pub async fn analyze(context: &OperationContext) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+        let security_findings = if context.options.security_scan {
+            Self::analyze_security(context).await?
         } else {
             Vec::new()
         };
         
-        let review_result = self.analyze_review(&context, &security_findings).await?;
+        let review_result = Self::analyze_review(context, &security_findings).await?;
         
-        let deviation_analysis = if context.config.deviation_analysis && context.has_issues() {
-            Some(self.analyze_deviation(&context).await?)
+        let deviation_analysis = if context.options.deviation_analysis && context.has_issues() {
+            Some(Self::analyze_deviation(context).await?)
         } else {
             None
         };
@@ -160,10 +174,10 @@ impl Analyzer {
     }
     
     /// 分析代码评审
-    async fn analyze_review(&self, context: &AnalysisContext, security_findings: &[SecurityFinding]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_review(context: &OperationContext, security_findings: &[SecurityFinding]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // 准备tree-sitter结构信息
         let tree_sitter_info = if let Some(ref structural_info) = context.structural_info {
-            structural_info.clone()
+            serde_json::to_string(structural_info).unwrap_or_default()
         } else {
             "无结构分析信息".to_string()
         };
@@ -191,12 +205,9 @@ impl Analyzer {
         
         // 尝试使用模板，如果失败则降级为硬编码提示词
         log::debug!("准备使用模板进行AI评审");
-        log::debug!("Tree-sitter信息长度: {}", tree_sitter_info.len());
-        log::debug!("安全扫描结果: {}", security_scan_results);
-        log::debug!("DevOps Issue上下文: {}", devops_issue_context);
         
         match crate::ai::review_code_with_template(
-            &self.config, 
+            &context.config, 
             &context.diff, 
             Some(&tree_sitter_info),
             &security_scan_results,
@@ -216,15 +227,15 @@ impl Analyzer {
                 );
                 
                 // 添加结构分析信息
-                if let Some(ref structural_info) = context.structural_info {
-                    prompt.push_str(&format!("\n\n{}", structural_info));
+                if context.structural_info.is_some() {
+                    prompt.push_str(&format!("\n\n{}", tree_sitter_info));
                 }
                 
                 if context.has_issues() {
                     prompt.push_str(&format!("\n\n相关Issue信息：\n{}", context.issue_context()));
                 }
                 
-                if context.config.deviation_analysis() && context.has_issues() {
+                if context.options.deviation_analysis && context.has_issues() {
                     prompt.push_str("\n\n请特别分析以下方面：\n");
                     prompt.push_str("1. 代码变更是否完全解决了Issue中描述的问题？\n");
                     prompt.push_str("2. 是否存在偏离需求的情况？\n");
@@ -234,15 +245,18 @@ impl Analyzer {
                     prompt.push_str("\n请提供偏离度分析报告，包括符合度和改进建议。");
                 }
                 
-                crate::ai::call_ai(&self.config, &prompt).await
+                match crate::ai::call_ai(&context.config, &prompt).await {
+                    Ok(result) => Ok(result),
+                    Err(e) => Err(format!("AI服务错误: {}", e).into()),
+                }
             }
         }
     }
     
     /// 分析安全问题
-    async fn analyze_security(&self) -> Result<Vec<SecurityFinding>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_security(context: &OperationContext) -> Result<Vec<SecurityFinding>, Box<dyn std::error::Error + Send + Sync>> {
         let current_dir = std::env::current_dir()?;
-        match crate::scan::run_opengrep_scan(&self.config, &current_dir, None, None, false) {
+        match crate::scan::run_opengrep_scan(&context.config, &current_dir, None, None, false) {
             Ok(result) => {
                 let findings: Vec<SecurityFinding> = result.findings.into_iter().map(|f| SecurityFinding {
                     title: f.title,
@@ -262,25 +276,28 @@ impl Analyzer {
     }
     
     /// 分析偏离度
-    async fn analyze_deviation(&self, context: &AnalysisContext) -> Result<DeviationAnalysis, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_deviation(context: &OperationContext) -> Result<DeviationAnalysis, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = format!(
             "分析以下代码变更与Issue需求的符合度，提供偏离度分析：\n\nIssue信息：\n{}\n\n代码变更：\n{}\n\n请分析：\n1. 需求覆盖率 (0.0-1.0)\n2. 质量评分 (0.0-1.0)\n3. 具体偏离项\n4. 改进建议",
             context.issue_context(),
             context.diff
         );
         
-        let ai_response = crate::ai::call_ai(&self.config, &prompt).await?;
-        
-        // 简化的解析逻辑 - 实际应该更robust
-        let requirement_coverage = extract_score(&ai_response, "需求覆盖率").unwrap_or(0.8);
-        let quality_score = extract_score(&ai_response, "质量评分").unwrap_or(0.7);
-        
-        Ok(DeviationAnalysis {
-            requirement_coverage,
-            quality_score,
-            deviations: vec![],
-            suggestions: vec![ai_response],
-        })
+        match crate::ai::call_ai(&context.config, &prompt).await {
+            Ok(ai_response) => {
+                // 简化的解析逻辑 - 实际应该更robust
+                let requirement_coverage = extract_score(&ai_response, "需求覆盖率").unwrap_or(0.8);
+                let quality_score = extract_score(&ai_response, "质量评分").unwrap_or(0.7);
+                
+                Ok(DeviationAnalysis {
+                    requirement_coverage,
+                    quality_score,
+                    deviations: vec![],
+                    suggestions: vec![ai_response.to_string()],
+                })
+            },
+            Err(e) => Err(format!("AI服务错误: {}", e).into()),
+        }
     }
 }
 

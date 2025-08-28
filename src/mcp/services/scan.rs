@@ -236,13 +236,13 @@ impl crate::mcp::GitAiMcpService for ScanService {
         match name {
             "execute_scan" => {
                 let params: ScanParams = serde_json::from_value(arguments)
-                    .map_err(|e| invalid_parameters_error(format!("Failed to parse scan parameters: {}", e)))?;
+                    .map_err(|e| crate::mcp::parse_error("scan", e))?;
                 
                 let result = self.execute_scan(params).await
-                    .map_err(|e| execution_failed_error(format!("Scan execution failed: {}", e)))?;
+                    .map_err(|e| crate::mcp::execution_error("Scan", e))?;
                 
                 Ok(serde_json::to_value(result)
-                    .map_err(|e| execution_failed_error(format!("Failed to serialize scan result: {}", e)))?)
+                    .map_err(|e| crate::mcp::serialize_error("scan", e))?)
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }

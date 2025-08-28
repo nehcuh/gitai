@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::prompts::{PromptManager, PromptContext};
+use crate::project_insights::InsightsGenerator;
 use serde::{Deserialize, Serialize};
 
 /// AI请求
@@ -28,7 +29,6 @@ struct AiChoice {
     message: AiMessage,
 }
 
-/// 简化的AI调用
 pub async fn call_ai(config: &Config, prompt: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let client = reqwest::Client::new();
     
@@ -67,8 +67,7 @@ pub async fn call_ai(config: &Config, prompt: &str) -> Result<String, Box<dyn st
     Ok(content)
 }
 
-/// 生成提交信息
-pub async fn generate_commit_message(config: &Config, diff: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub async fn generate_commit_message(config: &Config, diff: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let prompt = format!(
         "Generate a concise commit message for the following changes:\n\n{diff}"
     );
@@ -76,8 +75,7 @@ pub async fn generate_commit_message(config: &Config, diff: &str) -> Result<Stri
     call_ai(config, &prompt).await
 }
 
-/// 代码评审
-pub async fn review_code(config: &Config, diff: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub async fn review_code(config: &Config, diff: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let prompt = format!(
         "Review the following code changes and provide feedback:\n\n{diff}"
     );
@@ -85,7 +83,6 @@ pub async fn review_code(config: &Config, diff: &str) -> Result<String, Box<dyn 
     call_ai(config, &prompt).await
 }
 
-/// 使用提示词模板调用AI
 pub async fn call_ai_with_template(
     config: &Config, 
     template_name: &str, 
@@ -136,7 +133,6 @@ pub async fn call_ai_with_template(
     Ok(content)
 }
 
-/// 使用review模板进行代码评审
 pub async fn review_code_with_template(
     config: &Config, 
     diff: &str, 
@@ -149,8 +145,48 @@ pub async fn review_code_with_template(
         .with_variable("security_scan_results", security_scan_results)
         .with_variable("devops_issue_context", devops_issue_context);
     
+    // 使用增强的架构洞察替代简单的统计
     if let Some(summary) = tree_sitter_summary {
-        context = context.with_variable("tree_sitter_summary", summary);
+        // 尝试解析为 StructuralSummary 并生成架构洞察
+        match serde_json::from_str::<crate::tree_sitter::StructuralSummary>(summary) {
+            Ok(structural_summary) => {
+                let insights = InsightsGenerator::generate(&structural_summary, None);
+                
+                // 使用 ProjectInsights 的 to_ai_context 方法
+                let ai_context = insights.to_ai_context();
+                
+                // 构建详细的架构上下文
+                let architecture_context = format!(
+                    "## 架构洞察分析\n\n{}\
+                    \n### 代码结构统计\n\
+                    - 函数数量: {}\n\
+                    - 类/结构体数量: {}\n\
+                    - 复杂度热点: {} 个\n\
+                    - 架构层次: {} 层\n\
+                    - 架构违规: {} 处\n\
+                    - 循环依赖: {} 个\n\
+                    - 公开API: {} 个\n\
+                    - 技术债务评分: {:.1}\n\n\
+                    ### 原始统计信息\n{}",
+                    ai_context,
+                    structural_summary.functions.len(),
+                    structural_summary.classes.len(),
+                    insights.quality_hotspots.complexity_hotspots.len(),
+                    insights.architecture.architectural_layers.len(),
+                    insights.architecture.pattern_violations.len(),
+                    insights.architecture.module_dependencies.circular_dependencies.len(),
+                    insights.api_surface.public_apis.len(),
+                    insights.quality_hotspots.maintenance_burden.technical_debt_score,
+                    summary
+                );
+                
+                context = context.with_variable("tree_sitter_summary", &architecture_context);
+            },
+            Err(_) => {
+                // 如果解析失败，使用原始摘要
+                context = context.with_variable("tree_sitter_summary", summary);
+            }
+        }
     } else {
         context = context.with_variable("tree_sitter_summary", "无结构分析信息");
     }
@@ -158,13 +194,38 @@ pub async fn review_code_with_template(
     call_ai_with_template(config, "review", &context).await
 }
 
-/// 使用commit-generator模板生成提交信息
 pub async fn generate_commit_message_with_template(
     config: &Config, 
-    diff: &str
+    diff: &str,
+    tree_sitter_summary: Option<&str>
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let context = PromptContext::new()
+    let mut context = PromptContext::new()
         .with_variable("diff", diff);
+    
+    // 如果有结构分析，添加架构影响信息
+    if let Some(summary) = tree_sitter_summary {
+        match serde_json::from_str::<crate::tree_sitter::StructuralSummary>(summary) {
+            Ok(structural_summary) => {
+                let insights = InsightsGenerator::generate(&structural_summary, None);
+                
+                // 为提交信息提供关键架构影响信息
+                let impact_summary = format!(
+                    "架构影响: 函数变更{}个, 类变更{}个, 复杂度热点{}个, API影响{}",
+                    structural_summary.functions.len(),
+                    structural_summary.classes.len(),
+                    insights.quality_hotspots.complexity_hotspots.len(),
+                    if !insights.impact_analysis.breaking_changes.is_empty() { 
+                        format!("有{}个破坏性变更", insights.impact_analysis.breaking_changes.len())
+                    } else { 
+                        "兼容".to_string()
+                    }
+                );
+                
+                context = context.with_variable("architecture_impact", &impact_summary);
+            },
+            Err(_) => {}
+        }
+    }
     
     call_ai_with_template(config, "commit-generator", &context).await
 }

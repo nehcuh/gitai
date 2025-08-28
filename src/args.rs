@@ -177,6 +177,11 @@ pub enum Command {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// 架构质量趋势追踪
+    Metrics {
+        #[command(subcommand)]
+        action: MetricsAction,
+    },
 }
 
 /// 提示词操作
@@ -196,6 +201,86 @@ pub enum PromptAction {
     Update,
     /// 初始化提示词目录
     Init,
+}
+
+/// 质量指标操作
+#[derive(Parser, Debug)]
+pub enum MetricsAction {
+    /// 记录当前代码质量快照
+    Record {
+        /// 自定义标签
+        #[arg(long)]
+        tags: Vec<String>,
+        /// 强制记录（即使没有代码变化）
+        #[arg(long)]
+        force: bool,
+    },
+    /// 分析质量趋势
+    Analyze {
+        /// 分析最近N天的数据
+        #[arg(long)]
+        days: Option<i64>,
+        /// 输出格式 (text|json|markdown|html)
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// 生成趋势报告
+    Report {
+        /// 报告类型 (summary|detailed|full)
+        #[arg(long, default_value = "summary")]
+        report_type: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 生成HTML格式
+        #[arg(long)]
+        html: bool,
+    },
+    /// 列出历史快照
+    List {
+        /// 显示最近N个快照
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// 分支过滤
+        #[arg(long)]
+        branch: Option<String>,
+        /// 输出格式 (text|json|table)
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+    /// 比较两个快照
+    Compare {
+        /// 第一个快照（commit hash或索引）
+        from: String,
+        /// 第二个快照（commit hash或索引，默认为最新）
+        to: Option<String>,
+        /// 输出格式 (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// 清理历史数据
+    Clean {
+        /// 保留最近N天的数据
+        #[arg(long, default_value = "90")]
+        keep_days: i64,
+        /// 确认清理
+        #[arg(long)]
+        yes: bool,
+    },
+    /// 导出数据
+    Export {
+        /// 导出格式 (csv|json)
+        #[arg(long, default_value = "csv")]
+        format: String,
+        /// 输出文件
+        output: PathBuf,
+        /// 包含的分支
+        #[arg(long)]
+        branches: Vec<String>,
+    },
 }
 
 /// 配置管理操作

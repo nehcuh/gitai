@@ -363,10 +363,21 @@ fn select_language_rules(rules_dir: &std::path::Path, scan_path: &std::path::Pat
         }
     }
     
-    if counts.is_empty() { return None; }
-    let (lang, _) = counts.into_iter().max_by_key(|(_, c)| *c).unwrap();
-    let candidate = rules_dir.join(lang);
-    if candidate.exists() { Some(candidate) } else { None }
+    if counts.is_empty() { 
+        return None; 
+    }
+    
+    // 安全地获取使用最多的语言，避免panic
+    if let Some((lang, _)) = counts.into_iter().max_by_key(|(_, c)| *c) {
+        let candidate = rules_dir.join(lang);
+        if candidate.exists() { 
+            Some(candidate) 
+        } else { 
+            None 
+        }
+    } else {
+        None
+    }
 }
 
 fn pick_rules_path(dir: &std::path::Path) -> std::path::PathBuf {

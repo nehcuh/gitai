@@ -80,6 +80,15 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     use std::io::{self, Write};
     use serde_json::{Value, json};
     
+    // Helper function to safely write JSON response to stdout
+    fn write_response(stdout: &mut impl Write, response: &Value) -> McpResult<()> {
+        writeln!(stdout, "{}", response)
+            .map_err(|e| crate::mcp::execution_failed_error(format!("Failed to write response: {}", e)))?;
+        stdout.flush()
+            .map_err(|e| crate::mcp::execution_failed_error(format!("Failed to flush stdout: {}", e)))?;
+        Ok(())
+    }
+    
     eprintln!("🚀 GitAI MCP Server starting...");
     eprintln!("📡 Available services:");
     eprintln!("   - review: Code review with tree-sitter and security scan");
@@ -121,8 +130,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         }
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/list" => {
                                 let response = json!({
@@ -179,8 +187,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         ]
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/call" => {
                                 let tool_name = msg.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
@@ -202,8 +209,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 ]
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                     Err(e) => {
                                         let error_type = match e {
@@ -241,8 +247,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 }
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                 }
                             }
@@ -255,8 +260,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         "message": format!("Method not found: {}", method)
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                         }
                     }
