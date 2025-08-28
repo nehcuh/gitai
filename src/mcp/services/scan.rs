@@ -81,8 +81,8 @@ impl ScanService {
                 // 使用与 CLI 完全一致的调用方式
                 let include_version = false; // CLI 默认不显示版本信息以提高性能
                 
-                debug!("🔍 开始扫描: path={:?}, lang={:?}", path, lang);
-                let result = scan::run_opengrep_scan(&self.config, path, lang, None, include_version);
+                debug!("🔍 开始扫描: path={:?}, lang={:?}, timeout={:?}", path, lang, Some(timeout));
+                let result = scan::run_opengrep_scan(&self.config, path, lang, Some(timeout), include_version);
                 
                 match &result {
                     Ok(scan_result) => {

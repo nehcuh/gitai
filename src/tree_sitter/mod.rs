@@ -33,6 +33,21 @@ impl SupportedLanguage {
         }
     }
 
+    /// 从语言名称推断语言
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "java" => Some(Self::Java),
+            "rust" | "rs" => Some(Self::Rust),
+            "c" => Some(Self::C),
+            "cpp" | "c++" => Some(Self::Cpp),
+            "python" | "py" => Some(Self::Python),
+            "go" => Some(Self::Go),
+            "javascript" | "js" => Some(Self::JavaScript),
+            "typescript" | "ts" => Some(Self::TypeScript),
+            _ => None,
+        }
+    }
+
     /// 获取语言名称（用于下载queries）
     pub fn name(&self) -> &'static str {
         match self {
