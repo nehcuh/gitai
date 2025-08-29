@@ -1,6 +1,5 @@
 use crate::config::Config;
 use crate::devops::Issue;
-use crate::analysis::{Analyzer, OperationContext, OperationOptions};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -84,6 +83,12 @@ impl CommitConfig {
     pub fn needs_issue_context(&self) -> bool {
         !self.issue_ids.is_empty()
     }
+}
+
+// === 触发结构化函数识别的示例改动 ===
+// 该函数仅用于验证 Tree-sitter 与架构影响分析能正确识别函数级变更
+pub fn sample_util_add(x: i32, y: i32) -> i32 {
+    x + y
 }
 
 /// 提交操作 - Linus式静态函数设计

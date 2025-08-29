@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::analysis::{Analyzer, OperationContext, OperationOptions};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
 use crate::project_insights::InsightsGenerator;
+use crate::architectural_impact::{GitStateAnalyzer, ArchitecturalImpact};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -12,6 +13,8 @@ pub struct ReviewResult {
     pub success: bool,
     /// 结果消息
     pub message: String,
+    /// 简要摘要
+    pub summary: String,
     /// 详细信息
     pub details: HashMap<String, String>,
     /// 发现的问题
@@ -35,6 +38,8 @@ pub struct Finding {
     pub severity: Severity,
     /// 详细描述
     pub description: String,
+    /// 代码片段
+    pub code_snippet: Option<String>,
 }
 
 /// 严重程度
@@ -127,7 +132,131 @@ impl ReviewExecutor {
 
 /// 执行评审流程
 pub async fn execute_review(config: &Config, review_config: ReviewConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let result = execute_review_with_result(config, review_config).await?;
+    let result = execute_review_with_result(config, review_config.clone()).await?;
+
+    // 打印 AI 评审结果到控制台
+    println!("\n🤖 AI 代码评审结果:");
+    println!("{}", "=".repeat(80));
+    
+    // 打印主要评审内容
+    if let Some(review_content) = result.details.get("review_result") {
+        println!("{}", review_content);
+    } else if !result.summary.is_empty() {
+        println!("{}", result.summary);
+    }
+    
+    // 打印依赖分析和影响范围（如果有）
+    if let Some(cascade_count) = result.details.get("cascade_effects") {
+        if let Ok(count) = cascade_count.parse::<usize>() {
+            if count > 0 {
+                println!("\n🌐 依赖分析:");
+                println!("{}", "-".repeat(40));
+                println!("  🔗 检测到 {} 条潜在级联效应", count);
+                
+                // 显示更多依赖信息（如果有）
+                if let Some(affected_modules) = result.details.get("affected_modules") {
+                    println!("  📦 受影响模块: {}", affected_modules);
+                }
+                if let Some(impact_level) = result.details.get("max_impact_level") {
+                    println!("  🎯 最大影响级别: {}", impact_level);
+                }
+            }
+        }
+    }
+    
+    // 打印架构影响分析（如果有）
+    if result.details.contains_key("tree_sitter") && result.details.get("tree_sitter") == Some(&"true".to_string()) {
+        if let Some(breaking_changes) = result.details.get("breaking_changes_count") {
+            if let Ok(count) = breaking_changes.parse::<usize>() {
+                if count > 0 {
+                    println!("\n🏗️ 架构影响:");
+                    println!("{}", "-".repeat(40));
+                    println!("  ⚠️  破坏性变更: {} 处", count);
+                }
+            }
+        }
+    }
+    
+    // 打印安全发现（如果有）
+    if !result.findings.is_empty() {
+        println!("\n🔒 安全问题:");
+        println!("{}", "-".repeat(40));
+        for finding in &result.findings {
+            let file_path = finding.file_path.as_deref().unwrap_or("<unknown>");
+            let line = finding.line.map(|l| l.to_string()).unwrap_or_else(|| "?".to_string());
+            println!("  ⚠️  {} ({}:{})", finding.title, file_path, line);
+            if let Some(ref snippet) = finding.code_snippet {
+                println!("     {}", snippet);
+            }
+        }
+    }
+    
+    // 打印推荐建议（如果有）
+    if !result.recommendations.is_empty() {
+        println!("\n👡 改进建议:");
+        println!("{}", "-".repeat(40));
+        for rec in &result.recommendations {
+            println!("  • {}", rec);
+        }
+    }
+    
+    // 打印评分（如果有）
+    if let Some(score) = result.score {
+        println!("\n📊 综合评分: {:.1}/10", score);
+    }
+    
+    println!("{}", "=".repeat(80));
+    println!();
+
+    // 如果指定了输出文件，则根据格式写入报告
+    if let Some(ref out_path) = review_config.output {
+        use std::fs;
+        let content = match review_config.format.to_ascii_lowercase().as_str() {
+            "markdown" | "md" => {
+                if let Some(md) = result.details.get("impact_report_md") {
+                    md.clone()
+                } else {
+                    // 回退为简单的Markdown摘要
+                    let mut s = String::new();
+                    s.push_str("# 代码评审结果\n\n");
+                    s.push_str(&format!("- 成功: {}\n", result.success));
+                    if let Some(score) = result.score {
+                        s.push_str(&format!("- 评分: {}\n", score));
+                    }
+                    if !result.recommendations.is_empty() {
+                        s.push_str("\n## 建议\n");
+                        for rec in &result.recommendations {
+                            s.push_str(&format!("- {}\n", rec));
+                        }
+                    }
+                    s
+                }
+            }
+            _ => {
+                // 文本摘要
+                let mut s = String::new();
+                s.push_str("代码评审结果\n");
+                s.push_str(&format!("成功: {}\n", result.success));
+                if let Some(score) = result.score {
+                    s.push_str(&format!("评分: {}\n", score));
+                }
+                if !result.findings.is_empty() {
+                    s.push_str(&format!("问题数量: {}\n", result.findings.len()));
+                }
+                if !result.recommendations.is_empty() {
+                    s.push_str("建议:\n");
+                    for rec in &result.recommendations {
+                        s.push_str(&format!("- {}\n", rec));
+                    }
+                }
+                s
+            }
+        };
+        if let Some(parent) = out_path.parent() { let _ = fs::create_dir_all(parent); }
+        fs::write(out_path, content)?;
+        println!("📁 评审报告已保存到: {}", out_path.display());
+    }
+
     if !result.success {
         return Err("评审失败".into());
     }
@@ -209,7 +338,7 @@ fn check_cache(cache_key: &str) -> Result<Option<String>, Box<dyn std::error::Er
         .join("gitai")
         .join("review_cache");
     
-    let cache_file = cache_dir.join(format!("review_{}.json", cache_key));
+    let cache_file = cache_dir.join(format!("review_{cache_key}.json"));
     
     if !cache_file.exists() {
         return Ok(None);
@@ -236,7 +365,7 @@ fn save_cache(cache_key: &str, result: &str, language: &Option<String>) -> Resul
     std::fs::create_dir_all(&cache_dir)?;
     
     let cache = ReviewCache::new(cache_key, result.to_string(), language.clone());
-    let cache_file = cache_dir.join(format!("review_{}.json", cache_key));
+    let cache_file = cache_dir.join(format!("review_{cache_key}.json"));
     
     let content = serde_json::to_string_pretty(&cache)?;
     std::fs::write(&cache_file, content)?;
@@ -256,6 +385,43 @@ async fn get_issue_context(config: &Config, issue_ids: &[String]) -> Result<Vec<
     } else {
         eprintln!("⚠️ 未配置DevOps平台，无法获取Issue信息");
         Ok(Vec::new())
+    }
+}
+
+/// 执行架构影响分析
+async fn perform_architectural_impact_analysis(diff: &str) -> Result<Option<ArchitecturalImpact>, Box<dyn std::error::Error + Send + Sync>> {
+    println!("🏗️ 正在进行架构影响分析...");
+    
+    // 创建GitStateAnalyzer并分析
+    let analyzer = GitStateAnalyzer::new();
+    match analyzer.analyze_git_diff(diff).await {
+        Ok(impact) => {
+            println!("  ✅ 架构影响分析完成");
+            
+            // 输出关键指标
+            let total_changes = impact.function_changes.len() + 
+                                impact.struct_changes.len() + 
+                                impact.interface_changes.len();
+            println!("     📊 总变更数: {total_changes}");
+            println!("     🔧 函数变更: {}", impact.function_changes.len());
+            println!("     🏗️ 结构体变更: {}", impact.struct_changes.len());
+            println!("     🔌 接口变更: {}", impact.interface_changes.len());
+            
+            // 输出影响范围
+            if !impact.impact_summary.affected_modules.is_empty() {
+                println!("     📦 影响模块: {}", impact.impact_summary.affected_modules.len());
+            }
+            if !impact.impact_summary.breaking_changes.is_empty() {
+                println!("     ⚠️  破坏性变更: {}", impact.impact_summary.breaking_changes.len());
+            }
+            
+            Ok(Some(impact))
+        }
+        Err(e) => {
+            println!("  ⚠️  架构影响分析失败: {e}");
+            log::debug!("架构影响分析详情: {e}");
+            Ok(None)
+        }
     }
 }
 
@@ -284,7 +450,7 @@ async fn perform_structural_analysis(diff: &str, language: &Option<String>) -> R
         return Ok(None);
     };
     
-    println!("  📝 检测到语言: {:?}", supported_lang);
+    println!("  📝 检测到语言: {supported_lang:?}");
     
     // 创建Tree-sitter管理器并分析
     match TreeSitterManager::new().await {
@@ -306,14 +472,14 @@ async fn perform_structural_analysis(diff: &str, language: &Option<String>) -> R
                 }
                 Err(e) => {
                     println!("  ⚠️  结构分析失败，将使用传统文本分析模式");
-                    log::debug!("Tree-sitter分析详情: {}", e);
+                    log::debug!("Tree-sitter分析详情: {e}");
                     Ok(None)
                 }
             }
         }
         Err(e) => {
             println!("  ⚠️  Tree-sitter初始化失败，将使用传统文本分析模式");
-            log::debug!("Tree-sitter初始化详情: {}", e);
+            log::debug!("Tree-sitter初始化详情: {e}");
             Ok(None)
         }
     }
@@ -348,8 +514,8 @@ fn extract_code_from_diff(diff: &str) -> String {
         }
         
         // 提取添加的行（+开头）和上下文行（没有+/-前缀）
-        if line.starts_with('+') {
-            code_lines.push(&line[1..]);
+        if let Some(stripped) = line.strip_prefix('+') {
+            code_lines.push(stripped);
         } else if !line.starts_with('-') && !line.trim().is_empty() {
             code_lines.push(line);
         }
@@ -401,7 +567,7 @@ fn infer_language_from_diff(diff: &str) -> Option<SupportedLanguage> {
     // 优先返回第一个支持的语言
     for (file_path, extension) in &detected_files {
         if let Some(lang) = SupportedLanguage::from_extension(extension) {
-            log::debug!("从文件 {} 检测到语言: {:?}", file_path, lang);
+            log::debug!("从文件 {file_path} 检测到语言: {lang:?}");
             return Some(lang);
         }
     }
@@ -409,10 +575,10 @@ fn infer_language_from_diff(diff: &str) -> Option<SupportedLanguage> {
     // 如果没有支持的语言，记录日志
     let unsupported_files: Vec<String> = detected_files
         .into_iter()
-        .map(|(path, ext)| format!("{} ({})", path, ext))
+        .map(|(path, ext)| format!("{path} ({ext})"))
         .collect();
     
-    log::debug!("检测到不支持的文件类型: {:?}", unsupported_files);
+    log::debug!("检测到不支持的文件类型: {unsupported_files:?}");
     None
 }
 
@@ -435,6 +601,7 @@ fn parse_cached_result(cached_result: &str, _config: &ReviewConfig) -> Result<Re
     Ok(ReviewResult {
         success: true,
         message: "使用缓存的评审结果".to_string(),
+        summary: cached_result.to_string(),
         details,
         findings: Vec::new(), // 缓存结果不包含详细的问题信息
         score,
@@ -448,6 +615,80 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
     let mut findings = Vec::new();
     let mut recommendations = Vec::new();
     
+    // 保存 AI 评审结果
+    details.insert("review_result".to_string(), result.review_result.clone());
+    let summary = result.review_result.clone();
+
+    // 注入影响范围Markdown和级联数量（如果存在）
+    if let Some(md) = &result.impact_markdown {
+        details.insert("impact_report_md".to_string(), md.clone());
+    }
+    if let Some(count) = result.cascade_effects_count {
+        details.insert("cascade_effects".to_string(), count.to_string());
+        if count > 0 {
+            recommendations.push(format!("检测到 {count} 条潜在级联效应，请重点验证关键路径"));
+        }
+    }
+    
+    // 添加架构影响和依赖分析的详细信息
+    if let Some(ref impact_scope) = result.impact_scope {
+        // 收集受影响的模块（合并直接和间接影响）
+        let mut all_impacts = Vec::new();
+        all_impacts.extend(impact_scope.direct_impacts.clone());
+        all_impacts.extend(impact_scope.indirect_impacts.clone());
+        
+        let affected_modules: Vec<String> = all_impacts.iter()
+            .filter_map(|c| {
+                if c.distance_from_change > 0 {
+                    Some(c.component_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        if !affected_modules.is_empty() {
+            details.insert("affected_modules".to_string(), affected_modules.join(", "));
+            details.insert("affected_modules_count".to_string(), affected_modules.len().to_string());
+        }
+        
+        // 计算最大影响级别
+        let max_impact = all_impacts.iter()
+            .map(|c| c.distance_from_change)
+            .max()
+            .unwrap_or(0);
+        
+        let impact_level = match max_impact {
+            0 => "直接变更",
+            1 => "一级依赖",
+            2 => "二级依赖",
+            3 => "三级依赖",
+            _ => "深层依赖",
+        };
+        details.insert("max_impact_level".to_string(), impact_level.to_string());
+        
+        // 添加影响统计信息
+        details.insert("total_impacted_nodes".to_string(), impact_scope.statistics.total_impacted_nodes.to_string());
+        details.insert("high_impact_count".to_string(), impact_scope.statistics.high_impact_count.to_string());
+    }
+    
+    // 添加破坏性变更信息
+    if let Some(ref architectural_impact) = result.architectural_impact {
+        let breaking_count = architectural_impact.impact_summary.breaking_changes.len();
+        if breaking_count > 0 {
+            details.insert("breaking_changes_count".to_string(), breaking_count.to_string());
+            // 添加破坏性变更的简要描述
+            let breaking_summary: Vec<String> = architectural_impact.impact_summary.breaking_changes
+                .iter()
+                .take(3)  // 只取前3个作为示例
+                .cloned()
+                .collect();
+            if !breaking_summary.is_empty() {
+                details.insert("breaking_changes_summary".to_string(), breaking_summary.join("; "));
+            }
+        }
+    }
+    
     // 转换安全发现
     for finding in &result.security_findings {
         findings.push(Finding {
@@ -459,7 +700,8 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
                 crate::scan::Severity::Warning => Severity::Warning,
                 crate::scan::Severity::Info => Severity::Info,
             },
-            description: finding.code_snippet.clone().unwrap_or_else(|| "发现安全问题的代码段".to_string()),
+            description: finding.title.clone(),
+            code_snippet: finding.code_snippet.clone(),
         });
     }
     
@@ -495,10 +737,10 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
         .count();
     
     if critical_count > 0 {
-        recommendations.push(format!("发现 {} 个严重安全问题，必须立即修复", critical_count));
+        recommendations.push(format!("发现 {critical_count} 个严重安全问题，必须立即修复"));
     }
     if warning_count > 0 {
-        recommendations.push(format!("发现 {} 个警告问题，建议修复", warning_count));
+        recommendations.push(format!("发现 {warning_count} 个警告问题，建议修复"));
     }
     
     // 计算总体评分
@@ -515,6 +757,7 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
     ReviewResult {
         success: true,
         message: "代码评审完成".to_string(),
+        summary,
         details,
         findings,
         score,
@@ -583,6 +826,7 @@ fn try_cached_or_empty_diff(
         return Ok(Some(ReviewResult {
             success: true,
             message: "没有检测到任何代码变更".to_string(),
+            summary: "没有检测到任何代码变更".to_string(),
             details: HashMap::new(),
             findings: Vec::new(),
             score: None,
@@ -611,6 +855,13 @@ async fn build_analysis_context(
         None
     };
     
+    // Perform architectural impact analysis if Tree-sitter is enabled
+    let architectural_impact = if review_config.tree_sitter {
+        perform_architectural_impact_analysis(&diff).await?
+    } else {
+        None
+    };
+    
     // Get issue context
     let issues = get_issue_context(config, &review_config.issue_ids).await?;
     
@@ -634,10 +885,109 @@ async fn build_analysis_context(
         
     // Add structural info if available
     if let Some(summary) = structural_summary {
-        context = context.with_structural_info(summary);
+        // 将结构化摘要加入上下文
+        context = context.with_structural_info(summary.clone());
+        // 基于结构化摘要构建依赖图（以diff缓冲区为文件名，非侵入式）
+        let graph = crate::architectural_impact::DependencyGraph::from_structural_summary(&summary, "DIFF_BUFFER");
+        context = context.with_dependency_graph(graph);
+    }
+    
+    // Add architectural impact if available
+    if let Some(impact) = architectural_impact {
+        context = context.with_architectural_impact(impact);
+    }
+
+    // If we have a dependency graph and architectural changes, compute impact scope and cascades
+    if let (Some(ref graph), Some(ref impact)) = (&context.dependency_graph, &context.architectural_impact) {
+        // Derive changed node IDs from graph by matching names from impact changes
+        let changed_ids = derive_changed_node_ids(graph, impact);
+        if !changed_ids.is_empty() {
+            let mut prop = crate::architectural_impact::ImpactPropagation::new(graph.clone());
+            let scope = prop.calculate_impact(changed_ids, 4);
+            let detector = crate::architectural_impact::CascadeDetector::new(graph.clone());
+            let breaking_changes = to_breaking_changes(impact);
+            let cascades = detector.detect_cascades(&breaking_changes);
+            // Attach to context
+            context = context.with_impact_scope(scope).with_cascade_effects(cascades);
+        }
     }
     
     Ok(context)
+}
+
+/// 根据 ArchitecturalImpact 推导 BreakingChange 列表
+fn to_breaking_changes(impact: &crate::architectural_impact::ArchitecturalImpact) -> Vec<crate::architectural_impact::BreakingChange> {
+    use crate::architectural_impact::{BreakingChange, BreakingChangeType, ImpactLevel};
+    let mut list = Vec::new();
+
+    for c in &impact.function_changes {
+        let change_type = match c.change_type {
+            crate::architectural_impact::git_state_analyzer::ChangeType::Added => BreakingChangeType::FunctionAdded,
+            crate::architectural_impact::git_state_analyzer::ChangeType::Removed => BreakingChangeType::FunctionRemoved,
+            crate::architectural_impact::git_state_analyzer::ChangeType::Modified => BreakingChangeType::FunctionSignatureChanged,
+        };
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Module,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    for c in &impact.struct_changes {
+        let change_type = BreakingChangeType::StructureChanged;
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Module,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    for c in &impact.interface_changes {
+        let change_type = BreakingChangeType::InterfaceChanged;
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Project,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    list
+}
+
+/// 从依赖图中根据变更名称推导节点ID
+fn derive_changed_node_ids(graph: &crate::architectural_impact::DependencyGraph, impact: &crate::architectural_impact::ArchitecturalImpact) -> Vec<String> {
+    use crate::architectural_impact::dependency_graph::NodeType;
+    use std::collections::HashSet;
+    let mut names = HashSet::new();
+    for c in &impact.function_changes { names.insert(c.name.as_str()); }
+    for c in &impact.struct_changes { names.insert(c.name.as_str()); }
+    for c in &impact.interface_changes { names.insert(c.name.as_str()); }
+
+    let mut ids = Vec::new();
+    for (id, node) in &graph.nodes {
+        match &node.node_type {
+            NodeType::Function(f) if names.contains(f.name.as_str()) => ids.push(id.clone()),
+            NodeType::Class(c) if names.contains(c.name.as_str()) => ids.push(id.clone()),
+            NodeType::Module(m) if names.contains(m.name.as_str()) => ids.push(id.clone()),
+            _ => {}
+        }
+    }
+    ids
 }
 
 /// Convert analysis result with critical check - eliminates special case 3
@@ -652,6 +1002,7 @@ fn convert_analysis_result_with_critical_check(
         ReviewResult {
             success: false,
             message: "发现严重安全问题，已阻止提交".to_string(),
+            summary: review_result.summary,
             details: review_result.details,
             findings: review_result.findings,
             score: review_result.score,

@@ -369,31 +369,61 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
     }
 
     fn tools(&self) -> Vec<Tool> {
-        vec![Tool {
-            name: "execute_analysis".to_string().into(),
-            description: "执行代码结构分析，支持单个文件或整个目录的分析，提供详细的代码度量和结构信息".to_string().into(),
-            input_schema: Arc::new(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "要分析的文件路径或目录路径"
+        vec![
+            Tool {
+                name: "execute_analysis".to_string().into(),
+                description: "执行代码结构分析，支持单个文件或整个目录的分析，提供详细的代码度量和结构信息".to_string().into(),
+                input_schema: Arc::new(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要分析的文件路径或目录路径"
+                        },
+                        "language": {
+                            "type": "string",
+                            "enum": ["rust", "java", "c", "cpp", "python", "go", "javascript", "typescript"],
+                            "description": "编程语言过滤器 (可选，默认自动检测所有支持的语言)"
+                        },
+                        "verbosity": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2,
+                            "description": "输出详细程度 (0-2，默认 1)。0：基础统计，1：标准信息，2：详细结构信息"
+                        }
                     },
-                    "language": {
-                        "type": "string",
-                        "enum": ["rust", "java", "c", "cpp", "python", "go", "javascript", "typescript"],
-                        "description": "编程语言过滤器 (可选，默认自动检测所有支持的语言)"
+                    "required": ["path"]
+                }).as_object().unwrap().clone()),
+            },
+            Tool {
+                name: "export_dependency_graph".to_string().into(),
+                description: "导出依赖图（全局/子目录），支持 JSON、DOT、SVG 和 Mermaid 格式输出".to_string().into(),
+                input_schema: Arc::new(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "扫描目录（默认 .）"},
+                        "threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "关键节点高亮阈值 (0-1)，默认 0.15"}
                     },
-                    "verbosity": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 2,
-                        "description": "输出详细程度 (0-2，默认 1)。0：基础统计，1：标准信息，2：详细结构信息"
-                    }
-                },
-                "required": ["path"]
-            }).as_object().unwrap().clone()),
-        }]
+                    "required": ["path"]
+                }).as_object().unwrap().clone()),
+            },
+            Tool {
+                name: "query_call_chain".to_string().into(),
+                description: "查询函数调用链（上游/下游），可设定最大深度与路径数量".to_string().into(),
+                input_schema: Arc::new(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "扫描目录（默认 .）"},
+                        "start": {"type": "string", "description": "起始函数名（必需）"},
+                        "end": {"type": "string", "description": "结束函数名（可选）"},
+                        "direction": {"type": "string", "enum": ["downstream", "upstream"], "description": "方向：下游(被调用方)/上游(调用方)，默认 downstream"},
+                        "max_depth": {"type": "integer", "minimum": 1, "maximum": 32, "description": "最大深度，默认 8"},
+                        "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "最多返回路径数，默认 20"}
+                    },
+                    "required": ["path", "start"]
+                }).as_object().unwrap().clone()),
+            }
+        ]
     }
 
     async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
@@ -412,6 +442,29 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                 
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("analysis", e))?)
+            }
+            "export_dependency_graph" => {
+                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                let threshold = arguments.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.15) as f32;
+                let dot = crate::architectural_impact::graph_export::export_dot_string(std::path::Path::new(path), threshold)
+                    .await
+                    .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
+                let obj = serde_json::json!({"dot": dot, "message": "ok"});
+                Ok(obj)
+            }
+            "query_call_chain" => {
+                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                let start = arguments.get("start").and_then(|v| v.as_str()).ok_or_else(|| invalid_parameters_error("missing 'start'"))?;
+                let end = arguments.get("end").and_then(|v| v.as_str());
+                let direction = arguments.get("direction").and_then(|v| v.as_str()).unwrap_or("downstream");
+                let max_depth = arguments.get("max_depth").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+                let max_paths = arguments.get("max_paths").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+                let chains = crate::architectural_impact::graph_export::query_call_chain(
+                    std::path::Path::new(path), start, end, direction, max_depth, max_paths
+                )
+                .await
+                .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
+                Ok(serde_json::json!({"chains": chains, "message": "ok"}))
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }

@@ -380,6 +380,17 @@ impl GitAiMcpManager {
                                 }
                             }
                         }
+                        "dependency" => {
+                            match services::DependencyService::new(config.clone()) {
+                                Ok(service) => {
+                                    services.insert("dependency".to_string(), Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>);
+                                    info!("✅ 服务 'dependency' 初始化成功");
+                                }
+                                Err(e) => {
+                                    error!("❌ 服务 'dependency' 初始化失败: {}", e);
+                                }
+                            }
+                        }
                         _ => {
                             warn!("⚠️  未知的服务名称: {}", service_name);
                         }

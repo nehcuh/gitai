@@ -115,15 +115,15 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
         .arg(path)
         .output()
         .map_err(|e| {
-            log::error!("执行 OpenGrep 失败: {}", e);
-            format!("执行 OpenGrep 失败: {}\n💡 请确保 OpenGrep 已安装并在 PATH 中", e)
+            log::error!("执行 OpenGrep 失败: {e}");
+            format!("执行 OpenGrep 失败: {e}\n💡 请确保 OpenGrep 已安装并在 PATH 中")
         })?;
     
     let execution_time = start_time.elapsed().as_secs_f64();
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::warn!("OpenGrep 返回非零状态码: {}", stderr);
+        log::warn!("OpenGrep 返回非零状态码: {stderr}");
         return Ok(ScanResult {
             tool: "opengrep".to_string(),
             version: if include_version { get_opengrep_version()? } else { "unknown".to_string() },
@@ -136,18 +136,18 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
     
     // 解析结果
     let stdout = String::from_utf8_lossy(&output.stdout);
-    debug!("📄 OpenGrep stdout: {}", stdout);
+    debug!("📄 OpenGrep stdout: {stdout}");
     
     let findings = match parse_opengrep_output(&stdout) {
         Ok(f) => f,
         Err(e) => {
-            debug!("❌ JSON 解析失败: {}", e);
+            debug!("❌ JSON 解析失败: {e}");
             return Ok(ScanResult {
                 tool: "opengrep".to_string(),
                 version: if include_version { get_opengrep_version().unwrap_or_else(|_| "unknown".to_string()) } else { "unknown".to_string() },
                 execution_time,
                 findings: vec![],
-                error: Some(format!("JSON 解析失败: {}", e)),
+                error: Some(format!("JSON 解析失败: {e}")),
                 rules_info,
             });
         }
@@ -195,17 +195,25 @@ fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + S
 
 /// 解析OpenGrep输出（整块 JSON，遍历 results 数组）
 fn parse_opengrep_output(output: &str) -> Result<Vec<Finding>, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    debug!("🔍 解析OpenGrep输出: {}", output);
+    debug!("🔍 解析OpenGrep输出: {output}");
     
     if output.trim().is_empty() {
         debug!("⚠️ OpenGrep 输出为空");
         return Ok(Vec::new());
     }
     
-    let v: serde_json::Value = serde_json::from_str(output)
-        .map_err(|e| format!("JSON 解析失败: {}, 输入: {}", e, output))?;
+    // 查找 JSON 部分（可能有标题信息在前面）
+    let json_part = if let Some(pos) = output.find('{') {
+        &output[pos..]
+    } else {
+        debug!("⚠️ 未找到 JSON 开始标志");
+        return Ok(Vec::new());
+    };
     
-    debug!("📄 JSON 结构: {:?}", v);
+    let v: serde_json::Value = serde_json::from_str(json_part)
+        .map_err(|e| format!("JSON 解析失败: {e}, JSON部分: {json_part}"))?;
+    
+    debug!("📄 JSON 结构: {v:?}");
     
     let mut findings = Vec::new();
     if let Some(results) = v.get("results").and_then(|r| r.as_array()) {
@@ -216,7 +224,7 @@ fn parse_opengrep_output(output: &str) -> Result<Vec<Finding>, Box<dyn std::erro
                     findings.push(finding);
                 }
                 Err(e) => {
-                    debug!("❌ 解析第 {} 个结果失败: {}", i, e);
+                    debug!("❌ 解析第 {i} 个结果失败: {e}");
                 }
             }
         }
@@ -224,11 +232,11 @@ fn parse_opengrep_output(output: &str) -> Result<Vec<Finding>, Box<dyn std::erro
         debug!("⚠️ 未找到 results 数组");
         // 检查是否有错误信息
         if let Some(errors) = v.get("errors").and_then(|e| e.as_array()) {
-            debug!("❌ OpenGrep 报告错误: {:?}", errors);
+            debug!("❌ OpenGrep 报告错误: {errors:?}");
         }
         // 检查扫描的路径
         if let Some(paths) = v.get("paths").and_then(|p| p.as_object()) {
-            debug!("📂 扫描的路径: {:?}", paths);
+            debug!("📂 扫描的路径: {paths:?}");
         }
     }
     
@@ -286,7 +294,7 @@ pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
             let sources = v["sources"].as_array()
                 .map(|a| a.iter().filter_map(|s| s.as_str().map(|x| x.to_string())).collect())
-                .unwrap_or_else(|| Vec::new());
+                .unwrap_or_else(Vec::new);
             let total = v["total_rules"].as_u64().unwrap_or(0) as usize;
             let updated_at = v["updated_at"].as_str().map(|s| s.to_string());
             Some(RulesInfo {
@@ -476,8 +484,7 @@ pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync 
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!(
-                "通过 cargo 安装 OpenGrep 失败: {}\n建议：\n1) 确认已安装 Rust 工具链 (https://rustup.rs) 并已将 ~/.cargo/bin 加入 PATH\n2) 手动执行: cargo install opengrep",
-                stderr
+                "通过 cargo 安装 OpenGrep 失败: {stderr}\n建议：\n1) 确认已安装 Rust 工具链 (https://rustup.rs) 并已将 ~/.cargo/bin 加入 PATH\n2) 手动执行: cargo install opengrep"
             ).into());
         }
     }

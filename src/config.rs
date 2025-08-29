@@ -208,13 +208,14 @@ pub struct McpServicesConfig {
     pub commit: Option<McpCommitConfig>,
     pub scan: Option<McpScanConfig>,
     pub analysis: Option<McpAnalysisConfig>,
+    pub dependency: Option<McpDependencyConfig>,
 }
 
 impl McpServicesConfig {
     /// 验证 MCP 服务配置
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证启用的服务
-        let valid_services = ["review", "commit", "scan", "analysis"];
+        let valid_services = ["review", "commit", "scan", "analysis", "dependency"];
         for service in &self.enabled {
             if !valid_services.contains(&service.as_str()) {
                 return Err(format!("不支持的 MCP 服务: {}，支持的服务: {:?}", service, valid_services).into());
@@ -236,6 +237,10 @@ impl McpServicesConfig {
         
         if let Some(ref analysis) = self.analysis {
             analysis.validate()?;
+        }
+        
+        if let Some(ref dependency) = self.dependency {
+            dependency.validate()?;
         }
         
         Ok(())
@@ -334,6 +339,37 @@ impl McpAnalysisConfig {
     }
 }
 
+/// MCP Dependency服务配置
+#[derive(Debug, Clone, Deserialize)]
+pub struct McpDependencyConfig {
+    /// 默认输出格式
+    pub default_format: String,
+    /// 默认详细程度
+    pub verbosity: u32,
+    /// 是否默认包含函数调用
+    pub default_include_calls: bool,
+    /// 是否默认包含导入关系
+    pub default_include_imports: bool,
+}
+
+impl McpDependencyConfig {
+    /// 验证 MCP Dependency 服务配置
+    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        // 验证输出格式
+        let valid_formats = ["json", "dot", "svg", "mermaid"];
+        if !valid_formats.contains(&self.default_format.as_str()) {
+            return Err(format!("不支持的输出格式: {}，支持的格式: {:?}", self.default_format, valid_formats).into());
+        }
+        
+        // 验证详细程度
+        if self.verbosity > 3 {
+            return Err("输出详细程度不能超过 3".into());
+        }
+        
+        Ok(())
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -360,7 +396,7 @@ impl Default for Config {
                     version: "0.1.0".to_string(),
                 },
                 services: McpServicesConfig {
-                    enabled: vec!["review".to_string(), "commit".to_string(), "scan".to_string(), "analysis".to_string()],
+                    enabled: vec!["review".to_string(), "commit".to_string(), "scan".to_string(), "analysis".to_string(), "dependency".to_string()],
                     review: Some(McpReviewConfig {
                         default_tree_sitter: false,
                         default_security_scan: false,
@@ -377,6 +413,12 @@ impl Default for Config {
                     }),
                     analysis: Some(McpAnalysisConfig {
                         verbosity: 1,
+                    }),
+                    dependency: Some(McpDependencyConfig {
+                        default_format: "svg".to_string(),
+                        verbosity: 1,
+                        default_include_calls: true,
+                        default_include_imports: true,
                     }),
                 },
             }),

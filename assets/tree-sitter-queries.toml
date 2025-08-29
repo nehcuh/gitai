@@ -32,6 +32,12 @@ comment_query = """
 (block_comment) @comment
 """
 
+call_query = """
+(method_invocation
+  name: (identifier) @call.callee
+) @call.expression
+"""
+
 [rust]
 function_query = """
 (function_item
@@ -68,6 +74,18 @@ comment_query = """
 (block_comment) @comment
 """
 
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
+
+(call_expression
+  function: (field_expression
+    field: (field_identifier) @call.callee
+  )
+) @call.expression
+"""
+
 [python]
 function_query = """
 (function_definition
@@ -95,6 +113,18 @@ comment_query = """
 (string
   (string_content) @comment
 ) @comment
+"""
+
+call_query = """
+(call
+  function: (identifier) @call.callee
+) @call.expression
+
+(call
+  function: (attribute
+    attribute: (identifier) @call.callee
+  )
+) @call.expression
 """
 
 [javascript]
@@ -127,6 +157,18 @@ class_query = """
 
 comment_query = """
 (comment) @comment
+"""
+
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
+
+(call_expression
+  function: (member_expression
+    property: (property_identifier) @call.callee
+  )
+) @call.expression
 """
 
 [typescript]
@@ -165,6 +207,18 @@ comment_query = """
 (comment) @comment
 """
 
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
+
+(call_expression
+  function: (member_expression
+    property: (property_identifier) @call.callee
+  )
+) @call.expression
+"""
+
 [c]
 function_query = """
 (function_definition
@@ -196,6 +250,12 @@ comment_query = """
 (comment) @comment
 """
 
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
+"""
+
 [cpp]
 function_query = """
 (function_definition
@@ -221,6 +281,12 @@ class_query = """
 
 comment_query = """
 (comment) @comment
+"""
+
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
 """
 
 [go]
@@ -257,4 +323,16 @@ class_query = """
 
 comment_query = """
 (comment) @comment
+"""
+
+call_query = """
+(call_expression
+  function: (identifier) @call.callee
+) @call.expression
+
+(call_expression
+  function: (selector_expression
+    field: (field_identifier) @call.callee
+  )
+) @call.expression
 """

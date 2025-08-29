@@ -119,7 +119,7 @@ impl ResourceManager {
             
             // Try fallback sources
             for fallback in &self.config.sources.fallback_sources {
-                let fallback_url = format!("{}/rules", fallback);
+                let fallback_url = format!("{fallback}/rules");
                 if self.download_from_git(&fallback_url, &rules_dir).await.is_ok() {
                     info!("Downloaded rules from fallback source: {}", fallback);
                     break;
@@ -181,7 +181,6 @@ impl ResourceManager {
         if repo_url.contains("github.com") {
             // Convert to archive URL
             let archive_url = repo_url
-                .replace("github.com", "github.com")
                 .replace(".git", "/archive/refs/heads/main.zip");
             
             self.download_archive(&archive_url, target_dir).await
@@ -196,7 +195,7 @@ impl ResourceManager {
         let response = self.client.get(url)
             .send()
             .await
-            .with_context(|| format!("Failed to download from {}", url))?;
+            .with_context(|| format!("Failed to download from {url}"))?;
         
         if !response.status().is_success() {
             anyhow::bail!("Failed to download: HTTP {}", response.status());
@@ -289,7 +288,7 @@ impl ResourceManager {
         let response = self.client.get(url)
             .send()
             .await
-            .with_context(|| format!("Failed to download from {}", url))?;
+            .with_context(|| format!("Failed to download from {url}"))?;
         
         if !response.status().is_success() {
             anyhow::bail!("Failed to download: HTTP {}", response.status());

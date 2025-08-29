@@ -264,6 +264,7 @@ comment_query = """
             } else {
                 default.comment_query.clone()
             },
+            call_query: custom.call_query.clone().or_else(|| default.call_query.clone()),
         }
     }
     
@@ -349,12 +350,14 @@ mod tests {
             function_query: "default_function".to_string(),
             class_query: "default_class".to_string(),
             comment_query: "default_comment".to_string(),
+            call_query: None,
         };
         
         let custom = LanguageQueries {
             function_query: "custom_function".to_string(),
             class_query: String::new(),
             comment_query: "custom_comment".to_string(),
+            call_query: None,
         };
         
         let merged = manager.merge_queries(&default, &custom);
@@ -381,6 +384,7 @@ mod tests {
                 function_query: "test".to_string(),
                 class_query: String::new(),
                 comment_query: String::new(),
+                call_query: None,
             },
         };
         
@@ -399,6 +403,7 @@ mod tests {
                 function_query: "test".to_string(),
                 class_query: String::new(),
                 comment_query: String::new(),
+                call_query: None,
             },
         };
         

@@ -108,10 +108,24 @@ impl CacheStats {
 impl TreeSitterCache {
     /// 创建新的缓存管理器
     pub fn new(capacity: usize, max_age_seconds: u64) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let cache_dir = dirs::cache_dir()
+        let base_dir = dirs::cache_dir()
             .unwrap_or_else(|| std::path::PathBuf::from(".cache"))
             .join("gitai")
             .join("tree_sitter_cache");
+
+        // 测试环境隔离：为每次测试实例使用独立子目录，避免并发测试干扰
+        let cache_dir = if cfg!(test) {
+            let unique = format!(
+                "test_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
+            base_dir.join(unique)
+        } else {
+            base_dir
+        };
         
         std::fs::create_dir_all(&cache_dir)?;
         
@@ -196,15 +210,15 @@ impl TreeSitterCache {
             cache.clear();
         }
         
-        // 清除磁盘缓存
+        // 清除磁盘缓存：删除目录并重建，避免并发测试下的残留
         if self.cache_dir.exists() {
-            for entry in std::fs::read_dir(&self.cache_dir)? {
-                let entry = entry?;
-                if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
-                    std::fs::remove_file(entry.path())?;
+            if let Err(e) = std::fs::remove_dir_all(&self.cache_dir) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    return Err(Box::new(e));
                 }
             }
         }
+        std::fs::create_dir_all(&self.cache_dir)?;
         
         // 重置统计
         if let Ok(mut stats) = self.stats.lock() {
@@ -350,6 +364,7 @@ mod tests {
             exports: vec![],
             comments: vec![],
             complexity_hints: vec![],
+            calls: vec![],
         };
         
         let mut entry = CacheEntry::new(summary);
@@ -387,6 +402,7 @@ mod tests {
             exports: vec![],
             comments: vec![],
             complexity_hints: vec![],
+            calls: vec![],
         };
         
         // 测试缓存未命中

@@ -13,6 +13,8 @@ mod review;
 mod mcp;
 mod project_insights;
 mod metrics;
+mod architectural_impact;
+mod error;
 
 use std::path::PathBuf;
 use std::fs;
@@ -168,8 +170,23 @@ async fn main() -> Result<()> {
         Command::Metrics { action } => {
             handle_metrics(&config, &action).await?;
         }
+        Command::Graph { path, output, threshold } => {
+            handle_graph_export(&path, output.as_ref(), threshold).await?;
+        }
     }
     
+    Ok(())
+}
+
+async fn handle_graph_export(path: &std::path::Path, output: Option<&std::path::PathBuf>, threshold: f32) -> Result<()> {
+    use crate::architectural_impact::graph_export::export_dot_string;
+    let dot = export_dot_string(path, threshold).await?;
+    if let Some(out) = output {
+        std::fs::write(out, dot)?;
+        println!("📁 依赖图已导出: {}", out.display());
+    } else {
+        println!("{}", dot);
+    }
     Ok(())
 }
 

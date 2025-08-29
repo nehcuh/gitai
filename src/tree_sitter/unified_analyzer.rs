@@ -16,6 +16,7 @@ pub struct LanguageQueries {
     pub function_query: String,
     pub class_query: String,
     pub comment_query: String,
+    pub call_query: Option<String>,
 }
 
 /// 统一的结构分析器
@@ -26,6 +27,7 @@ pub struct UnifiedAnalyzer {
     function_query: Option<Query>,
     class_query: Option<Query>,
     comment_query: Option<Query>,
+    call_query: Option<Query>,
 }
 
 impl UnifiedAnalyzer {
@@ -40,6 +42,10 @@ impl UnifiedAnalyzer {
         let function_query = Query::new(lang, &queries.function_query).ok();
         let class_query = Query::new(lang, &queries.class_query).ok();
         let comment_query = Query::new(lang, &queries.comment_query).ok();
+        let call_query = match &queries.call_query {
+            Some(q) => Query::new(lang, q).ok(),
+            None => None,
+        };
         
         // 记录加载情况
         if function_query.is_none() {
@@ -51,6 +57,11 @@ impl UnifiedAnalyzer {
         if comment_query.is_none() {
             log::warn!("无法加载 {:?} 的注释查询", language);
         }
+        if queries.call_query.is_none() {
+            log::info!("未定义 {:?} 的调用查询，将跳过调用提取", language);
+        } else if call_query.is_none() {
+            log::warn!("无法编译 {:?} 的调用查询", language);
+        }
         
         Ok(Self {
             language,
@@ -58,6 +69,7 @@ impl UnifiedAnalyzer {
             function_query,
             class_query,
             comment_query,
+            call_query,
         })
     }
     
@@ -138,6 +150,7 @@ impl UnifiedAnalyzer {
             exports: Vec::new(),
             comments: Vec::new(),
             complexity_hints: Vec::new(),
+            calls: Vec::new(),
         };
         
         let root_node = tree.root_node();
@@ -160,6 +173,12 @@ impl UnifiedAnalyzer {
             log::debug!("提取到 {} 个注释", summary.comments.len());
         }
         
+        // 提取调用
+        if let Some(ref query) = self.call_query {
+            summary.calls = self.extract_calls(query, root_node, source)?;
+            log::debug!("提取到 {} 个调用", summary.calls.len());
+        }
+
         // 计算复杂度提示
         summary.complexity_hints = self.calculate_complexity_hints(&summary);
         
@@ -267,6 +286,41 @@ impl UnifiedAnalyzer {
         Ok(classes)
     }
     
+    /// 提取调用信息
+    fn extract_calls(&self, query: &Query, node: Node, source: &[u8]) -> Result<Vec<crate::tree_sitter::FunctionCallInfo>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut calls = Vec::new();
+        let mut cursor = QueryCursor::new();
+
+        let matches = cursor.matches(query, node, source);
+        for m in matches {
+            let mut callee = String::new();
+            let mut line: usize = 0;
+            let mut is_method = false;
+            for capture in m.captures {
+                let captured_node = capture.node;
+                let text = captured_node.utf8_text(source).unwrap_or("").to_string();
+                if let Some(capture_name) = query.capture_names().get(capture.index as usize) {
+                    match capture_name.as_str() {
+                        "call.callee" => {
+                            callee = text;
+                        }
+                        "call.expression" => {
+                            line = captured_node.start_position().row + 1;
+                            // 粗略判断是否为方法调用：如果表达式文本包含 '.' 或 '::'
+                            let expr_text = captured_node.utf8_text(source).unwrap_or("");
+                            is_method = expr_text.contains('.') || expr_text.contains("::");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if !callee.is_empty() {
+                calls.push(crate::tree_sitter::FunctionCallInfo { callee, line, is_method });
+            }
+        }
+        Ok(calls)
+    }
+
     /// 提取注释信息
     fn extract_comments(&self, query: &Query, node: Node, source: &[u8]) -> Result<Vec<CommentInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let mut comments = Vec::new();
