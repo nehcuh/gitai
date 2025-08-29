@@ -1,0 +1,45 @@
+[package]
+name = "gitai-security"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Security scanning module for GitAI"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+
+# Core dependencies
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+
+# File system
+walkdir = { workspace = true }
+dirs = { workspace = true }
+
+# HTTP for downloading rules
+reqwest = { workspace = true }
+
+# Archive handling
+tar = { workspace = true }
+flate2 = { workspace = true }
+zip = { workspace = true }
+
+# Caching
+parking_lot = { workspace = true }
+chrono = { workspace = true }
+
+[features]
+default = ["opengrep"]
+opengrep = []
+semgrep = []
+full = ["opengrep", "semgrep"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+mockito = { workspace = true }
