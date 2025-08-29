@@ -93,8 +93,17 @@ pub fn run_opengrep_scan(config: &Config, path: &Path, lang: Option<&str>, timeo
                     select_language_rules(&rules_dir, path).unwrap_or_else(|| pick_rules_path(&rules_dir))
                 };
                 args.push(format!("--config={}", rules_root.display()));
-                // 读取元信息
-                rules_info = read_rules_info(&rules_root).or_else(|| read_rules_info(&rules_dir));
+                // 读取元信息：先尝试具体的规则目录，再尝试根目录
+                rules_info = read_rules_info(&rules_root)
+                    .and_then(|info| {
+                        // 如果子目录没有规则计数，尝试从父目录获取
+                        if info.total_rules == 0 {
+                            None
+                        } else {
+                            Some(info)
+                        }
+                    })
+                    .or_else(|| read_rules_info(&rules_dir));
             }
         }
     }
@@ -382,25 +391,61 @@ fn select_language_rules(rules_dir: &std::path::Path, scan_path: &std::path::Pat
 
 fn pick_rules_path(dir: &std::path::Path) -> std::path::PathBuf {
     use std::fs;
-    // 如果根目录有文件，直接使用根目录
-    if let Ok(mut entries) = fs::read_dir(dir) {
-        for e in entries.by_ref().flatten() {
-            if e.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                return dir.to_path_buf();
+    
+    // 首先尝试寻找有效的语言子目录（更精确）
+    let mut language_dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let dir_name = entry.file_name();
+                if let Some(name_str) = dir_name.to_str() {
+                    // 只考虑已知的编程语言目录
+                    match name_str {
+                        "java" | "python" | "javascript" | "typescript" | "go" | "rust" | 
+                        "c" | "cpp" | "ruby" | "php" | "kotlin" | "scala" | "swift" => {
+                            language_dirs.push(entry.path());
+                        }
+                        _ => {} // 忽略非语言目录（如 .github, .git 等）
+                    }
+                }
             }
         }
     }
-    // 否则如果只有一个子目录，返回该子目录
-    let mut subdirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for e in entries.flatten() {
-            if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                subdirs.push(e.path());
+    
+    // 如果只有一个语言目录，使用它
+    if language_dirs.len() == 1 {
+        return language_dirs.into_iter().next().unwrap();
+    }
+    
+    // 如果有多个语言目录，选择最可能的一个（按常用程度排序）
+    let preferred_order = ["java", "python", "javascript", "typescript", "go", "rust"];
+    for preferred in &preferred_order {
+        let candidate = dir.join(preferred);
+        if language_dirs.iter().any(|path| path == &candidate) {
+            return candidate;
+        }
+    }
+    
+    // 最后回退：检查根目录是否有实际的规则文件（.yml/.yaml，但排除元数据文件）
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                if let Some(file_name) = entry.file_name().to_str() {
+                    // 只接受明确的规则文件，排除元数据和配置文件
+                    if file_name.ends_with(".yml") || file_name.ends_with(".yaml") {
+                        if !file_name.starts_with('.') && 
+                           !file_name.contains("pre-commit") &&
+                           !file_name.contains("schema") &&
+                           file_name != "template.yaml" {
+                            return dir.to_path_buf();
+                        }
+                    }
+                }
             }
         }
     }
-    if subdirs.len() == 1 { return subdirs.remove(0); }
-    // 回退到根目录
+    
+    // 最终回退到根目录（但这种情况下可能会失败，这是期望的行为）
     dir.to_path_buf()
 }
 

@@ -75,6 +75,9 @@ impl ReviewConfig {
             .map(|ids| ids.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default();
         
+        // 当指定了 scan_tool 时自动启用 security_scan
+        let security_scan = security_scan || scan_tool.is_some();
+        
         Self {
             language,
             format,
