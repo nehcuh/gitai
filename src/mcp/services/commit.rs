@@ -82,24 +82,10 @@ impl CommitService {
         }
 
         // 执行提交
-        let executor = commit::CommitExecutor::new(self.config.clone());
-        
-        // 由于原始 execute 方法没有返回值，我们需要适配
-        let result = self.execute_commit_with_result(&executor, commit_config).await?;
-        
-        Ok(result)
-    }
-
-    async fn execute_commit_with_result(
-        &self,
-        executor: &commit::CommitExecutor,
-        config: commit::CommitConfig,
-    ) -> Result<CommitResult, Box<dyn std::error::Error + Send + Sync>> {
-        // 使用真实的业务逻辑执行提交
-        let commit_result = executor.execute_with_result(config).await?;
+        let commit_result = commit::execute_commit_with_result(&self.config, commit_config).await?;
         
         // 转换为 MCP 使用的 CommitResult 格式
-        Ok(CommitResult {
+        let result = CommitResult {
             success: commit_result.success,
             message: commit_result.message,
             commit_hash: commit_result.commit_hash,
@@ -110,7 +96,9 @@ impl CommitService {
                 recommendations: if let Some(report) = r.report { vec![report] } else { vec![] },
             }),
             details: commit_result.details,
-        })
+        };
+        
+        Ok(result)
     }
 }
 
@@ -166,13 +154,13 @@ impl crate::mcp::GitAiMcpService for CommitService {
         match name {
             "execute_commit" => {
                 let params: CommitParams = serde_json::from_value(arguments)
-                    .map_err(|e| invalid_parameters_error(format!("Failed to parse commit parameters: {}", e)))?;
+                    .map_err(|e| crate::mcp::parse_error("commit", e))?;
                 
                 let result = self.execute_commit(params).await
-                    .map_err(|e| execution_failed_error(format!("Commit execution failed: {}", e)))?;
+                    .map_err(|e| crate::mcp::execution_error("Commit", e))?;
                 
                 Ok(serde_json::to_value(result)
-                    .map_err(|e| execution_failed_error(format!("Failed to serialize commit result: {}", e)))?)
+                    .map_err(|e| crate::mcp::serialize_error("commit", e))?)
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }

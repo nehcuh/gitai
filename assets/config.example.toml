@@ -1,0 +1,76 @@
+# GitAI MCP 配置文件
+
+[ai]
+# AI 服务 API 地址
+api_url = "http://localhost:11434/v1/chat/completions"
+
+# 使用的模型名称
+model = "qwen2.5:32b"
+
+# 温度参数 (0.0-1.0)
+temperature = 0.3
+
+# API 密钥 (可选，某些服务需要)
+api_key = "your_api_key"
+
+[scan]
+# 默认扫描路径 (可选，未设置时使用当前目录)
+default_path = "/path/to/your/project"
+
+# 扫描超时时间（秒）
+timeout = 300
+
+# 并发任务数
+jobs = 4
+
+[mcp]
+# 启用 MCP 服务器
+enabled = true
+
+[mcp.server]
+# 传输协议 (stdio, tcp, sse)
+transport = "stdio"
+
+# 监听地址 (tcp/sse)
+# listen_addr = "127.0.0.1:8080"
+
+# 服务名称
+name = "gitai"
+
+# 服务版本
+version = "0.1.0"
+
+[mcp.services]
+# 启用的服务列表
+enabled = ["review", "commit", "scan", "analysis"]
+
+[mcp.services.review]
+# 默认输出格式
+default_format = "text"
+
+# 默认启用 Tree-sitter 分析
+default_tree_sitter = true
+
+# 默认启用安全扫描
+default_security_scan = true
+
+[mcp.services.commit]
+# 默认添加所有文件
+default_add_all = false
+
+# 默认启用评审
+default_review = false
+
+# 默认启用 Tree-sitter 分析
+default_tree_sitter = false
+
+[mcp.services.scan]
+# 默认扫描工具
+default_tool = "opengrep"
+
+# 默认超时时间（秒）
+default_timeout = 300
+
+[mcp.services.analysis]
+# 默认输出详细程度 (0-2)
+verbosity = 1

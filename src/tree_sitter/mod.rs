@@ -1,8 +1,12 @@
 pub mod analyzer;
 pub mod queries;
+pub mod unified_analyzer;
+pub mod cache;
+pub mod custom_queries;
 
 use std::collections::HashMap;
 use tree_sitter::{Language, Parser};
+use cache::{TreeSitterCache, CacheKey};
 
 /// 支持的编程语言
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -95,6 +99,7 @@ impl SupportedLanguage {
 pub struct TreeSitterManager {
     parsers: HashMap<SupportedLanguage, Parser>,
     queries_manager: queries::QueriesManager,
+    cache: Option<TreeSitterCache>,
 }
 
 impl TreeSitterManager {
@@ -113,9 +118,13 @@ impl TreeSitterManager {
         // 确保queries已下载
         queries_manager.ensure_queries_downloaded().await?;
         
+        // 初始化缓存 (100项，1小时过期)
+        let cache = TreeSitterCache::new(100, 3600).ok();
+        
         Ok(Self {
             parsers,
             queries_manager,
+            cache,
         })
     }
 
@@ -129,13 +138,22 @@ impl TreeSitterManager {
         &self.queries_manager
     }
 
-    /// 分析代码结构
+    /// 分析代码结构（支持缓存）
     pub fn analyze_structure(
         &mut self,
         code: &str,
         language: SupportedLanguage,
     ) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>> {
         log::debug!("开始分析 {:?} 语言代码，代码长度: {} 字符", language, code.len());
+        
+        // 检查缓存
+        if let Some(ref cache) = self.cache {
+            let cache_key = CacheKey::from_content(code, language.name());
+            if let Some(cached_summary) = cache.get(&cache_key) {
+                log::info!("使用缓存的分析结果 - {:?} 语言", language);
+                return Ok(cached_summary);
+            }
+        }
         
         let parser = self.get_parser(language)
             .ok_or_else(|| {
@@ -153,9 +171,10 @@ impl TreeSitterManager {
         
         log::debug!("Tree 解析成功，根节点: {}", tree.root_node().kind());
         
-        let analyzer = analyzer::StructureAnalyzer::new(language, &self.queries_manager)
+        // 使用新的统一分析器
+        let analyzer = unified_analyzer::UnifiedAnalyzer::new(language)
             .map_err(|e| {
-                log::error!("Failed to create StructureAnalyzer for {:?}: {}", language, e);
+                log::error!("Failed to create UnifiedAnalyzer for {:?}: {}", language, e);
                 e
             })?;
             
@@ -167,13 +186,21 @@ impl TreeSitterManager {
             
         log::info!("结构分析成功：{:?} 语言，函数: {}, 类: {}, 注释: {}", 
                   language, result.functions.len(), result.classes.len(), result.comments.len());
+        
+        // 保存到缓存
+        if let Some(ref cache) = self.cache {
+            let cache_key = CacheKey::from_content(code, language.name());
+            if let Err(e) = cache.set(cache_key, result.clone()) {
+                log::warn!("缓存保存失败: {}", e);
+            }
+        }
                   
         Ok(result)
     }
 }
 
 /// 代码结构摘要
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct StructuralSummary {
     pub language: String,
     pub functions: Vec<FunctionInfo>,

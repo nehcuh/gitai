@@ -5,11 +5,12 @@ pub fn run_git(args: &[String]) -> Result<String, Box<dyn std::error::Error + Se
     let output = Command::new("git")
         .env("GIT_PAGER", "cat")
         .args(args)
-        .output()?;
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Git command failed: {stderr}").into());
+        return Err(format!("Git command failed: {}", stderr).into());
     }
     
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -29,7 +30,7 @@ pub fn run_git_capture(args: &[String]) -> std::io::Result<(Option<i32>, String,
 }
 
 /// 获取Git diff
-pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     run_git(&["diff".to_string(), "--cached".to_string()])
 }
 
@@ -69,30 +70,30 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
 }
 
 /// 检查是否有未暂存的变更
-pub fn has_unstaged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn has_unstaged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let output = run_git(&["diff".to_string(), "--name-only".to_string()])?;
     Ok(!output.trim().is_empty())
 }
 
 /// 检查是否有已暂存的变更
-pub fn has_staged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn has_staged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let output = run_git(&["diff".to_string(), "--cached".to_string(), "--name-only".to_string()])?;
     Ok(!output.trim().is_empty())
 }
 
 /// 获取Git状态
 #[allow(dead_code)]
-pub fn get_status() -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn get_status() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     run_git(&["status".to_string(), "--porcelain".to_string()])
 }
 
 /// 执行Git提交
-pub fn git_commit(message: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn git_commit(message: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     run_git(&["commit".to_string(), "-m".to_string(), message.to_string()])
 }
 
 /// 自动暂存所有变更
-pub fn git_add_all() -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn git_add_all() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     run_git(&["add".to_string(), ".".to_string()])
 }
 

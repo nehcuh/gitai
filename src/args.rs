@@ -17,6 +17,14 @@ pub struct Args {
     /// 显式禁用AI（用于覆盖默认或别名设置）
     #[arg(long)]
     pub noai: bool,
+    
+    /// 离线模式（不进行网络请求）
+    #[arg(long, global = true)]
+    pub offline: bool,
+    
+    /// 自定义配置URL
+    #[arg(long, global = true)]
+    pub config_url: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -149,6 +157,31 @@ pub enum Command {
         #[arg(long, default_value = "127.0.0.1:8080")]
         addr: String,
     },
+    /// 初始化GitAI配置
+    Init {
+        /// 配置URL（用于企业内网）
+        #[arg(long)]
+        config_url: Option<String>,
+        /// 离线模式初始化
+        #[arg(long)]
+        offline: bool,
+        /// 资源目录（离线模式使用）
+        #[arg(long)]
+        resources_dir: Option<PathBuf>,
+        /// 开发模式（使用项目内资源）
+        #[arg(long)]
+        dev: bool,
+    },
+    /// 配置管理
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+    /// 架构质量趋势追踪
+    Metrics {
+        #[command(subcommand)]
+        action: MetricsAction,
+    },
 }
 
 /// 提示词操作
@@ -168,6 +201,113 @@ pub enum PromptAction {
     Update,
     /// 初始化提示词目录
     Init,
+}
+
+/// 质量指标操作
+#[derive(Parser, Debug)]
+pub enum MetricsAction {
+    /// 记录当前代码质量快照
+    Record {
+        /// 自定义标签
+        #[arg(long)]
+        tags: Vec<String>,
+        /// 强制记录（即使没有代码变化）
+        #[arg(long)]
+        force: bool,
+    },
+    /// 分析质量趋势
+    Analyze {
+        /// 分析最近N天的数据
+        #[arg(long)]
+        days: Option<i64>,
+        /// 输出格式 (text|json|markdown|html)
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// 生成趋势报告
+    Report {
+        /// 报告类型 (summary|detailed|full)
+        #[arg(long, default_value = "summary")]
+        report_type: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 生成HTML格式
+        #[arg(long)]
+        html: bool,
+    },
+    /// 列出历史快照
+    List {
+        /// 显示最近N个快照
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// 分支过滤
+        #[arg(long)]
+        branch: Option<String>,
+        /// 输出格式 (text|json|table)
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+    /// 比较两个快照
+    Compare {
+        /// 第一个快照（commit hash或索引）
+        from: String,
+        /// 第二个快照（commit hash或索引，默认为最新）
+        to: Option<String>,
+        /// 输出格式 (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// 清理历史数据
+    Clean {
+        /// 保留最近N天的数据
+        #[arg(long, default_value = "90")]
+        keep_days: i64,
+        /// 确认清理
+        #[arg(long)]
+        yes: bool,
+    },
+    /// 导出数据
+    Export {
+        /// 导出格式 (csv|json)
+        #[arg(long, default_value = "csv")]
+        format: String,
+        /// 输出文件
+        output: PathBuf,
+        /// 包含的分支
+        #[arg(long)]
+        branches: Vec<String>,
+    },
+}
+
+/// 配置管理操作
+#[derive(Parser, Debug)]
+pub enum ConfigAction {
+    /// 检查配置状态
+    Check,
+    /// 显示当前配置
+    Show {
+        /// 显示格式 (text|json|toml)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// 更新所有资源
+    Update {
+        /// 强制更新，即使未过期
+        #[arg(long)]
+        force: bool,
+    },
+    /// 重置配置到默认值
+    Reset {
+        /// 不创建备份
+        #[arg(long)]
+        no_backup: bool,
+    },
+    /// 清理过期缓存
+    Clean,
 }
 
 impl Args {

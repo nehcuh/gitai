@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 
 /// GitAI MCP 服务器处理器
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct GitAiMcpServer {
     /// MCP 服务管理器
     manager: Arc<RwLock<crate::mcp::GitAiMcpManager>>,
@@ -16,6 +17,7 @@ pub struct GitAiMcpServer {
 
 impl GitAiMcpServer {
     /// 创建新的 MCP 服务器
+    #[allow(dead_code)]
     pub fn new(config: Config) -> Self {
         let manager = Arc::new(RwLock::new(crate::mcp::GitAiMcpManager::new(config)));
         Self { manager }
@@ -78,6 +80,15 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     use std::io::{self, Write};
     use serde_json::{Value, json};
     
+    // Helper function to safely write JSON response to stdout
+    fn write_response(stdout: &mut impl Write, response: &Value) -> McpResult<()> {
+        writeln!(stdout, "{}", response)
+            .map_err(|e| crate::mcp::execution_failed_error(format!("Failed to write response: {}", e)))?;
+        stdout.flush()
+            .map_err(|e| crate::mcp::execution_failed_error(format!("Failed to flush stdout: {}", e)))?;
+        Ok(())
+    }
+    
     eprintln!("🚀 GitAI MCP Server starting...");
     eprintln!("📡 Available services:");
     eprintln!("   - review: Code review with tree-sitter and security scan");
@@ -119,8 +130,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         }
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/list" => {
                                 let response = json!({
@@ -177,8 +187,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         ]
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/call" => {
                                 let tool_name = msg.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
@@ -200,8 +209,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 ]
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                     Err(e) => {
                                         let error_type = match e {
@@ -239,8 +247,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 }
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                 }
                             }
@@ -253,8 +260,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         "message": format!("Method not found: {}", method)
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                         }
                     }
@@ -272,6 +278,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
 }
 
 /// 启动 TCP MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()> {
     // TCP 传输需要额外的实现，目前 rmcp 主要支持 stdio
     eprintln!("⚠️  TCP transport not fully implemented in current rmcp version");
@@ -280,6 +287,7 @@ pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()>
 }
 
 /// 启动 SSE MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_websocket_server(_config: Config, _addr: &str) -> McpResult<()> {
     eprintln!("⚠️  SSE transport not fully implemented in current rmcp version");
     eprintln!("   Please use stdio transport instead");

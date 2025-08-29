@@ -88,22 +88,7 @@ impl ReviewService {
         }
 
         // 执行评审
-        let executor = review::ReviewExecutor::new(self.config.clone());
-        
-        // 由于原始 execute 方法没有返回值，我们需要适配
-        // 这里我们创建一个自定义的执行器来捕获结果
-        let result = self.execute_review_with_result(&executor, review_config).await?;
-        
-        Ok(result)
-    }
-
-    async fn execute_review_with_result(
-        &self,
-        executor: &review::ReviewExecutor,
-        config: review::ReviewConfig,
-    ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
-        // 使用真实的业务逻辑执行评审
-        let review_result = executor.execute_with_result(config).await?;
+        let review_result = review::execute_review_with_result(&self.config, review_config).await?;
         
         // 转换为 MCP 使用的 ReviewResult 格式
         Ok(ReviewResult {
@@ -181,13 +166,13 @@ impl crate::mcp::GitAiMcpService for ReviewService {
         match name {
             "execute_review" => {
                 let params: ReviewParams = serde_json::from_value(arguments)
-                    .map_err(|e| invalid_parameters_error(format!("Failed to parse review parameters: {}", e)))?;
+                    .map_err(|e| crate::mcp::parse_error("review", e))?;
                 
                 let result = self.execute_review(params).await
-                    .map_err(|e| execution_failed_error(format!("Review execution failed: {}", e)))?;
+                    .map_err(|e| crate::mcp::execution_error("Review", e))?;
                 
                 Ok(serde_json::to_value(result)
-                    .map_err(|e| execution_failed_error(format!("Failed to serialize review result: {}", e)))?)
+                    .map_err(|e| crate::mcp::serialize_error("review", e))?)
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }
