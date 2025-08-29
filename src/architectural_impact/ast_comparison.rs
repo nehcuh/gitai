@@ -350,6 +350,7 @@ mod tests {
             exports: vec![],
             comments: vec![],
             complexity_hints: vec![],
+            calls: vec![],
         }
     }
 

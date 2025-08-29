@@ -5,9 +5,25 @@ pub mod breaking_changes;
 pub mod risk_assessment;
 pub mod ai_context;
 pub mod git_state_analyzer;
+pub mod dependency_graph;
+pub mod impact_propagation;
+pub mod cascade_detector;
+pub mod impact_report;
 
 // 重新导出git_state_analyzer模块的公共类型
 pub use git_state_analyzer::{GitStateAnalyzer, ArchitecturalImpact};
+
+// 重新导出dependency_graph模块的公共类型
+pub use dependency_graph::DependencyGraph;
+
+// 重新导出影响传播模块的公共类型
+pub use impact_propagation::{ImpactPropagation, ImpactScope};
+
+// 重新导出级联检测模块的公共类型
+pub use cascade_detector::{CascadeDetector, CascadeEffect};
+
+// 重新导出影响报告生成功能
+pub use impact_report::generate_markdown_report;
 
 
 /// 架构影响分析的主要结果结构

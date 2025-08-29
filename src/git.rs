@@ -6,11 +6,11 @@ pub fn run_git(args: &[String]) -> Result<String, Box<dyn std::error::Error + Se
         .env("GIT_PAGER", "cat")
         .args(args)
         .output()
-        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+        .map_err(|e| format!("Failed to execute git command: {e}"))?;
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Git command failed: {}", stderr).into());
+        return Err(format!("Git command failed: {stderr}").into());
     }
     
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -105,10 +105,10 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
     match remote_branch {
         Ok(upstream) => {
             // 有远程分支，比较本地与远程的差异
-            log::debug!("检查未推送的提交: 本地 vs {}", upstream);
+            log::debug!("检查未推送的提交: 本地 vs {upstream}");
             let diff = run_git(&[
                 "diff".to_string(),
-                format!("{}..HEAD", upstream)
+                format!("{upstream}..HEAD")
             ]);
             
             match diff {
@@ -122,7 +122,7 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
                     }
                 }
                 Err(e) => {
-                    log::warn!("获取未推送的diff失败: {}", e);
+                    log::warn!("获取未推送的diff失败: {e}");
                     Ok(String::new())
                 }
             }
@@ -170,7 +170,7 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
             match run_git(&["rev-parse".to_string(), "--abbrev-ref".to_string(), "HEAD".to_string()]) {
                 Ok(current_branch) => {
                     let current_branch = current_branch.trim();
-                    let origin_branch = format!("origin/{}", current_branch);
+                    let origin_branch = format!("origin/{current_branch}");
                     
                     // 检查 origin/branch 是否存在
                     match run_git(&["rev-parse".to_string(), "--verify".to_string(), origin_branch.clone()]) {
@@ -178,7 +178,7 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
                         Err(_) => Err("没有找到对应的远程分支".into())
                     }
                 }
-                Err(e) => Err(format!("无法获取当前分支: {}", e).into())
+                Err(e) => Err(format!("无法获取当前分支: {e}").into())
             }
         }
     }

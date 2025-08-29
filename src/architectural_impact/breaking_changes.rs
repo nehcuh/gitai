@@ -10,7 +10,7 @@ pub fn detect_function_breaking_changes(
     after_functions: &[FunctionInfo],
     file_path: &str,
 ) -> Vec<BreakingChange> {
-    let mut changes = Vec::new();
+    let changes = Vec::new();
     
     // TODO: 实现函数破坏性变更检测逻辑
     // 1. 检测函数删除
@@ -28,7 +28,7 @@ pub fn detect_class_breaking_changes(
     after_classes: &[ClassInfo],
     file_path: &str,
 ) -> Vec<BreakingChange> {
-    let mut changes = Vec::new();
+    let changes = Vec::new();
     
     // TODO: 实现类/结构体破坏性变更检测逻辑
     // 1. 检测类/结构体删除

@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::devops::Issue;
 use crate::tree_sitter::StructuralSummary;
 use crate::architectural_impact::ArchitecturalImpact;
+use crate::architectural_impact::{DependencyGraph, ImpactScope, CascadeEffect};
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,12 @@ pub struct OperationContext {
     pub structural_info: Option<StructuralSummary>,
     /// 架构影响分析结果
     pub architectural_impact: Option<ArchitecturalImpact>,
+    /// 依赖图（从结构化摘要构建）
+    pub dependency_graph: Option<DependencyGraph>,
+    /// 影响范围（传播分析结果）
+    pub impact_scope: Option<ImpactScope>,
+    /// 级联效应
+    pub cascade_effects: Vec<CascadeEffect>,
     /// 操作特定的选项
     pub options: OperationOptions,
 }
@@ -53,6 +60,9 @@ impl OperationContext {
             issues: Vec::new(),
             structural_info: None,
             architectural_impact: None,
+            dependency_graph: None,
+            impact_scope: None,
+            cascade_effects: Vec::new(),
             options: OperationOptions::default(),
         }
     }
@@ -78,6 +88,24 @@ impl OperationContext {
     /// 设置架构影响分析信息
     pub fn with_architectural_impact(mut self, impact: ArchitecturalImpact) -> Self {
         self.architectural_impact = Some(impact);
+        self
+    }
+
+    /// 设置依赖图
+    pub fn with_dependency_graph(mut self, graph: DependencyGraph) -> Self {
+        self.dependency_graph = Some(graph);
+        self
+    }
+
+    /// 设置影响范围
+    pub fn with_impact_scope(mut self, scope: ImpactScope) -> Self {
+        self.impact_scope = Some(scope);
+        self
+    }
+
+    /// 设置级联效应
+    pub fn with_cascade_effects(mut self, effects: Vec<CascadeEffect>) -> Self {
+        self.cascade_effects = effects;
         self
     }
     
@@ -125,6 +153,10 @@ pub struct AnalysisResult {
     pub review_result: String,
     pub security_findings: Vec<SecurityFinding>,
     pub deviation_analysis: Option<DeviationAnalysis>,
+    /// 影响范围的Markdown报告（若已计算）
+    pub impact_markdown: Option<String>,
+    /// 级联效应数量（若已计算）
+    pub cascade_effects_count: Option<usize>,
 }
 
 /// 安全发现
@@ -176,10 +208,15 @@ impl Analyzer {
             None
         };
         
+        // 构建影响报告（如果有上下文中的影响范围）
+        let (impact_markdown, cascade_effects_count) = Self::build_impact_metadata(context);
+
         Ok(AnalysisResult {
             review_result,
             security_findings,
             deviation_analysis,
+            impact_markdown,
+            cascade_effects_count,
         })
     }
     
@@ -307,6 +344,19 @@ impl Analyzer {
                 })
             },
             Err(e) => Err(format!("AI服务错误: {}", e).into()),
+        }
+    }
+}
+
+impl Analyzer {
+    /// 根据上下文构建影响范围的Markdown与级联效应计数
+    fn build_impact_metadata(context: &OperationContext) -> (Option<String>, Option<usize>) {
+        if let (Some(graph), Some(scope)) = (&context.dependency_graph, &context.impact_scope) {
+            let md = crate::architectural_impact::generate_markdown_report(scope, Some(graph));
+            let cascades_count = Some(context.cascade_effects.len());
+            (Some(md), cascades_count)
+        } else {
+            (None, None)
         }
     }
 }

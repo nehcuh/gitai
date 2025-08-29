@@ -209,6 +209,7 @@ pub struct StructuralSummary {
     pub exports: Vec<String>,
     pub comments: Vec<CommentInfo>,
     pub complexity_hints: Vec<String>,
+    pub calls: Vec<FunctionCallInfo>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -232,6 +233,13 @@ pub struct ClassInfo {
     pub is_abstract: bool,
     pub extends: Option<String>,
     pub implements: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FunctionCallInfo {
+    pub callee: String,
+    pub line: usize,
+    pub is_method: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

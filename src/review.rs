@@ -210,7 +210,7 @@ fn check_cache(cache_key: &str) -> Result<Option<String>, Box<dyn std::error::Er
         .join("gitai")
         .join("review_cache");
     
-    let cache_file = cache_dir.join(format!("review_{}.json", cache_key));
+    let cache_file = cache_dir.join(format!("review_{cache_key}.json"));
     
     if !cache_file.exists() {
         return Ok(None);
@@ -237,7 +237,7 @@ fn save_cache(cache_key: &str, result: &str, language: &Option<String>) -> Resul
     std::fs::create_dir_all(&cache_dir)?;
     
     let cache = ReviewCache::new(cache_key, result.to_string(), language.clone());
-    let cache_file = cache_dir.join(format!("review_{}.json", cache_key));
+    let cache_file = cache_dir.join(format!("review_{cache_key}.json"));
     
     let content = serde_json::to_string_pretty(&cache)?;
     std::fs::write(&cache_file, content)?;
@@ -274,7 +274,7 @@ async fn perform_architectural_impact_analysis(diff: &str) -> Result<Option<Arch
             let total_changes = impact.function_changes.len() + 
                                 impact.struct_changes.len() + 
                                 impact.interface_changes.len();
-            println!("     📊 总变更数: {}", total_changes);
+            println!("     📊 总变更数: {total_changes}");
             println!("     🔧 函数变更: {}", impact.function_changes.len());
             println!("     🏗️ 结构体变更: {}", impact.struct_changes.len());
             println!("     🔌 接口变更: {}", impact.interface_changes.len());
@@ -290,8 +290,8 @@ async fn perform_architectural_impact_analysis(diff: &str) -> Result<Option<Arch
             Ok(Some(impact))
         }
         Err(e) => {
-            println!("  ⚠️  架构影响分析失败: {}", e);
-            log::debug!("架构影响分析详情: {}", e);
+            println!("  ⚠️  架构影响分析失败: {e}");
+            log::debug!("架构影响分析详情: {e}");
             Ok(None)
         }
     }
@@ -322,7 +322,7 @@ async fn perform_structural_analysis(diff: &str, language: &Option<String>) -> R
         return Ok(None);
     };
     
-    println!("  📝 检测到语言: {:?}", supported_lang);
+    println!("  📝 检测到语言: {supported_lang:?}");
     
     // 创建Tree-sitter管理器并分析
     match TreeSitterManager::new().await {
@@ -344,14 +344,14 @@ async fn perform_structural_analysis(diff: &str, language: &Option<String>) -> R
                 }
                 Err(e) => {
                     println!("  ⚠️  结构分析失败，将使用传统文本分析模式");
-                    log::debug!("Tree-sitter分析详情: {}", e);
+                    log::debug!("Tree-sitter分析详情: {e}");
                     Ok(None)
                 }
             }
         }
         Err(e) => {
             println!("  ⚠️  Tree-sitter初始化失败，将使用传统文本分析模式");
-            log::debug!("Tree-sitter初始化详情: {}", e);
+            log::debug!("Tree-sitter初始化详情: {e}");
             Ok(None)
         }
     }
@@ -386,8 +386,8 @@ fn extract_code_from_diff(diff: &str) -> String {
         }
         
         // 提取添加的行（+开头）和上下文行（没有+/-前缀）
-        if line.starts_with('+') {
-            code_lines.push(&line[1..]);
+        if let Some(stripped) = line.strip_prefix('+') {
+            code_lines.push(stripped);
         } else if !line.starts_with('-') && !line.trim().is_empty() {
             code_lines.push(line);
         }
@@ -439,7 +439,7 @@ fn infer_language_from_diff(diff: &str) -> Option<SupportedLanguage> {
     // 优先返回第一个支持的语言
     for (file_path, extension) in &detected_files {
         if let Some(lang) = SupportedLanguage::from_extension(extension) {
-            log::debug!("从文件 {} 检测到语言: {:?}", file_path, lang);
+            log::debug!("从文件 {file_path} 检测到语言: {lang:?}");
             return Some(lang);
         }
     }
@@ -447,10 +447,10 @@ fn infer_language_from_diff(diff: &str) -> Option<SupportedLanguage> {
     // 如果没有支持的语言，记录日志
     let unsupported_files: Vec<String> = detected_files
         .into_iter()
-        .map(|(path, ext)| format!("{} ({})", path, ext))
+        .map(|(path, ext)| format!("{path} ({ext})"))
         .collect();
     
-    log::debug!("检测到不支持的文件类型: {:?}", unsupported_files);
+    log::debug!("检测到不支持的文件类型: {unsupported_files:?}");
     None
 }
 
@@ -485,6 +485,17 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
     let mut details = HashMap::new();
     let mut findings = Vec::new();
     let mut recommendations = Vec::new();
+
+    // 注入影响范围Markdown和级联数量（如果存在）
+    if let Some(md) = &result.impact_markdown {
+        details.insert("impact_report_md".to_string(), md.clone());
+    }
+    if let Some(count) = result.cascade_effects_count {
+        details.insert("cascade_effects".to_string(), count.to_string());
+        if count > 0 {
+            recommendations.push(format!("检测到 {count} 条潜在级联效应，请重点验证关键路径"));
+        }
+    }
     
     // 转换安全发现
     for finding in &result.security_findings {
@@ -533,10 +544,10 @@ fn convert_analysis_result(result: &crate::analysis::AnalysisResult, config: &Re
         .count();
     
     if critical_count > 0 {
-        recommendations.push(format!("发现 {} 个严重安全问题，必须立即修复", critical_count));
+        recommendations.push(format!("发现 {critical_count} 个严重安全问题，必须立即修复"));
     }
     if warning_count > 0 {
-        recommendations.push(format!("发现 {} 个警告问题，建议修复", warning_count));
+        recommendations.push(format!("发现 {warning_count} 个警告问题，建议修复"));
     }
     
     // 计算总体评分
@@ -679,15 +690,109 @@ async fn build_analysis_context(
         
     // Add structural info if available
     if let Some(summary) = structural_summary {
-        context = context.with_structural_info(summary);
+        // 将结构化摘要加入上下文
+        context = context.with_structural_info(summary.clone());
+        // 基于结构化摘要构建依赖图（以diff缓冲区为文件名，非侵入式）
+        let graph = crate::architectural_impact::DependencyGraph::from_structural_summary(&summary, "DIFF_BUFFER");
+        context = context.with_dependency_graph(graph);
     }
     
     // Add architectural impact if available
     if let Some(impact) = architectural_impact {
         context = context.with_architectural_impact(impact);
     }
+
+    // If we have a dependency graph and architectural changes, compute impact scope and cascades
+    if let (Some(ref graph), Some(ref impact)) = (&context.dependency_graph, &context.architectural_impact) {
+        // Derive changed node IDs from graph by matching names from impact changes
+        let changed_ids = derive_changed_node_ids(graph, impact);
+        if !changed_ids.is_empty() {
+            let mut prop = crate::architectural_impact::ImpactPropagation::new(graph.clone());
+            let scope = prop.calculate_impact(changed_ids, 4);
+            let detector = crate::architectural_impact::CascadeDetector::new(graph.clone());
+            let breaking_changes = to_breaking_changes(impact);
+            let cascades = detector.detect_cascades(&breaking_changes);
+            // Attach to context
+            context = context.with_impact_scope(scope).with_cascade_effects(cascades);
+        }
+    }
     
     Ok(context)
+}
+
+/// 根据 ArchitecturalImpact 推导 BreakingChange 列表
+fn to_breaking_changes(impact: &crate::architectural_impact::ArchitecturalImpact) -> Vec<crate::architectural_impact::BreakingChange> {
+    use crate::architectural_impact::{BreakingChange, BreakingChangeType, ImpactLevel};
+    let mut list = Vec::new();
+
+    for c in &impact.function_changes {
+        let change_type = match c.change_type {
+            crate::architectural_impact::git_state_analyzer::ChangeType::Added => BreakingChangeType::FunctionAdded,
+            crate::architectural_impact::git_state_analyzer::ChangeType::Removed => BreakingChangeType::FunctionRemoved,
+            crate::architectural_impact::git_state_analyzer::ChangeType::Modified => BreakingChangeType::FunctionSignatureChanged,
+        };
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Module,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    for c in &impact.struct_changes {
+        let change_type = BreakingChangeType::StructureChanged;
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Module,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    for c in &impact.interface_changes {
+        let change_type = BreakingChangeType::InterfaceChanged;
+        list.push(BreakingChange {
+            change_type,
+            component: c.name.clone(),
+            description: c.description.clone(),
+            impact_level: ImpactLevel::Project,
+            suggestions: vec![],
+            before: None,
+            after: None,
+            file_path: c.file_path.clone(),
+        });
+    }
+
+    list
+}
+
+/// 从依赖图中根据变更名称推导节点ID
+fn derive_changed_node_ids(graph: &crate::architectural_impact::DependencyGraph, impact: &crate::architectural_impact::ArchitecturalImpact) -> Vec<String> {
+    use crate::architectural_impact::dependency_graph::NodeType;
+    use std::collections::HashSet;
+    let mut names = HashSet::new();
+    for c in &impact.function_changes { names.insert(c.name.as_str()); }
+    for c in &impact.struct_changes { names.insert(c.name.as_str()); }
+    for c in &impact.interface_changes { names.insert(c.name.as_str()); }
+
+    let mut ids = Vec::new();
+    for (id, node) in &graph.nodes {
+        match &node.node_type {
+            NodeType::Function(f) if names.contains(f.name.as_str()) => ids.push(id.clone()),
+            NodeType::Class(c) if names.contains(c.name.as_str()) => ids.push(id.clone()),
+            NodeType::Module(m) if names.contains(m.name.as_str()) => ids.push(id.clone()),
+            _ => {}
+        }
+    }
+    ids
 }
 
 /// Convert analysis result with critical check - eliminates special case 3

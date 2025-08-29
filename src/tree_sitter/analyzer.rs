@@ -401,6 +401,7 @@ impl StructureAnalyzer {
             exports: Vec::new(),
             comments: Vec::new(),
             complexity_hints: Vec::new(),
+            calls: Vec::new(),
         };
 
         let root_node = tree.root_node();
@@ -726,6 +727,7 @@ mod tests {
             exports: Vec::new(),
             comments: Vec::new(),
             complexity_hints: Vec::new(),
+            calls: Vec::new(),
         };
         
         // 添加更多的函数以达到数量限制
