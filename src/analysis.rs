@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::devops::Issue;
 use crate::tree_sitter::StructuralSummary;
+use crate::architectural_impact::ArchitecturalImpact;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,8 @@ pub struct OperationContext {
     pub issues: Vec<Issue>,
     /// Tree-sitter结构分析结果
     pub structural_info: Option<StructuralSummary>,
+    /// 架构影响分析结果
+    pub architectural_impact: Option<ArchitecturalImpact>,
     /// 操作特定的选项
     pub options: OperationOptions,
 }
@@ -49,6 +52,7 @@ impl OperationContext {
             diff: String::new(),
             issues: Vec::new(),
             structural_info: None,
+            architectural_impact: None,
             options: OperationOptions::default(),
         }
     }
@@ -68,6 +72,12 @@ impl OperationContext {
     /// 设置结构分析信息
     pub fn with_structural_info(mut self, info: StructuralSummary) -> Self {
         self.structural_info = Some(info);
+        self
+    }
+    
+    /// 设置架构影响分析信息
+    pub fn with_architectural_impact(mut self, impact: ArchitecturalImpact) -> Self {
+        self.architectural_impact = Some(impact);
         self
     }
     

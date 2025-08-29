@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::analysis::{Analyzer, OperationContext, OperationOptions};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
 use crate::project_insights::InsightsGenerator;
+use crate::architectural_impact::{GitStateAnalyzer, ArchitecturalImpact};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
@@ -256,6 +257,43 @@ async fn get_issue_context(config: &Config, issue_ids: &[String]) -> Result<Vec<
     } else {
         eprintln!("⚠️ 未配置DevOps平台，无法获取Issue信息");
         Ok(Vec::new())
+    }
+}
+
+/// 执行架构影响分析
+async fn perform_architectural_impact_analysis(diff: &str) -> Result<Option<ArchitecturalImpact>, Box<dyn std::error::Error + Send + Sync>> {
+    println!("🏗️ 正在进行架构影响分析...");
+    
+    // 创建GitStateAnalyzer并分析
+    let analyzer = GitStateAnalyzer::new();
+    match analyzer.analyze_git_diff(diff).await {
+        Ok(impact) => {
+            println!("  ✅ 架构影响分析完成");
+            
+            // 输出关键指标
+            let total_changes = impact.function_changes.len() + 
+                                impact.struct_changes.len() + 
+                                impact.interface_changes.len();
+            println!("     📊 总变更数: {}", total_changes);
+            println!("     🔧 函数变更: {}", impact.function_changes.len());
+            println!("     🏗️ 结构体变更: {}", impact.struct_changes.len());
+            println!("     🔌 接口变更: {}", impact.interface_changes.len());
+            
+            // 输出影响范围
+            if !impact.impact_summary.affected_modules.is_empty() {
+                println!("     📦 影响模块: {}", impact.impact_summary.affected_modules.len());
+            }
+            if !impact.impact_summary.breaking_changes.is_empty() {
+                println!("     ⚠️  破坏性变更: {}", impact.impact_summary.breaking_changes.len());
+            }
+            
+            Ok(Some(impact))
+        }
+        Err(e) => {
+            println!("  ⚠️  架构影响分析失败: {}", e);
+            log::debug!("架构影响分析详情: {}", e);
+            Ok(None)
+        }
     }
 }
 
@@ -611,6 +649,13 @@ async fn build_analysis_context(
         None
     };
     
+    // Perform architectural impact analysis if Tree-sitter is enabled
+    let architectural_impact = if review_config.tree_sitter {
+        perform_architectural_impact_analysis(&diff).await?
+    } else {
+        None
+    };
+    
     // Get issue context
     let issues = get_issue_context(config, &review_config.issue_ids).await?;
     
@@ -635,6 +680,11 @@ async fn build_analysis_context(
     // Add structural info if available
     if let Some(summary) = structural_summary {
         context = context.with_structural_info(summary);
+    }
+    
+    // Add architectural impact if available
+    if let Some(impact) = architectural_impact {
+        context = context.with_architectural_impact(impact);
     }
     
     Ok(context)

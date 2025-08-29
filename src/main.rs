@@ -13,6 +13,8 @@ mod review;
 mod mcp;
 mod project_insights;
 mod metrics;
+mod architectural_impact;
+mod error;
 
 use std::path::PathBuf;
 use std::fs;

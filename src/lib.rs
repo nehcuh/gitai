@@ -20,6 +20,7 @@ pub mod mcp;
 pub mod error;
 pub mod project_insights;
 pub mod metrics;
+pub mod architectural_impact;
 
 pub use config::Config;
 pub use context::{OperationContext, OperationOptions};
@@ -27,3 +28,4 @@ pub use error::{GitAIError, Result};
 pub use tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
 pub use prompts::{PromptManager, PromptContext};
 pub use project_insights::{ProjectInsights, InsightsGenerator};
+pub use architectural_impact::{ArchitecturalImpactAnalysis, BreakingChange, RiskLevel};
