@@ -85,6 +85,12 @@ impl CommitConfig {
     }
 }
 
+// === 触发结构化函数识别的示例改动 ===
+// 该函数仅用于验证 Tree-sitter 与架构影响分析能正确识别函数级变更
+pub fn sample_util_add(x: i32, y: i32) -> i32 {
+    x + y
+}
+
 /// 提交操作 - Linus式静态函数设计
 /// 
 /// 干掉无意义的Executor包装器，直接用函数处理事情！

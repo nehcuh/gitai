@@ -92,7 +92,7 @@ fn display_node(node_id: &str, graph: Option<&DependencyGraph>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::architectural_impact::impact_propagation::{ImpactedComponent, PropagationType};
+    use crate::architectural_impact::impact_propagation::{ImpactedComponent, PropagationType, ComponentType, ImpactPath, ImpactStatistics};
 
     #[test]
     fn test_generate_markdown_report_basic() {

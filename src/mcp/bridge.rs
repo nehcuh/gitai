@@ -183,6 +183,34 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                     },
                                                     "required": ["path"]
                                                 }
+                                            },
+                                            {
+                                                "name": "export_dependency_graph",
+                                                "description": "Export global/subtree dependency graph in JSON, DOT, SVG or Mermaid format",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Critical node highlight threshold (0-1), default 0.15"}
+                                                    },
+                                                    "required": ["path"]
+                                                }
+                                            },
+                                            {
+                                                "name": "query_call_chain",
+                                                "description": "Query function call chains (downstream/upstream)",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "start": {"type": "string", "description": "Start function name"},
+                                                        "end": {"type": "string", "description": "Optional end function name"},
+                                                        "direction": {"type": "string", "enum": ["downstream", "upstream"], "description": "Direction: downstream(callees)/upstream(callers), default downstream"},
+                                                        "max_depth": {"type": "integer", "minimum": 1, "maximum": 32, "description": "Max depth, default 8"},
+                                                        "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Max number of paths to return, default 20"}
+                                                    },
+                                                    "required": ["path", "start"]
+                                                }
                                             }
                                         ]
                                     }

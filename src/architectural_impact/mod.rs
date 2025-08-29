@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 pub mod ast_comparison;
+pub mod dependency_graph;
+pub mod git_state_analyzer;
+pub mod ai_context;
 pub mod breaking_changes;
 pub mod risk_assessment;
-pub mod ai_context;
-pub mod git_state_analyzer;
-pub mod dependency_graph;
 pub mod impact_propagation;
 pub mod cascade_detector;
 pub mod impact_report;
+pub mod graph_export;
 
 // 重新导出git_state_analyzer模块的公共类型
 pub use git_state_analyzer::{GitStateAnalyzer, ArchitecturalImpact};

@@ -157,6 +157,10 @@ pub struct AnalysisResult {
     pub impact_markdown: Option<String>,
     /// 级联效应数量（若已计算）
     pub cascade_effects_count: Option<usize>,
+    /// 影响范围分析结果
+    pub impact_scope: Option<ImpactScope>,
+    /// 架构影响分析结果
+    pub architectural_impact: Option<ArchitecturalImpact>,
 }
 
 /// 安全发现
@@ -217,6 +221,8 @@ impl Analyzer {
             deviation_analysis,
             impact_markdown,
             cascade_effects_count,
+            impact_scope: context.impact_scope.clone(),
+            architectural_impact: context.architectural_impact.clone(),
         })
     }
     

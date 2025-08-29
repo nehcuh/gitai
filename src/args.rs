@@ -182,6 +182,18 @@ pub enum Command {
         #[command(subcommand)]
         action: MetricsAction,
     },
+    /// 依赖图导出（全局/子目录）
+    Graph {
+        /// 扫描路径（目录）
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// 输出 DOT 文件路径（默认输出到 stdout）
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 关键节点高亮阈值（0-1）
+        #[arg(long, default_value_t = 0.15)]
+        threshold: f32,
+    },
 }
 
 /// 提示词操作

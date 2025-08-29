@@ -5,7 +5,7 @@
 use crate::{config::Config, scan, mcp::*};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::sync::Arc;
 use log::{debug, info, warn, error};
@@ -45,14 +45,56 @@ impl ScanService {
         info!("🔍 开始安全扫描: {}", params.path);
         let tool = params.tool.unwrap_or_else(|| self.default_tool.clone());
         let timeout = params.timeout.unwrap_or(self.default_timeout);
-        let path = Path::new(&params.path);
         
-        debug!("📋 扫描参数: 工具={}, 超时={}s", tool, timeout);
+        // 智能路径解析：处理相对路径和绝对路径
+        let path = if Path::new(&params.path).is_absolute() {
+            // 如果是绝对路径，直接使用
+            PathBuf::from(&params.path)
+        } else {
+            // 如果是相对路径，尝试多种解析策略
+            let relative_path = Path::new(&params.path);
+            
+            // 策略1：相对于当前工作目录
+            let cwd_path = std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(relative_path);
+            
+            if cwd_path.exists() {
+                cwd_path
+            } else {
+                // 策略2：相对于用户主目录的 Projects 目录（常见的项目目录）
+                if let Some(home) = dirs::home_dir() {
+                    let home_projects_path = home.join("Projects").join(relative_path);
+                    if home_projects_path.exists() {
+                        home_projects_path
+                    } else {
+                        // 策略3：如果路径看起来像 ../xxx，尝试从 gitai 项目目录解析
+                        if params.path.starts_with("../") {
+                            let gitai_path = home.join("Projects/gitai").join(relative_path);
+                            if gitai_path.exists() {
+                                gitai_path
+                            } else {
+                                // 回退到原始路径
+                                PathBuf::from(&params.path)
+                            }
+                        } else {
+                            // 回退到原始路径
+                            PathBuf::from(&params.path)
+                        }
+                    }
+                } else {
+                    // 无法获取主目录，使用原始路径
+                    PathBuf::from(&params.path)
+                }
+            }
+        };
+        
+        debug!("📋 扫描参数: 工具={}, 超时={}s, 解析后路径={}", tool, timeout, path.display());
         
         // 验证路径是否存在
         if !path.exists() {
-            error!("❌ 扫描路径不存在: {}", params.path);
-            return Err(format!("扫描路径不存在: {}", params.path).into());
+            error!("❌ 扫描路径不存在: {} (解析后: {})", params.path, path.display());
+            return Err(format!("扫描路径不存在: {} (解析后: {})", params.path, path.display()).into());
         }
 
         // 使用真实的扫描逻辑
@@ -83,7 +125,7 @@ impl ScanService {
                 let include_version = false; // 不获取版本信息以提高性能
                 
                 debug!("🔍 开始扫描: path={:?}, lang={:?}, timeout={:?}", path, lang, Some(timeout));
-                let result = scan::run_opengrep_scan(&self.config, path, lang, Some(timeout), include_version);
+                let result = scan::run_opengrep_scan(&self.config, &path, lang, Some(timeout), include_version);
                 
                 match &result {
                     Ok(scan_result) => {

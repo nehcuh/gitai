@@ -202,8 +202,16 @@ fn parse_opengrep_output(output: &str) -> Result<Vec<Finding>, Box<dyn std::erro
         return Ok(Vec::new());
     }
     
-    let v: serde_json::Value = serde_json::from_str(output)
-        .map_err(|e| format!("JSON 解析失败: {e}, 输入: {output}"))?;
+    // 查找 JSON 部分（可能有标题信息在前面）
+    let json_part = if let Some(pos) = output.find('{') {
+        &output[pos..]
+    } else {
+        debug!("⚠️ 未找到 JSON 开始标志");
+        return Ok(Vec::new());
+    };
+    
+    let v: serde_json::Value = serde_json::from_str(json_part)
+        .map_err(|e| format!("JSON 解析失败: {e}, JSON部分: {json_part}"))?;
     
     debug!("📄 JSON 结构: {v:?}");
     
