@@ -9,6 +9,7 @@ pub mod git_state_analyzer;
 // 重新导出git_state_analyzer模块的公共类型
 pub use git_state_analyzer::{GitStateAnalyzer, ArchitecturalImpact};
 
+
 /// 架构影响分析的主要结果结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchitecturalImpactAnalysis {

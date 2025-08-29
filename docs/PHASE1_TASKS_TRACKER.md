@@ -8,9 +8,9 @@
 ### 1.1 创建架构影响分析模块 (Day 1-2)
 
 #### ✅ 任务 1.1.1: 创建新模块 (2小时)
-- [ ] 创建 `src/architectural_impact/mod.rs`
-- [ ] 定义核心数据结构
-- [ ] 添加必要的依赖项到 Cargo.toml
+- [x] 创建 `src/architectural_impact/mod.rs`
+- [x] 定义核心数据结构
+- [x] 添加必要的依赖项到 Cargo.toml
 
 **具体步骤:**
 ```bash
@@ -23,11 +23,11 @@ touch src/architectural_impact/mod.rs
 - 基础的架构影响分析数据结构定义
 - 模块导入配置完成
 
-#### ⏳ 任务 1.1.2: 实现 AST 对比引擎 (4小时)
-- [ ] 创建 `src/architectural_impact/ast_comparison.rs`
-- [ ] 实现基本的结构对比逻辑
-- [ ] 函数签名变化检测
-- [ ] 类/结构体变化检测
+#### ✅ 任务 1.1.2: 实现 AST 对比引擎 (4小时)
+- [x] 创建 `src/architectural_impact/ast_comparison.rs`
+- [x] 实现基本的结构对比逻辑
+- [x] 函数签名变化检测
+- [x] 类/结构体变化检测
 
 **具体步骤:**
 - 比较两个 `StructuralSummary`
@@ -44,10 +44,10 @@ pub fn compare_structural_summaries(
 
 ### 1.2 集成到现有评审流程 (Day 3)
 
-#### ⏳ 任务 1.2.1: 实现变更前代码状态获取 (4小时)
-- [ ] 创建 `get_ast_before_changes()` 函数
-- [ ] 从 git diff 中提取变更前的代码
-- [ ] 对变更前代码进行 Tree-sitter 分析
+#### ✅ 任务 1.2.1: 实现变更前代码状态获取 (4小时)
+- [x] 创建 `get_ast_before_changes()` 函数
+- [x] 从 git diff 中提取变更前的代码
+- [x] 对变更前代码进行 Tree-sitter 分析
 
 **技术挑战:**
 - 如何从 git diff 重建变更前的完整代码状态？
@@ -62,10 +62,10 @@ fn get_file_content_before_changes(file_path: &str, commit: &str) -> Result<Stri
 fn reconstruct_before_state(diff: &str) -> Result<HashMap<String, String>>
 ```
 
-#### ⏳ 任务 1.2.2: 修改 review.rs 集成架构影响分析 (3小时)
-- [ ] 在 `perform_structural_analysis` 前添加变更前分析
-- [ ] 调用架构影响分析
-- [ ] 集成架构影响到 AI 上下文
+#### ✅ 任务 1.2.2: 修改 review.rs 集成架构影响分析 (3小时)
+- [x] 在 `perform_structural_analysis` 前添加变更前分析
+- [x] 调用架构影响分析
+- [x] 集成架构影响到 AI 上下文
 
 **修改点:**
 ```rust
@@ -83,11 +83,11 @@ if review_config.tree_sitter {
 
 ### 1.3 实现最小可用版本 (Day 4-5)
 
-#### ⏳ 任务 1.3.1: 基础破坏性变更检测 (4小时)
-- [ ] 创建 `src/architectural_impact/breaking_changes.rs`
-- [ ] 函数签名变化检测
-- [ ] API 删除检测
-- [ ] 公共接口修改检测
+#### ✅ 任务 1.3.1: 基础破坏性变更检测 (4小时)
+- [x] 创建 `src/architectural_impact/breaking_changes.rs`
+- [x] 函数签名变化检测
+- [x] API 删除检测
+- [x] 公共接口修改检测
 
 **检测逻辑:**
 ```rust
@@ -106,10 +106,10 @@ pub fn detect_breaking_changes(
 ) -> Vec<BreakingChange>
 ```
 
-#### ⏳ 任务 1.3.2: 简单风险评估 (3小时)
-- [ ] 创建 `src/architectural_impact/risk_assessment.rs`
-- [ ] 实现基于变更类型的风险评级
-- [ ] 影响范围估算
+#### ✅ 任务 1.3.2: 简单风险评估 (3小时)
+- [x] 创建 `src/architectural_impact/risk_assessment.rs`
+- [x] 实现基于变更类型的风险评级
+- [x] 影响范围估算
 
 **风险评估规则:**
 ```rust
@@ -121,10 +121,10 @@ pub enum RiskLevel {
 }
 ```
 
-#### ⏳ 任务 1.3.3: AI 友好输出格式 (2小时)
-- [ ] 创建 `src/architectural_impact/ai_context.rs`
-- [ ] 实现结构化文本输出
-- [ ] 确保 AI 可读性
+#### ✅ 任务 1.3.3: AI 友好输出格式 (2小时)
+- [x] 创建 `src/architectural_impact/ai_context.rs`
+- [x] 实现结构化文本输出
+- [x] 确保 AI 可读性
 
 **输出格式设计:**
 ```markdown
