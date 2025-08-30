@@ -2,7 +2,7 @@
 //
 // 提供代码评审功能的 MCP 服务实现
 
-use crate::{config::Config, review, mcp::*};
+use crate::{config::Config, mcp::*, review};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -58,55 +58,62 @@ impl ReviewService {
     }
 
     /// 执行代码评审
-    async fn execute_review(&self, params: ReviewParams) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_review(
+        &self,
+        params: ReviewParams,
+    ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
         // 构建评审配置
         let mut review_config = self.default_config.clone();
-        
+
         // 应用参数覆盖
         if let Some(tree_sitter) = params.tree_sitter {
             review_config.tree_sitter = tree_sitter;
         }
-        
+
         if let Some(security_scan) = params.security_scan {
             review_config.security_scan = security_scan;
         }
-        
+
         if let Some(issue_ids) = params.issue_ids {
             review_config.issue_ids = issue_ids;
         }
-        
+
         if let Some(scan_tool) = params.scan_tool {
             review_config.scan_tool = Some(scan_tool);
         }
-        
+
         if let Some(deviation_analysis) = params.deviation_analysis {
             review_config.deviation_analysis = deviation_analysis;
         }
-        
+
         if let Some(format) = params.format {
             review_config.format = format;
         }
 
         // 执行评审
         let review_result = review::execute_review_with_result(&self.config, review_config).await?;
-        
+
         // 转换为 MCP 使用的 ReviewResult 格式
         Ok(ReviewResult {
             success: review_result.success,
             message: review_result.message,
             details: review_result.details,
-            findings: review_result.findings.into_iter().map(|f| Finding {
-                title: f.title,
-                file_path: f.file_path,
-                line: f.line.map(|l| l as usize),
-                severity: match f.severity {
-                    review::Severity::Error => Severity::Error,
-                    review::Severity::Warning => Severity::Warning,
-                    review::Severity::Info => Severity::Info,
-                },
-                description: f.description,
-                suggestion: None,
-            }).collect(),
+            findings: review_result
+                .findings
+                .into_iter()
+                .map(|f| Finding {
+                    title: f.title,
+                    file_path: f.file_path,
+                    line: f.line.map(|l| l as usize),
+                    severity: match f.severity {
+                        review::Severity::Error => Severity::Error,
+                        review::Severity::Warning => Severity::Warning,
+                        review::Severity::Info => Severity::Info,
+                    },
+                    description: f.description,
+                    suggestion: None,
+                })
+                .collect(),
             score: review_result.score,
             recommendations: review_result.recommendations,
         })
@@ -127,50 +134,61 @@ impl crate::mcp::GitAiMcpService for ReviewService {
         vec![Tool {
             name: "execute_review".to_string().into(),
             description: self.description().to_string().into(),
-            input_schema: Arc::new(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "tree_sitter": {
-                        "type": "boolean",
-                        "description": "是否启用 Tree-sitter 结构分析 (可选，默认 false)"
+            input_schema: Arc::new(
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "tree_sitter": {
+                            "type": "boolean",
+                            "description": "是否启用 Tree-sitter 结构分析 (可选，默认 false)"
+                        },
+                        "security_scan": {
+                            "type": "boolean",
+                            "description": "是否启用安全扫描 (可选，默认 false)"
+                        },
+                        "issue_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "关联的 Issue ID 列表 (可选，空数组表示不关联)"
+                        },
+                        "scan_tool": {
+                            "type": "string",
+                            "description": "使用的扫描工具 (可选，如 opengrep)"
+                        },
+                        "deviation_analysis": {
+                            "type": "boolean",
+                            "description": "是否进行偏差分析 (可选，默认 false)"
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": ["text", "json", "markdown"],
+                            "description": "输出格式 (可选，默认 text)"
+                        }
                     },
-                    "security_scan": {
-                        "type": "boolean", 
-                        "description": "是否启用安全扫描 (可选，默认 false)"
-                    },
-                    "issue_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "关联的 Issue ID 列表 (可选，空数组表示不关联)"
-                    },
-                    "scan_tool": {
-                        "type": "string",
-                        "description": "使用的扫描工具 (可选，如 opengrep)"
-                    },
-                    "deviation_analysis": {
-                        "type": "boolean",
-                        "description": "是否进行偏差分析 (可选，默认 false)"
-                    },
-                    "format": {
-                        "type": "string",
-                        "enum": ["text", "json", "markdown"],
-                        "description": "输出格式 (可选，默认 text)"
-                    }
-                },
-                "required": []
-            }).as_object().unwrap().clone()),
+                    "required": []
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
         }]
     }
 
-    async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> crate::mcp::McpResult<serde_json::Value> {
         match name {
             "execute_review" => {
                 let params: ReviewParams = serde_json::from_value(arguments)
                     .map_err(|e| crate::mcp::parse_error("review", e))?;
-                
-                let result = self.execute_review(params).await
+
+                let result = self
+                    .execute_review(params)
+                    .await
                     .map_err(|e| crate::mcp::execution_error("Review", e))?;
-                
+
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("review", e))?)
             }

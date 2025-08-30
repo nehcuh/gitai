@@ -1,7 +1,7 @@
 // review 类型定义模块
 // 所有 review 相关的数据结构定义
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -78,10 +78,10 @@ impl ReviewConfig {
         let issue_ids = issue_id
             .map(|ids| ids.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default();
-        
+
         // 当指定了 scan_tool 时自动启用 security_scan
         let security_scan = security_scan || scan_tool.is_some();
-        
+
         Self {
             language,
             format,
@@ -94,11 +94,11 @@ impl ReviewConfig {
             deviation_analysis,
         }
     }
-    
+
     pub fn needs_issue_context(&self) -> bool {
         !self.issue_ids.is_empty() || self.deviation_analysis
     }
-    
+
     pub fn deviation_analysis(&self) -> bool {
         self.deviation_analysis
     }
@@ -125,7 +125,7 @@ impl ReviewCache {
             language,
         }
     }
-    
+
     pub fn is_expired(&self, max_age_seconds: u64) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

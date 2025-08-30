@@ -1,10 +1,8 @@
 // Use modules from the library crate
 use gitai::{
+    args::{self, Args, Command, ConfigAction, MetricsAction, PromptAction},
     config::{self, Config},
-    args::{self, Args, Command, PromptAction, ConfigAction, MetricsAction},
-    git,
-    prompts,
-    error,
+    error, git, prompts,
 };
 
 // Conditionally import feature-gated modules
@@ -27,15 +25,17 @@ use gitai::mcp;
 use gitai::metrics;
 
 // Always available modules
-use gitai::{analysis, commit, review, tree_sitter, project_insights, architectural_impact, features};
+use gitai::{
+    analysis, architectural_impact, commit, features, project_insights, review, tree_sitter,
+};
 
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 fn init_logger() {
     use std::io::Write;
-    
+
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .format(|buf, record| {
@@ -46,7 +46,7 @@ fn init_logger() {
                 log::Level::Debug => "\x1b[36m", // 青色
                 log::Level::Trace => "\x1b[90m", // 灰色
             };
-            
+
             writeln!(
                 buf,
                 "{}{} [{}] {}",
@@ -65,7 +65,7 @@ fn get_cache_dir() -> Result<PathBuf> {
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".cache")
         .join("gitai");
-    
+
     fs::create_dir_all(&cache_dir)?;
     Ok(cache_dir)
 }
@@ -73,19 +73,26 @@ fn get_cache_dir() -> Result<PathBuf> {
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger();
-    
+
     let args = Args::parse();
-    
+
     // 处理 Init 命令（不需要配置）
-    if let Command::Init { config_url, offline, resources_dir, dev } = &args.command {
+    if let Command::Init {
+        config_url,
+        offline,
+        resources_dir,
+        dev,
+    } = &args.command
+    {
         return handle_init(
             config_url.clone(),
             *offline || args.offline,
             resources_dir.clone(),
-            *dev
-        ).await;
+            *dev,
+        )
+        .await;
     }
-    
+
     // 加载配置文件，提供友好错误信息
     let config = match config::Config::load() {
         Ok(config) => {
@@ -99,7 +106,7 @@ async fn main() -> Result<()> {
             return Err(format!("配置加载失败: {}", e).into());
         }
     };
-    
+
     match args.command {
         Command::Review {
             language,
@@ -113,8 +120,15 @@ async fn main() -> Result<()> {
             deviation_analysis,
         } => {
             let review_config = review::ReviewConfig::from_args(
-                language, format, output, tree_sitter, security_scan,
-                scan_tool, block_on_critical, issue_id, deviation_analysis,
+                language,
+                format,
+                output,
+                tree_sitter,
+                security_scan,
+                scan_tool,
+                block_on_critical,
+                issue_id,
+                deviation_analysis,
             );
             review::execute_review(&config, review_config).await?;
         }
@@ -134,7 +148,23 @@ async fn main() -> Result<()> {
             timeout,
             benchmark,
         } => {
-            handle_scan(&config, &path, &tool, full, remote, update_rules, &format, output, translate, auto_install, lang.as_deref(), no_history, timeout, benchmark).await?;
+            handle_scan(
+                &config,
+                &path,
+                &tool,
+                full,
+                remote,
+                update_rules,
+                &format,
+                output,
+                translate,
+                auto_install,
+                lang.as_deref(),
+                no_history,
+                timeout,
+                benchmark,
+            )
+            .await?;
         }
         #[cfg(not(feature = "security"))]
         Command::Scan { .. } => {
@@ -163,7 +193,14 @@ async fn main() -> Result<()> {
             tree_sitter,
             dry_run,
         } => {
-            let commit_config = commit::CommitConfig::from_args(message, issue_id, all, review, tree_sitter, dry_run);
+            let commit_config = commit::CommitConfig::from_args(
+                message,
+                issue_id,
+                all,
+                review,
+                tree_sitter,
+                dry_run,
+            );
             commit::execute_commit(&config, commit_config).await?;
         }
         #[cfg(feature = "update-notifier")]
@@ -182,8 +219,14 @@ async fn main() -> Result<()> {
         }
         Command::Git(git_args) => {
             // 默认不启用AI解释；--ai 显式开启；--noai 可显式关闭（当外部别名强制开启时）
-            let use_ai = if args.ai { true } else if args.noai { false } else { false };
-            
+            let use_ai = if args.ai {
+                true
+            } else if args.noai {
+                false
+            } else {
+                false
+            };
+
             #[cfg(feature = "ai")]
             {
                 if use_ai {
@@ -193,7 +236,7 @@ async fn main() -> Result<()> {
                     print!("{output}");
                 }
             }
-            
+
             #[cfg(not(feature = "ai"))]
             {
                 // 未启用 AI 时，总是直接执行 git
@@ -228,18 +271,26 @@ async fn main() -> Result<()> {
             eprintln!("💡 请使用包含 'metrics' 功能的构建版本");
             return Err("功能未启用".into());
         }
-        Command::Graph { path, output, threshold } => {
+        Command::Graph {
+            path,
+            output,
+            threshold,
+        } => {
             handle_graph_export(&path, output.as_ref(), threshold).await?;
         }
         Command::Features { format } => {
             features::display_features(&format);
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_graph_export(path: &std::path::Path, output: Option<&std::path::PathBuf>, threshold: f32) -> Result<()> {
+async fn handle_graph_export(
+    path: &std::path::Path,
+    output: Option<&std::path::PathBuf>,
+    threshold: f32,
+) -> Result<()> {
     use gitai::architectural_impact::graph_export::export_dot_string;
     let dot = export_dot_string(path, threshold).await?;
     if let Some(out) = output {
@@ -270,7 +321,7 @@ async fn handle_scan(
     benchmark: bool,
 ) -> Result<()> {
     let show_progress = _format != "json";
-    
+
     if show_progress {
         println!("🔍 正在扫描: {}", path.display());
     }
@@ -288,7 +339,7 @@ async fn handle_scan(
             return Err("未检测到 OpenGrep，请先安装或使用 --auto-install 进行自动安装".into());
         }
     }
-    
+
     // 更新规则（如果需要）
     if update_rules {
         if show_progress {
@@ -306,7 +357,7 @@ async fn handle_scan(
             eprintln!("ℹ️  update-notifier 功能未启用，跳过规则更新。");
         }
     }
-    
+
     // 执行扫描
     let result = if tool == "opengrep" || tool == "auto" {
         let include_version = show_progress && !benchmark;
@@ -319,14 +370,18 @@ async fn handle_scan(
     if !(no_history || benchmark) {
         let cache_dir = get_cache_dir()?;
         let history_dir = cache_dir.join("scan_history");
-        if let Err(e) = fs::create_dir_all(&history_dir) { eprintln!("⚠️ 无法创建扫描历史目录: {}", e); }
+        if let Err(e) = fs::create_dir_all(&history_dir) {
+            eprintln!("⚠️ 无法创建扫描历史目录: {}", e);
+        }
         let ts = chrono::Utc::now().format("%Y%m%d%H%M%S");
         let history_file = history_dir.join(format!("scan_{}_{}.json", result.tool, ts));
         if let Ok(json) = serde_json::to_string(&result) {
-            if let Err(e) = fs::write(&history_file, json) { eprintln!("⚠️ 写入扫描历史失败: {}", e); }
+            if let Err(e) = fs::write(&history_file, json) {
+                eprintln!("⚠️ 写入扫描历史失败: {}", e);
+            }
         }
     }
-    
+
     // 输出结果
     if _format == "json" {
         let json = serde_json::to_string_pretty(&result)?;
@@ -341,11 +396,16 @@ async fn handle_scan(
             println!("  工具: {}", result.tool);
             println!("  版本: {}", result.version);
             println!("  执行时间: {:.2}s", result.execution_time);
-            
+
             if !result.findings.is_empty() {
                 println!("  发现问题: {}", result.findings.len());
                 for finding in result.findings.iter().take(5) {
-                    println!("    - {} ({}:{})", finding.title, finding.file_path.display(), finding.line);
+                    println!(
+                        "    - {} ({}:{})",
+                        finding.title,
+                        finding.file_path.display(),
+                        finding.line
+                    );
                 }
                 if result.findings.len() > 5 {
                     println!("    ... 还有 {} 个问题", result.findings.len() - 5);
@@ -355,7 +415,7 @@ async fn handle_scan(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -363,43 +423,47 @@ async fn handle_scan(
 fn handle_scan_history(limit: usize) -> Result<()> {
     let cache_dir = get_cache_dir()?;
     let history_dir = cache_dir.join("scan_history");
-    
+
     if !history_dir.exists() {
         println!("📁 扫描历史目录不存在");
         return Ok(());
     }
-    
+
     // 获取历史文件
     let mut entries: Vec<_> = fs::read_dir(&history_dir)?
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension()
-                .and_then(|s| s.to_str()) == Some("json")
-        })
+        .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("json"))
         .collect();
-    
+
     // 按修改时间排序（最新的在前）
     entries.sort_by(|a, b| {
-        let a_time = a.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        let b_time = b.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let a_time = a
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        let b_time = b
+            .metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
         b_time.cmp(&a_time)
     });
-    
+
     println!("📋 扫描历史 (最近{}次):", limit);
     println!();
-    
+
     for (i, entry) in entries.iter().take(limit).enumerate() {
         let path = entry.path();
         if let Ok(content) = fs::read_to_string(&path) {
             if let Ok(result) = serde_json::from_str::<scan::ScanResult>(&content) {
-                let modified = entry.metadata()
+                let modified = entry
+                    .metadata()
                     .and_then(|m| m.modified())
                     .ok()
                     .and_then(|t| t.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
                     .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, 0))
                     .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
                     .unwrap_or_else(|| "未知时间".to_string());
-                
+
                 println!("{}. {} - {}", i + 1, modified, result.tool);
                 println!("   执行时间: {:.2}s", result.execution_time);
                 println!("   发现问题: {}", result.findings.len());
@@ -413,7 +477,7 @@ fn handle_scan_history(limit: usize) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -421,18 +485,18 @@ fn handle_scan_history(limit: usize) -> Result<()> {
 async fn handle_update_check(config: &config::Config, format: &str) -> Result<()> {
     let updater = update::AutoUpdater::new(config.clone());
     let status = updater.check_update_status();
-    
+
     if format == "json" {
         let json = serde_json::to_string_pretty(&status)?;
         println!("{}", json);
     } else {
         println!("🔎 更新检查:");
         println!();
-        
+
         for item in &status {
             println!("📦 {}: {}", item.name, item.message);
         }
-        
+
         println!();
         if status.is_empty() {
             println!("就绪状态: ✅ 已就绪");
@@ -440,7 +504,7 @@ async fn handle_update_check(config: &config::Config, format: &str) -> Result<()
             println!("就绪状态: ❌ 需要更新");
         }
     }
-    
+
     Ok(())
 }
 
@@ -449,10 +513,10 @@ async fn handle_update(config: &config::Config) -> Result<()> {
     println!("🔄 正在更新规则...");
     let updater = update::AutoUpdater::new(config.clone());
     let result = updater.update_scan_rules().await?;
-    
+
     println!("✅ 更新完成");
     println!("   更新状态: {}", result.message);
-    
+
     Ok(())
 }
 
@@ -461,7 +525,7 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
     // 执行Git命令
     let output = git::run_git(git_args)?;
     print!("{output}");
-    
+
     // 添加AI解释
     let command_str = format!("git {}", git_args.join(" "));
     let prompt = format!(
@@ -469,7 +533,7 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
         command_str,
         output.trim()
     );
-    
+
     match ai::call_ai(config, &prompt).await {
         Ok(explanation) => {
             println!("\n🤖 AI解释:");
@@ -479,7 +543,7 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
             log::warn!("AI解释失败: {}", e);
         }
     }
-    
+
     Ok(())
 }
 
@@ -492,22 +556,25 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
                 .join(".config")
                 .join("gitai")
                 .join("prompts");
-            
+
             fs::create_dir_all(&prompts_dir)?;
-            
+
             // 创建默认模板
             let templates = [
-                ("commit-generator.md", include_str!("../assets/prompts/commit-generator.md")),
+                (
+                    "commit-generator.md",
+                    include_str!("../assets/prompts/commit-generator.md"),
+                ),
                 ("review.md", include_str!("../assets/prompts/review.md")),
             ];
-            
+
             for (filename, content) in &templates {
                 let file_path = prompts_dir.join(filename);
                 if !file_path.exists() {
                     fs::write(&file_path, content)?;
                 }
             }
-            
+
             println!("✅ 提示词目录已就绪: {}", prompts_dir.display());
         }
         PromptAction::List => {
@@ -516,12 +583,12 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
                 .join(".config")
                 .join("gitai")
                 .join("prompts");
-            
+
             if !prompts_dir.exists() {
                 println!("📁 提示词目录不存在，请先运行: gitai prompts init");
                 return Ok(());
             }
-            
+
             println!("📝 可用的提示词模板:");
             let entries = fs::read_dir(&prompts_dir)?;
             for entry in entries {
@@ -541,7 +608,7 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
                 .join(".config")
                 .join("gitai")
                 .join("prompts");
-            
+
             let file_path = prompts_dir.join(format!("{}.md", name));
             if file_path.exists() {
                 let content = fs::read_to_string(&file_path)?;
@@ -555,7 +622,7 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
             println!("🔄 更新提示词模板功能暂未实现");
         }
     }
-    
+
     Ok(())
 }
 
@@ -566,21 +633,21 @@ async fn handle_init(
     _dev: bool,
 ) -> Result<()> {
     use gitai::config_init::ConfigInitializer;
-    
+
     println!("🚀 初始化 GitAI 配置...");
-    
+
     let mut initializer = ConfigInitializer::new();
-    
+
     if let Some(url) = config_url {
         println!("📥 使用配置URL: {}", url);
         initializer = initializer.with_config_url(Some(url));
     }
-    
+
     if offline {
         println!("🔌 离线模式初始化");
         initializer = initializer.with_offline_mode(true);
     }
-    
+
     match initializer.initialize().await {
         Ok(config_path) => {
             println!("✅ 配置初始化成功!");
@@ -597,37 +664,41 @@ async fn handle_init(
             return Err(e.into());
         }
     }
-    
+
     Ok(())
 }
 
-async fn handle_config(config: &config::Config, action: &ConfigAction, offline: bool) -> Result<()> {
-    use gitai::resource_manager::{ResourceManager, load_resource_config};
-    
+async fn handle_config(
+    config: &config::Config,
+    action: &ConfigAction,
+    offline: bool,
+) -> Result<()> {
+    use gitai::resource_manager::{load_resource_config, ResourceManager};
+
     match action {
         ConfigAction::Check => {
             println!("🔍 检查配置状态...");
-            
+
             // 检查配置文件
             let config_dir = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config/gitai");
             let config_path = config_dir.join("config.toml");
-            
+
             if config_path.exists() {
                 println!("✅ 配置文件: {}", config_path.display());
             } else {
                 println!("❌ 配置文件不存在");
             }
-            
+
             // 检查缓存目录
             let cache_dir = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".cache/gitai");
-            
+
             if cache_dir.exists() {
                 println!("✅ 缓存目录: {}", cache_dir.display());
-                
+
                 // 检查规则
                 let rules_dir = cache_dir.join("rules");
                 if rules_dir.exists() {
@@ -635,7 +706,7 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
                 } else {
                     println!("  ⚠️  规则缓存: 未找到");
                 }
-                
+
                 // 检查 Tree-sitter
                 let ts_dir = cache_dir.join("tree-sitter");
                 if ts_dir.exists() {
@@ -657,7 +728,10 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
                     println!("    \"model\": \"{}\"", config.ai.model);
                     println!("  }},");
                     println!("  \"scan\": {{");
-                    println!("    \"default_path\": \"{}\"", config.scan.default_path.as_deref().unwrap_or("."));
+                    println!(
+                        "    \"default_path\": \"{}\"",
+                        config.scan.default_path.as_deref().unwrap_or(".")
+                    );
                     println!("  }}");
                     println!("}}");
                 }
@@ -670,29 +744,32 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
                     println!("  AI服务: {}", config.ai.api_url);
                     println!("  AI模型: {}", config.ai.model);
                     // config.scan 是 ScanConfig 类型，不是 Option
-                    println!("  扫描路径: {}", config.scan.default_path.as_deref().unwrap_or("."));
+                    println!(
+                        "  扫描路径: {}",
+                        config.scan.default_path.as_deref().unwrap_or(".")
+                    );
                 }
             }
         }
         ConfigAction::Update { force } => {
             println!("🔄 更新资源...");
-            
+
             let config_path = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config/gitai/config.toml");
-            
+
             if let Ok(resource_config) = load_resource_config(&config_path) {
                 let manager = ResourceManager::new(resource_config)?;
-                
+
                 if offline {
                     eprintln!("⚠️  离线模式下无法更新资源");
                     return Ok(());
                 }
-                
+
                 if *force {
                     println!("🚀 强制更新所有资源...");
                 }
-                
+
                 manager.update_all().await?;
                 println!("✅ 资源更新完成");
             } else {
@@ -701,17 +778,17 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
         }
         ConfigAction::Reset { no_backup } => {
             println!("🔄 重置配置...");
-            
+
             let config_path = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config/gitai/config.toml");
-            
+
             if !no_backup && config_path.exists() {
                 let backup_path = config_path.with_extension("toml.backup");
                 fs::copy(&config_path, &backup_path)?;
                 println!("💾 已备份到: {}", backup_path.display());
             }
-            
+
             // 写入默认配置
             let default_config = include_str!("../assets/config.enhanced.toml");
             fs::write(&config_path, default_config)?;
@@ -719,11 +796,11 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
         }
         ConfigAction::Clean => {
             println!("🧹 清理缓存...");
-            
+
             let config_path = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config/gitai/config.toml");
-            
+
             if let Ok(resource_config) = load_resource_config(&config_path) {
                 let manager = ResourceManager::new(resource_config)?;
                 manager.clean_cache().await?;
@@ -733,7 +810,7 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -744,10 +821,10 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
         eprintln!("❌ MCP 服务未启用，请在配置文件中启用 MCP");
         std::process::exit(1);
     }
-    
+
     println!("🚀 启动 GitAI MCP 服务器");
     println!("📡 传输协议: {}", transport);
-    
+
     match transport {
         "stdio" => {
             println!("🔌 使用 stdio 传输");
@@ -766,7 +843,7 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
             std::process::exit(1);
         }
     }
-    
+
     Ok(())
 }
 
@@ -775,11 +852,11 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
     use metrics::QualityTracker;
     use project_insights::InsightsGenerator;
     use tree_sitter::TreeSitterManager;
-    
+
     match action {
         MetricsAction::Record { tags, force } => {
             println!("📊 记录代码质量快照...");
-            
+
             // 检查是否有代码变化（除非强制记录）
             if !force {
                 let status = git::run_git(&["status".to_string(), "--porcelain".to_string()])?;
@@ -789,18 +866,18 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                     return Ok(());
                 }
             }
-            
+
             // 创建质量追踪器
             let mut tracker = QualityTracker::new()?;
-            
+
             // 分析当前代码
             println!("🔍 分析代码结构...");
             let mut manager = TreeSitterManager::new().await?;
-            
+
             // 获取当前目录的代码文件并分析
             let mut summary = tree_sitter::StructuralSummary::default();
             let code_files = find_code_files(".")?;
-            
+
             for file_path in &code_files {
                 if let Ok(content) = std::fs::read_to_string(file_path) {
                     if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
@@ -815,32 +892,39 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                     }
                 }
             }
-            
+
             // 生成项目洞察
             println!("💡 生成项目洞察...");
             let insights = InsightsGenerator::generate(&summary, None);
-            
+
             // 记录快照
             let mut snapshot = tracker.record_snapshot(&summary, &insights)?;
-            
+
             // 添加标签
             if !tags.is_empty() {
                 snapshot.tags = tags.clone();
             }
-            
+
             println!("✅ 质量快照已记录");
             println!("   Commit: {}", &snapshot.commit_hash[..7]);
             println!("   分支: {}", snapshot.branch);
             println!("   代码行数: {}", snapshot.lines_of_code);
             println!("   技术债务: {:.1}", snapshot.technical_debt.debt_score);
-            println!("   复杂度: {:.1}", snapshot.complexity_metrics.avg_cyclomatic_complexity);
+            println!(
+                "   复杂度: {:.1}",
+                snapshot.complexity_metrics.avg_cyclomatic_complexity
+            );
         }
-        MetricsAction::Analyze { days, format, output } => {
+        MetricsAction::Analyze {
+            days,
+            format,
+            output,
+        } => {
             println!("📈 分析质量趋势...");
-            
+
             let tracker = QualityTracker::new()?;
             let analysis = tracker.analyze_trends(*days)?;
-            
+
             let result = match format.as_str() {
                 "json" => serde_json::to_string_pretty(&analysis)?,
                 "markdown" | "html" => {
@@ -869,7 +953,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                     )
                 }
             };
-            
+
             if let Some(output_path) = output {
                 std::fs::write(output_path, result)?;
                 println!("📁 分析结果已保存到: {}", output_path.display());
@@ -877,11 +961,15 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                 println!("{}", result);
             }
         }
-        MetricsAction::Report { report_type, output, html } => {
+        MetricsAction::Report {
+            report_type,
+            output,
+            html,
+        } => {
             println!("📄 生成质量报告...");
-            
+
             let tracker = QualityTracker::new()?;
-            
+
             let report = if *html {
                 let analysis = tracker.analyze_trends(None)?;
                 let visualizer = metrics::visualizer::TrendVisualizer::new();
@@ -889,7 +977,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             } else {
                 tracker.generate_report(output.as_deref())?
             };
-            
+
             if let Some(output_path) = output {
                 std::fs::write(output_path, report)?;
                 println!("✅ 报告已生成: {}", output_path.display());
@@ -897,22 +985,29 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                 println!("{}", report);
             }
         }
-        MetricsAction::List { limit, branch, format } => {
+        MetricsAction::List {
+            limit,
+            branch,
+            format,
+        } => {
             let tracker = QualityTracker::new()?;
             let snapshots = tracker.get_snapshots();
-            
+
             // 过滤分支
             let filtered: Vec<_> = if let Some(branch_name) = branch {
-                snapshots.iter()
+                snapshots
+                    .iter()
                     .filter(|s| s.branch == *branch_name)
                     .collect()
             } else {
                 snapshots.iter().collect()
             };
-            
+
             match format.as_str() {
                 "json" => {
-                    let json = serde_json::to_string_pretty(&filtered.into_iter().take(*limit).collect::<Vec<_>>())?;
+                    let json = serde_json::to_string_pretty(
+                        &filtered.into_iter().take(*limit).collect::<Vec<_>>(),
+                    )?;
                     println!("{}", json);
                 }
                 "table" | _ => {
@@ -920,7 +1015,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                     println!("┌────┬──────────────┬─────────┬──────┬─────────┬────────┬────────┐");
                     println!("│ #  │ 时间         │ Commit  │ LOC  │ 债务    │ 复杂度 │ API稳定│");
                     println!("├────┼──────────────┼─────────┼──────┼─────────┼────────┼────────┤");
-                    
+
                     for (i, snapshot) in filtered.iter().rev().take(*limit).enumerate() {
                         println!(
                             "│{:3} │ {} │ {:7} │{:5} │{:8.1} │{:7.1} │{:7.0}%│",
@@ -940,7 +1035,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
         MetricsAction::Compare { from, to, format } => {
             let tracker = QualityTracker::new()?;
             let snapshots = tracker.get_snapshots();
-            
+
             // 查找快照
             let from_snapshot = if from == "latest" {
                 snapshots.last()
@@ -949,7 +1044,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             } else {
                 snapshots.iter().find(|s| s.commit_hash.starts_with(from))
             };
-            
+
             let to_snapshot = if let Some(to_ref) = to {
                 if to_ref == "latest" {
                     snapshots.last()
@@ -961,21 +1056,35 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             } else {
                 snapshots.last()
             };
-            
+
             match (from_snapshot, to_snapshot) {
                 (Some(from_s), Some(to_s)) => {
                     let changes = tracker.compare_snapshots(from_s, to_s);
-                    
+
                     if format == "json" {
                         println!("{}", serde_json::to_string_pretty(&changes)?);
                     } else {
                         println!("📊 快照比较:");
-                        println!("   从: {} ({})", &from_s.commit_hash[..7], from_s.timestamp.format("%Y-%m-%d"));
-                        println!("   到: {} ({})", &to_s.commit_hash[..7], to_s.timestamp.format("%Y-%m-%d"));
+                        println!(
+                            "   从: {} ({})",
+                            &from_s.commit_hash[..7],
+                            from_s.timestamp.format("%Y-%m-%d")
+                        );
+                        println!(
+                            "   到: {} ({})",
+                            &to_s.commit_hash[..7],
+                            to_s.timestamp.format("%Y-%m-%d")
+                        );
                         println!();
                         println!("   变化:");
                         for (key, value) in &changes {
-                            let emoji = if *value > 0.0 { "📈" } else if *value < 0.0 { "📉" } else { "➡️" };
+                            let emoji = if *value > 0.0 {
+                                "📈"
+                            } else if *value < 0.0 {
+                                "📉"
+                            } else {
+                                "➡️"
+                            };
                             println!("     {} {}: {:+.2}", emoji, key, value);
                         }
                     }
@@ -990,25 +1099,30 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
                 println!("⚠️  确认清理超过{}天的历史数据？使用 --yes 确认", keep_days);
                 return Ok(());
             }
-            
+
             let mut tracker = QualityTracker::new()?;
             let removed = tracker.cleanup_old_snapshots(*keep_days)?;
             println!("🧹 已清理 {} 个旧快照", removed);
         }
-        MetricsAction::Export { format, output, branches } => {
+        MetricsAction::Export {
+            format,
+            output,
+            branches,
+        } => {
             println!("📤 导出质量数据...");
-            
+
             let tracker = QualityTracker::new()?;
             let snapshots = if branches.is_empty() {
                 tracker.get_snapshots().to_vec()
             } else {
-                tracker.get_snapshots()
+                tracker
+                    .get_snapshots()
                     .iter()
                     .filter(|s| branches.contains(&s.branch))
                     .cloned()
                     .collect()
             };
-            
+
             match format.as_str() {
                 "csv" => {
                     metrics::storage::export_to_csv(&snapshots, output)?;
@@ -1025,7 +1139,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1033,14 +1147,14 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
 fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     let supported_extensions = vec!["rs", "java", "py", "js", "ts", "go", "c", "cpp"];
-    
+
     for entry in walkdir::WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| !e.file_type().is_dir())
     {
         let path = entry.path();
-        
+
         // 跳过隐藏目录和常见的排除目录
         if path.components().any(|c| {
             c.as_os_str().to_str().map_or(false, |s| {
@@ -1049,13 +1163,13 @@ fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
         }) {
             continue;
         }
-        
+
         if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
             if supported_extensions.contains(&ext) {
                 files.push(path.to_path_buf());
             }
         }
     }
-    
+
     Ok(files)
 }

@@ -342,11 +342,12 @@ impl InsightsGenerator {
     /// 检测循环依赖
     fn detect_circular_dependencies(edges: &[DependencyEdge]) -> Vec<CircularDependency> {
         let mut circular_deps = Vec::new();
-        
+
         // 构建邻接表
         let mut graph: HashMap<String, HashSet<String>> = HashMap::new();
         for edge in edges {
-            graph.entry(edge.from.clone())
+            graph
+                .entry(edge.from.clone())
                 .or_insert_with(HashSet::new)
                 .insert(edge.to.clone());
         }
@@ -376,7 +377,7 @@ impl InsightsGenerator {
             // 找到循环
             return true;
         }
-        
+
         if visited.contains(node) {
             return false;
         }
@@ -428,7 +429,11 @@ impl InsightsGenerator {
                         func.name, line_count
                     ),
                     location: format!("{}:{}", func.name, func.line_start),
-                    severity: if line_count > 100 { Severity::High } else { Severity::Medium },
+                    severity: if line_count > 100 {
+                        Severity::High
+                    } else {
+                        Severity::Medium
+                    },
                     suggestion: "考虑将该函数拆分为多个更小的函数".to_string(),
                 });
             }
@@ -441,7 +446,7 @@ impl InsightsGenerator {
     fn identify_architectural_layers(_summary: &StructuralSummary) -> Vec<ArchitecturalLayer> {
         // 基于命名约定识别层次
         let mut layers = Vec::new();
-        
+
         // 这里是简化的实现，实际可以基于文件路径、包结构等识别
         layers.push(ArchitecturalLayer {
             name: "Domain".to_string(),
@@ -456,7 +461,7 @@ impl InsightsGenerator {
     /// 分析耦合度
     fn analyze_coupling(_summary: &StructuralSummary) -> CouplingAnalysis {
         let avg_coupling = 0.3; // 简化计算
-        
+
         CouplingAnalysis {
             average_coupling: avg_coupling,
             highly_coupled_components: vec![],
@@ -493,10 +498,12 @@ impl InsightsGenerator {
         let mut breaking_changes = Vec::new();
 
         // 检测函数签名变化
-        let prev_funcs: HashMap<_, _> = previous.functions.iter()
+        let prev_funcs: HashMap<_, _> = previous
+            .functions
+            .iter()
             .map(|f| (f.name.clone(), f))
             .collect();
-        
+
         for func in &current.functions {
             if let Some(prev_func) = prev_funcs.get(&func.name) {
                 if func.parameters != prev_func.parameters {
@@ -532,13 +539,14 @@ impl InsightsGenerator {
 
     /// 识别受影响的模块
     fn identify_affected_modules(breaking_changes: &[BreakingChange]) -> Vec<AffectedModule> {
-        breaking_changes.iter().map(|change| {
-            AffectedModule {
+        breaking_changes
+            .iter()
+            .map(|change| AffectedModule {
                 module_path: change.component.clone(),
                 impact_level: ImpactLevel::Direct,
                 required_changes: vec![change.migration_suggestion.clone()],
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     /// 计算影响评分
@@ -547,7 +555,7 @@ impl InsightsGenerator {
         affected_modules: &[AffectedModule],
     ) -> ImpactScore {
         let score = breaking_changes.len() as f64 * 10.0 + affected_modules.len() as f64 * 5.0;
-        
+
         ImpactScore {
             overall_score: score,
             breaking_changes_count: breaking_changes.len(),
@@ -563,7 +571,9 @@ impl InsightsGenerator {
 
     /// 分析 API 表面
     fn analyze_api_surface(summary: &StructuralSummary) -> ApiSurface {
-        let public_apis: Vec<PublicApi> = summary.functions.iter()
+        let public_apis: Vec<PublicApi> = summary
+            .functions
+            .iter()
             .filter(|f| f.visibility.as_ref().map_or(false, |v| v == "public"))
             .map(|f| PublicApi {
                 name: f.name.clone(),
@@ -590,15 +600,28 @@ impl InsightsGenerator {
 
     /// 识别质量热点
     fn identify_quality_hotspots(summary: &StructuralSummary) -> QualityHotspots {
-        let complexity_hotspots: Vec<ComplexityHotspot> = summary.functions.iter()
+        let complexity_hotspots: Vec<ComplexityHotspot> = summary
+            .functions
+            .iter()
             .filter(|f| f.parameters.len() > 5 || (f.line_end - f.line_start) > 50)
             .map(|f| ComplexityHotspot {
                 component: f.name.clone(),
                 complexity_score: ((f.line_end - f.line_start) + f.parameters.len() * 5) as u32,
                 reasons: vec![
-                    if f.parameters.len() > 5 { Some(format!("参数过多: {}", f.parameters.len())) } else { None },
-                    if (f.line_end - f.line_start) > 50 { Some(format!("函数过长: {} 行", f.line_end - f.line_start)) } else { None },
-                ].into_iter().flatten().collect(),
+                    if f.parameters.len() > 5 {
+                        Some(format!("参数过多: {}", f.parameters.len()))
+                    } else {
+                        None
+                    },
+                    if (f.line_end - f.line_start) > 50 {
+                        Some(format!("函数过长: {} 行", f.line_end - f.line_start))
+                    } else {
+                        None
+                    },
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
                 refactoring_suggestions: vec![
                     "考虑使用参数对象模式".to_string(),
                     "将函数拆分为更小的功能单元".to_string(),
@@ -607,7 +630,8 @@ impl InsightsGenerator {
             .collect();
 
         let maintenance_burden = MaintenanceBurden {
-            high_maintenance_components: complexity_hotspots.iter()
+            high_maintenance_components: complexity_hotspots
+                .iter()
                 .map(|h| h.component.clone())
                 .collect(),
             technical_debt_score: complexity_hotspots.len() as f64 * 10.0,
@@ -626,9 +650,9 @@ impl InsightsGenerator {
 impl ProjectInsights {
     pub fn to_ai_context(&self) -> String {
         let mut context = String::new();
-        
+
         context.push_str("## 项目架构洞察\n\n");
-        
+
         // 架构问题
         if !self.architecture.pattern_violations.is_empty() {
             context.push_str("### 架构模式违规\n");
@@ -645,7 +669,12 @@ impl ProjectInsights {
         }
 
         // 循环依赖
-        if !self.architecture.module_dependencies.circular_dependencies.is_empty() {
+        if !self
+            .architecture
+            .module_dependencies
+            .circular_dependencies
+            .is_empty()
+        {
             context.push_str("### 循环依赖\n");
             for circular in &self.architecture.module_dependencies.circular_dependencies {
                 context.push_str(&format!(

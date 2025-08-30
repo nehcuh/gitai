@@ -1,7 +1,7 @@
 // 依赖图模块 - 用于构建和分析代码间的依赖关系
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::tree_sitter::{ClassInfo, FunctionInfo, StructuralSummary};
 use serde::{Deserialize, Serialize};
-use crate::tree_sitter::{StructuralSummary, FunctionInfo, ClassInfo};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// 依赖图
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,16 +182,16 @@ impl DependencyGraph {
     /// 从结构化摘要构建依赖图
     pub fn from_structural_summary(summary: &StructuralSummary, file_path: &str) -> Self {
         let mut graph = Self::new();
-        
+
         // 添加文件节点
         let file_id = format!("file:{}", file_path);
         graph.add_file_node(&file_id, file_path);
-        
+
         // 添加函数节点
         for func in &summary.functions {
             let func_id = format!("func:{}::{}", file_path, func.name);
             graph.add_function_node(&func_id, func, file_path);
-            
+
             // 文件包含函数
             graph.add_edge(Edge {
                 from: file_id.clone(),
@@ -201,12 +201,12 @@ impl DependencyGraph {
                 metadata: None,
             });
         }
-        
+
         // 添加类节点
         for class in &summary.classes {
             let class_id = format!("class:{}::{}", file_path, class.name);
             graph.add_class_node(&class_id, class, file_path);
-            
+
             // 文件包含类
             graph.add_edge(Edge {
                 from: file_id.clone(),
@@ -216,7 +216,7 @@ impl DependencyGraph {
                 metadata: None,
             });
         }
-        
+
         // 处理导入关系（为每个导入创建模块节点）
         for import in &summary.imports {
             let module_id = format!("module:{}", import);
@@ -291,13 +291,17 @@ impl DependencyGraph {
                             to: callee_id.clone(),
                             edge_type: EdgeType::Calls,
                             weight: 1.0,
-                            metadata: Some(EdgeMetadata { call_count: Some(1), is_strong_dependency: true, notes: None }),
+                            metadata: Some(EdgeMetadata {
+                                call_count: Some(1),
+                                is_strong_dependency: true,
+                                notes: None,
+                            }),
                         });
                     }
                 }
             }
         }
-        
+
         graph.rebuild_adjacency_lists();
         graph
     }
@@ -355,7 +359,9 @@ impl DependencyGraph {
 
     /// 添加文件节点
     fn add_file_node(&mut self, id: &str, file_path: &str) {
-        let size = std::fs::metadata(file_path).map(|m| m.len() as usize).unwrap_or(0);
+        let size = std::fs::metadata(file_path)
+            .map(|m| m.len() as usize)
+            .unwrap_or(0);
         let node = Node {
             id: id.to_string(),
             node_type: NodeType::File(FileNode {
@@ -384,29 +390,46 @@ impl DependencyGraph {
     /// 规则：
     /// - 通过 caller_file_path 和 call_line 定位调用发生的函数（作为 caller）
     /// - 在全图中按函数名唯一匹配 callee（若有多个同名函数则跳过，以避免歧义）
-    pub fn add_resolved_call(&mut self, caller_file_path: &str, call_line: usize, callee_name: &str) {
+    pub fn add_resolved_call(
+        &mut self,
+        caller_file_path: &str,
+        call_line: usize,
+        callee_name: &str,
+    ) {
         // 定位 caller
-        let caller_id_opt = self.nodes.iter()
+        let caller_id_opt = self
+            .nodes
+            .iter()
             .filter_map(|(id, node)| match &node.node_type {
-                NodeType::Function(_) if node.metadata.file_path == caller_file_path
-                    && node.metadata.start_line <= call_line
-                    && node.metadata.end_line >= call_line => Some(id.clone()),
+                NodeType::Function(_)
+                    if node.metadata.file_path == caller_file_path
+                        && node.metadata.start_line <= call_line
+                        && node.metadata.end_line >= call_line =>
+                {
+                    Some(id.clone())
+                }
                 _ => None,
             })
             .next();
 
-        if caller_id_opt.is_none() { return; }
+        if caller_id_opt.is_none() {
+            return;
+        }
         let caller_id = caller_id_opt.unwrap();
 
         // 唯一定位 callee（同名函数必须唯一）
-        let mut matches: Vec<String> = self.nodes.iter()
+        let mut matches: Vec<String> = self
+            .nodes
+            .iter()
             .filter_map(|(id, node)| match &node.node_type {
                 NodeType::Function(f) if f.name == callee_name => Some(id.clone()),
                 _ => None,
             })
             .collect();
 
-        if matches.len() != 1 { return; }
+        if matches.len() != 1 {
+            return;
+        }
         let callee_id = matches.pop().unwrap();
 
         self.add_edge(Edge {
@@ -414,7 +437,11 @@ impl DependencyGraph {
             to: callee_id,
             edge_type: EdgeType::Calls,
             weight: 1.0,
-            metadata: Some(EdgeMetadata { call_count: Some(1), is_strong_dependency: true, notes: None }),
+            metadata: Some(EdgeMetadata {
+                call_count: Some(1),
+                is_strong_dependency: true,
+                notes: None,
+            }),
         });
     }
 
@@ -455,13 +482,13 @@ impl DependencyGraph {
     pub fn rebuild_adjacency_lists(&mut self) {
         self.adjacency_list.clear();
         self.reverse_adjacency_list.clear();
-        
+
         for edge in &self.edges {
             self.adjacency_list
                 .entry(edge.from.clone())
                 .or_insert_with(Vec::new)
                 .push(edge.to.clone());
-            
+
             self.reverse_adjacency_list
                 .entry(edge.to.clone())
                 .or_insert_with(Vec::new)
@@ -486,18 +513,22 @@ impl DependencyGraph {
     }
 
     /// 使用BFS计算从某个节点开始的影响范围
-    pub fn calculate_impact_scope(&self, changed_node_id: &str, max_depth: usize) -> HashMap<String, usize> {
+    pub fn calculate_impact_scope(
+        &self,
+        changed_node_id: &str,
+        max_depth: usize,
+    ) -> HashMap<String, usize> {
         let mut visited = HashMap::new();
         let mut queue = VecDeque::new();
-        
+
         queue.push_back((changed_node_id.to_string(), 0));
         visited.insert(changed_node_id.to_string(), 0);
-        
+
         while let Some((node_id, depth)) = queue.pop_front() {
             if depth >= max_depth {
                 continue;
             }
-            
+
             // 获取所有依赖当前节点的节点（反向传播）
             if let Some(dependents) = self.reverse_adjacency_list.get(&node_id) {
                 for dependent in dependents {
@@ -508,7 +539,7 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         visited
     }
 
@@ -518,7 +549,7 @@ impl DependencyGraph {
         let mut visited = HashSet::new();
         let mut rec_stack = HashSet::new();
         let mut path = Vec::new();
-        
+
         for node_id in self.nodes.keys() {
             if !visited.contains(node_id) {
                 self.dfs_cycle_detection(
@@ -530,7 +561,7 @@ impl DependencyGraph {
                 );
             }
         }
-        
+
         cycles
     }
 
@@ -546,7 +577,7 @@ impl DependencyGraph {
         visited.insert(node_id.to_string());
         rec_stack.insert(node_id.to_string());
         path.push(node_id.to_string());
-        
+
         if let Some(neighbors) = self.adjacency_list.get(node_id) {
             for neighbor in neighbors {
                 if !visited.contains(neighbor) {
@@ -559,7 +590,7 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         path.pop();
         rec_stack.remove(node_id);
     }
@@ -568,7 +599,7 @@ impl DependencyGraph {
     pub fn calculate_centrality(&self, node_id: &str) -> f32 {
         let in_degree = self.get_dependents(node_id).len() as f32;
         let out_degree = self.get_dependencies(node_id).len() as f32;
-        
+
         // 简单的度中心性计算
         (in_degree + out_degree) / (self.nodes.len() as f32 * 2.0)
     }
@@ -576,14 +607,14 @@ impl DependencyGraph {
     /// 识别关键节点（高中心性节点）
     pub fn identify_critical_nodes(&self, threshold: f32) -> Vec<(&String, f32)> {
         let mut critical_nodes = Vec::new();
-        
+
         for node_id in self.nodes.keys() {
             let centrality = self.calculate_centrality(node_id);
             if centrality > threshold {
                 critical_nodes.push((node_id, centrality));
             }
         }
-        
+
         critical_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         critical_nodes
     }
@@ -591,43 +622,43 @@ impl DependencyGraph {
     /// 计算函数的重要性分数
     fn calculate_function_importance(func: &FunctionInfo) -> f32 {
         let mut score = 0.5;
-        
+
         // 公共函数更重要
         if matches!(func.visibility.as_deref(), Some("public")) {
             score += 0.2;
         }
-        
+
         // 异步函数通常更重要
         if func.is_async {
             score += 0.1;
         }
-        
+
         // 参数多的函数可能更复杂
         score += (func.parameters.len() as f32) * 0.02;
-        
+
         score.min(1.0)
     }
 
     /// 计算类的重要性分数
     fn calculate_class_importance(class: &ClassInfo) -> f32 {
         let mut score = 0.5;
-        
+
         // 抽象类通常更重要
         if class.is_abstract {
             score += 0.15;
         }
-        
+
         // 继承关系增加重要性
         if class.extends.is_some() {
             score += 0.1;
         }
-        
+
         // 实现接口增加重要性
         score += (class.implements.len() as f32) * 0.05;
-        
+
         // 方法多的类更重要
         score += (class.methods.len() as f32) * 0.01;
-        
+
         score.min(1.0)
     }
 
@@ -637,7 +668,7 @@ impl DependencyGraph {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        
+
         match extension {
             "rs" => "rust",
             "java" => "java",
@@ -648,7 +679,8 @@ impl DependencyGraph {
             "c" => "c",
             "cpp" | "cc" => "cpp",
             _ => "unknown",
-        }.to_string()
+        }
+        .to_string()
     }
 
     /// 获取图的统计信息
@@ -794,7 +826,7 @@ mod tests {
     #[test]
     fn test_graph_construction() {
         let mut graph = DependencyGraph::new();
-        
+
         // 添加节点
         let node1 = Node {
             id: "func1".to_string(),
@@ -814,9 +846,9 @@ mod tests {
             },
             importance_score: 0.7,
         };
-        
+
         graph.add_node(node1);
-        
+
         // 添加边
         graph.add_edge(Edge {
             from: "func1".to_string(),
@@ -825,7 +857,7 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         assert_eq!(graph.nodes.len(), 1);
         assert_eq!(graph.edges.len(), 1);
     }
@@ -833,7 +865,7 @@ mod tests {
     #[test]
     fn test_impact_scope_calculation() {
         let mut graph = DependencyGraph::new();
-        
+
         // 构建简单的依赖链: A -> B -> C -> D
         for id in ["A", "B", "C", "D"] {
             graph.add_node(Node {
@@ -855,7 +887,7 @@ mod tests {
                 importance_score: 0.5,
             });
         }
-        
+
         graph.add_edge(Edge {
             from: "B".to_string(),
             to: "A".to_string(),
@@ -863,7 +895,7 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.add_edge(Edge {
             from: "C".to_string(),
             to: "B".to_string(),
@@ -871,7 +903,7 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.add_edge(Edge {
             from: "D".to_string(),
             to: "C".to_string(),
@@ -879,12 +911,12 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.rebuild_adjacency_lists();
-        
+
         // 测试从A开始的影响范围
         let impact = graph.calculate_impact_scope("A", 3);
-        
+
         assert_eq!(impact.len(), 4); // A, B, C, D都受影响
         assert_eq!(impact.get("A"), Some(&0));
         assert_eq!(impact.get("B"), Some(&1));
@@ -895,7 +927,7 @@ mod tests {
     #[test]
     fn test_cycle_detection() {
         let mut graph = DependencyGraph::new();
-        
+
         // 构建有环的图: A -> B -> C -> A
         for id in ["A", "B", "C"] {
             graph.add_node(Node {
@@ -917,7 +949,7 @@ mod tests {
                 importance_score: 0.5,
             });
         }
-        
+
         graph.add_edge(Edge {
             from: "A".to_string(),
             to: "B".to_string(),
@@ -925,7 +957,7 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.add_edge(Edge {
             from: "B".to_string(),
             to: "C".to_string(),
@@ -933,7 +965,7 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.add_edge(Edge {
             from: "C".to_string(),
             to: "A".to_string(),
@@ -941,9 +973,9 @@ mod tests {
             weight: 1.0,
             metadata: None,
         });
-        
+
         graph.rebuild_adjacency_lists();
-        
+
         let cycles = graph.detect_cycles();
         assert!(!cycles.is_empty());
     }
@@ -961,7 +993,13 @@ mod tests {
                 return_type: None,
                 is_async: false,
             }),
-            metadata: NodeMetadata { file_path: "a.rs".to_string(), start_line: 1, end_line: 3, complexity: 1, created_at: 0 },
+            metadata: NodeMetadata {
+                file_path: "a.rs".to_string(),
+                start_line: 1,
+                end_line: 3,
+                complexity: 1,
+                created_at: 0,
+            },
             importance_score: 0.5,
         });
         graph.add_node(Node {
@@ -973,11 +1011,23 @@ mod tests {
                 return_type: None,
                 is_async: false,
             }),
-            metadata: NodeMetadata { file_path: "b.rs".to_string(), start_line: 1, end_line: 3, complexity: 1, created_at: 0 },
+            metadata: NodeMetadata {
+                file_path: "b.rs".to_string(),
+                start_line: 1,
+                end_line: 3,
+                complexity: 1,
+                created_at: 0,
+            },
             importance_score: 0.5,
         });
         // 边
-        graph.add_edge(Edge { from: "func:A".to_string(), to: "func:B".to_string(), edge_type: EdgeType::Calls, weight: 1.0, metadata: None });
+        graph.add_edge(Edge {
+            from: "func:A".to_string(),
+            to: "func:B".to_string(),
+            edge_type: EdgeType::Calls,
+            weight: 1.0,
+            metadata: None,
+        });
         graph.rebuild_adjacency_lists();
 
         let dot = graph.to_dot(None);
@@ -1001,10 +1051,17 @@ mod tests {
         assert!(graph.nodes.contains_key("module:serde::Serialize"));
 
         // 应存在从文件到模块的 Imports 边
-        let mut imports_edges = graph.edges.iter().filter(|e| e.edge_type == EdgeType::Imports);
+        let mut imports_edges = graph
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Imports);
         assert!(imports_edges.any(|e| e.from == "file:src/lib.rs" && e.to == "module:std::fmt"));
-        let mut imports_edges2 = graph.edges.iter().filter(|e| e.edge_type == EdgeType::Imports);
-        assert!(imports_edges2.any(|e| e.from == "file:src/lib.rs" && e.to == "module:serde::Serialize"));
+        let mut imports_edges2 = graph
+            .edges
+            .iter()
+            .filter(|e| e.edge_type == EdgeType::Imports);
+        assert!(imports_edges2
+            .any(|e| e.from == "file:src/lib.rs" && e.to == "module:serde::Serialize"));
     }
 
     #[test]
@@ -1028,8 +1085,11 @@ mod tests {
         let graph = DependencyGraph::from_structural_summary(&summary, file_path);
         let file_id = format!("file:{}", file_path);
         let func_id = format!("func:{}::{}", file_path, "foo");
-        
+
         // 存在 Exports 边
-        assert!(graph.edges.iter().any(|e| e.edge_type == EdgeType::Exports && e.from == file_id && e.to == func_id));
+        assert!(graph
+            .edges
+            .iter()
+            .any(|e| e.edge_type == EdgeType::Exports && e.from == file_id && e.to == func_id));
     }
 }

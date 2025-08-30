@@ -1,11 +1,18 @@
-use std::path::{Path, PathBuf};
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::tree_sitter::SupportedLanguage;
 
-const NVIM_TREESITTER_BASE: &str = "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries";
-const QUERY_FILES: &[&str] = &["highlights.scm", "locals.scm", "injections.scm", "folds.scm", "indents.scm"];
+const NVIM_TREESITTER_BASE: &str =
+    "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries";
+const QUERY_FILES: &[&str] = &[
+    "highlights.scm",
+    "locals.scm",
+    "injections.scm",
+    "folds.scm",
+    "indents.scm",
+];
 
 /// Queries管理器，负责下载和缓存Tree-sitter查询文件
 pub struct QueriesManager {
@@ -30,17 +37,25 @@ impl QueriesManager {
             .unwrap_or_else(|| dirs::home_dir().unwrap().join(".cache"))
             .join("gitai")
             .join("tree-sitter-queries");
-        
-        log::debug!("创建 Tree-sitter 查询管理器，缓存目录: {}", cache_dir.display());
-        
+
+        log::debug!(
+            "创建 Tree-sitter 查询管理器，缓存目录: {}",
+            cache_dir.display()
+        );
+
         std::fs::create_dir_all(&cache_dir).map_err(|e| {
-            let error = format!("Failed to create cache directory {}: {}", cache_dir.display(), e);
+            let error = format!(
+                "Failed to create cache directory {}: {}",
+                cache_dir.display(),
+                e
+            );
             log::error!("{}", error);
-            Box::new(std::io::Error::new(std::io::ErrorKind::Other, error)) as Box<dyn std::error::Error + Send + Sync>
+            Box::new(std::io::Error::new(std::io::ErrorKind::Other, error))
+                as Box<dyn std::error::Error + Send + Sync>
         })?;
-        
+
         log::info!("Tree-sitter 查询管理器初始化成功");
-        
+
         Ok(Self {
             cache_dir,
             queries: HashMap::new(),
@@ -48,7 +63,9 @@ impl QueriesManager {
     }
 
     /// 确保所有支持的语言的queries已下载
-    pub async fn ensure_queries_downloaded(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn ensure_queries_downloaded(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for lang in SupportedLanguage::all() {
             self.ensure_language_queries(lang).await?;
         }
@@ -56,9 +73,12 @@ impl QueriesManager {
     }
 
     /// 确保特定语言的queries已下载
-    pub async fn ensure_language_queries(&self, language: SupportedLanguage) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn ensure_language_queries(
+        &self,
+        language: SupportedLanguage,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let lang_dir = self.cache_dir.join(language.name());
-        
+
         // 检查是否已存在
         if lang_dir.exists() && self.is_queries_complete(&lang_dir) {
             log::debug!("Queries for {} already cached", language.name());
@@ -67,14 +87,19 @@ impl QueriesManager {
 
         // 创建语言目录
         fs::create_dir_all(&lang_dir)?;
-        
+
         log::info!("Downloading queries for {}", language.name());
-        
+
         // 下载每个查询文件
         for query_file in QUERY_FILES {
-            let url = format!("{}/{}/{}", NVIM_TREESITTER_BASE, language.name(), query_file);
+            let url = format!(
+                "{}/{}/{}",
+                NVIM_TREESITTER_BASE,
+                language.name(),
+                query_file
+            );
             let file_path = lang_dir.join(query_file);
-            
+
             match self.download_query_file(&url).await {
                 Ok(content) => {
                     fs::write(&file_path, content)?;
@@ -82,21 +107,27 @@ impl QueriesManager {
                 }
                 Err(e) => {
                     // 某些语言可能没有所有的查询文件，这是正常的
-                    log::debug!("Could not download {} for {}: {}", query_file, language.name(), e);
+                    log::debug!(
+                        "Could not download {} for {}: {}",
+                        query_file,
+                        language.name(),
+                        e
+                    );
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// 下载单个查询文件
-    async fn download_query_file(&self, url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn download_query_file(
+        &self,
+        url: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let client = reqwest::Client::new();
-        let response = client.get(url)
-            .send()
-            .await?;
-        
+        let response = client.get(url).send().await?;
+
         if response.status().is_success() {
             Ok(response.text().await?)
         } else {
@@ -110,7 +141,10 @@ impl QueriesManager {
     }
 
     /// 加载特定语言的查询
-    pub fn load_language_queries(&mut self, language: SupportedLanguage) -> Result<&LanguageQueries, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn load_language_queries(
+        &mut self,
+        language: SupportedLanguage,
+    ) -> Result<&LanguageQueries, Box<dyn std::error::Error + Send + Sync>> {
         // 如果已加载，直接返回
         if self.queries.contains_key(&language) {
             return Ok(&self.queries[&language]);
@@ -141,9 +175,13 @@ impl QueriesManager {
     }
 
     /// 获取查询内容
-    pub fn get_query(&mut self, language: SupportedLanguage, query_type: QueryType) -> Option<String> {
+    pub fn get_query(
+        &mut self,
+        language: SupportedLanguage,
+        query_type: QueryType,
+    ) -> Option<String> {
         self.load_language_queries(language).ok()?;
-        
+
         let queries = self.queries.get(&language)?;
         match query_type {
             QueryType::Highlights => queries.highlights.clone(),
@@ -186,10 +224,13 @@ mod tests {
     #[tokio::test]
     async fn test_queries_download() {
         let manager = QueriesManager::new().unwrap();
-        
+
         // 测试下载Java queries
-        manager.ensure_language_queries(SupportedLanguage::Java).await.unwrap();
-        
+        manager
+            .ensure_language_queries(SupportedLanguage::Java)
+            .await
+            .unwrap();
+
         // 验证文件存在
         let java_dir = manager.cache_dir.join("java");
         assert!(java_dir.exists());

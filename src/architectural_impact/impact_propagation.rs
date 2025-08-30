@@ -1,7 +1,7 @@
 // 影响传播算法模块 - 计算代码变更的影响传播范围
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::architectural_impact::dependency_graph::{DependencyGraph, EdgeType, NodeType};
 use serde::{Deserialize, Serialize};
-use crate::architectural_impact::dependency_graph::{DependencyGraph, NodeType, EdgeType};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// 影响传播分析器
 #[derive(Debug, Clone)]
@@ -159,10 +159,10 @@ impl ImpactPropagation {
     ) -> ImpactScope {
         // 清理之前的缓存
         self.impact_scores.clear();
-        
+
         // 使用BFS计算影响传播
         let impact_map = self.bfs_propagation(&changed_nodes, max_depth);
-        
+
         // 构建影响范围结果
         self.build_impact_scope(changed_nodes, impact_map, max_depth)
     }
@@ -193,7 +193,7 @@ impl ImpactPropagation {
 
             // 获取当前节点的所有依赖者
             let dependents = self.graph.get_dependents(&current_node);
-            
+
             for dependent_id in dependents {
                 if visited.contains(dependent_id) {
                     continue;
@@ -207,12 +207,18 @@ impl ImpactPropagation {
                     depth + 1,
                 );
 
-                if propagated_score > 0.05 {  // 只保留有意义的影响
+                if propagated_score > 0.05 {
+                    // 只保留有意义的影响
                     impact_map.insert(
                         dependent_id.clone(),
-                        (propagated_score, depth + 1, propagation_type.clone())
+                        (propagated_score, depth + 1, propagation_type.clone()),
                     );
-                    queue.push_back((dependent_id.clone(), propagated_score, depth + 1, propagation_type));
+                    queue.push_back((
+                        dependent_id.clone(),
+                        propagated_score,
+                        depth + 1,
+                        propagation_type,
+                    ));
                     visited.insert(dependent_id.clone());
                 }
             }
@@ -231,13 +237,13 @@ impl ImpactPropagation {
     ) -> (f32, PropagationType) {
         // 基础衰减因子
         let distance_decay = 0.8_f32.powi(depth as i32);
-        
+
         // 根据边类型和节点类型调整影响因子
         let edge_factor = self.get_edge_impact_factor(source_id, target_id);
         let node_factor = self.get_node_impact_factor(target_id);
-        
+
         let final_score = source_score * distance_decay * edge_factor * node_factor;
-        
+
         let propagation_type = if depth == 1 {
             PropagationType::Direct
         } else if final_score > 0.5 {
@@ -252,21 +258,29 @@ impl ImpactPropagation {
     /// 获取边的影响因子
     fn get_edge_impact_factor(&self, source_id: &str, target_id: &str) -> f32 {
         // 查找对应的边（支持反向匹配，以适配反向传播的邻接遍历）
-        let edge_opt = self.graph.edges.iter()
+        let edge_opt = self
+            .graph
+            .edges
+            .iter()
             .find(|e| e.from == source_id && e.to == target_id)
-            .or_else(|| self.graph.edges.iter().find(|e| e.from == target_id && e.to == source_id));
+            .or_else(|| {
+                self.graph
+                    .edges
+                    .iter()
+                    .find(|e| e.from == target_id && e.to == source_id)
+            });
 
         match edge_opt {
             Some(e) => match e.edge_type {
-                EdgeType::Calls => 0.9,        // 函数调用影响很大
-                EdgeType::Inherits => 0.95,    // 继承关系影响极大
-                EdgeType::Implements => 0.9,   // 实现关系影响很大
-                EdgeType::Uses => 0.7,         // 使用关系中等影响
-                EdgeType::References => 0.6,   // 引用关系较小影响
-                EdgeType::Imports => 0.5,      // 导入关系较小影响
-                EdgeType::Contains => 0.8,     // 包含关系影响较大
-                EdgeType::DependsOn => 0.8,    // 依赖关系影响较大
-                EdgeType::Exports => 0.3,      // 导出关系影响较小
+                EdgeType::Calls => 0.9,      // 函数调用影响很大
+                EdgeType::Inherits => 0.95,  // 继承关系影响极大
+                EdgeType::Implements => 0.9, // 实现关系影响很大
+                EdgeType::Uses => 0.7,       // 使用关系中等影响
+                EdgeType::References => 0.6, // 引用关系较小影响
+                EdgeType::Imports => 0.5,    // 导入关系较小影响
+                EdgeType::Contains => 0.8,   // 包含关系影响较大
+                EdgeType::DependsOn => 0.8,  // 依赖关系影响较大
+                EdgeType::Exports => 0.3,    // 导出关系影响较小
             },
             None => 0.4, // 默认影响因子
         }
@@ -277,13 +291,13 @@ impl ImpactPropagation {
         if let Some(node) = self.graph.nodes.get(node_id) {
             // 基于节点重要性分数
             let base_factor = node.importance_score;
-            
+
             // 基于节点类型调整
             let type_factor = match node.node_type {
                 NodeType::Function(_) => 1.0,
-                NodeType::Class(_) => 1.2,      // 类变更影响更大
-                NodeType::Module(_) => 1.1,     // 模块变更影响较大
-                NodeType::File(_) => 0.8,       // 文件变更影响相对较小
+                NodeType::Class(_) => 1.2,  // 类变更影响更大
+                NodeType::Module(_) => 1.1, // 模块变更影响较大
+                NodeType::File(_) => 0.8,   // 文件变更影响相对较小
             };
 
             base_factor * type_factor
@@ -405,7 +419,7 @@ impl ImpactPropagation {
         max_depth: usize,
     ) -> Vec<ImpactPath> {
         let mut paths = Vec::new();
-        
+
         // 选择受影响分数最高的若干个节点作为终点（排除源节点）
         let mut candidates: Vec<(String, f32)> = impact_map
             .iter()
@@ -421,7 +435,7 @@ impl ImpactPropagation {
                 if let Some(path) = self.find_shortest_path(source, target, max_depth) {
                     let weight = self.calculate_path_weight(&path);
                     let description = format!("从 {} 到 {} 的关键影响路径", source, target);
-                    
+
                     paths.push(ImpactPath {
                         nodes: path,
                         weight,
@@ -435,7 +449,7 @@ impl ImpactPropagation {
         // 按权重排序，只保留前5条关键路径
         paths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
         paths.truncate(5);
-        
+
         paths
     }
 
@@ -457,7 +471,7 @@ impl ImpactPropagation {
                 // 重构路径
                 let mut path = Vec::new();
                 let mut current_node = end.to_string();
-                
+
                 while let Some(prev) = parent.get(&current_node) {
                     path.push(current_node.clone());
                     current_node = prev.clone();
@@ -487,7 +501,7 @@ impl ImpactPropagation {
         }
 
         let mut total_weight = 1.0;
-        
+
         for window in path.windows(2) {
             let from = &window[0];
             let to = &window[1];
@@ -508,16 +522,16 @@ impl ImpactPropagation {
 
         let total_impacted = impact_scope.statistics.total_impacted_nodes as f32;
         let total_nodes = self.graph.nodes.len() as f32;
-        
+
         // 基础半径：受影响节点数占比
         let base_radius = total_impacted / total_nodes;
-        
+
         // 根据平均影响分数调整
         let score_factor = impact_scope.statistics.average_impact_score;
-        
+
         // 根据传播深度调整
         let depth_factor = (impact_scope.impact_depth as f32) / 10.0;
-        
+
         (base_radius + score_factor * 0.3 + depth_factor * 0.2).min(1.0)
     }
 }
@@ -569,11 +583,13 @@ impl PropagationRules {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::architectural_impact::dependency_graph::{DependencyGraph, Node, Edge, NodeType, FunctionNode, NodeMetadata, Visibility};
+    use crate::architectural_impact::dependency_graph::{
+        DependencyGraph, Edge, FunctionNode, Node, NodeMetadata, NodeType, Visibility,
+    };
 
     fn create_test_graph() -> DependencyGraph {
         let mut graph = DependencyGraph::new();
-        
+
         // 创建测试节点
         for i in 1..=5 {
             let id = format!("func{}", i);
@@ -657,7 +673,7 @@ mod tests {
 
         // func2 和 func5 应该是直接影响
         assert!(!impact_scope.direct_impacts.is_empty());
-        
+
         // func3 和 func4 应该是间接影响
         assert!(!impact_scope.indirect_impacts.is_empty());
     }
@@ -671,7 +687,7 @@ mod tests {
 
         // 应该能找到关键路径
         assert!(!impact_scope.critical_paths.is_empty());
-        
+
         // 检查路径结构
         for path in &impact_scope.critical_paths {
             assert!(path.nodes.len() >= 2);

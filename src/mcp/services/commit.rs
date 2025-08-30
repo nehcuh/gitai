@@ -2,7 +2,7 @@
 //
 // 提供智能提交功能的 MCP 服务实现
 
-use crate::{config::Config, commit, mcp::*};
+use crate::{commit, config::Config, mcp::*};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -52,38 +52,41 @@ impl CommitService {
     }
 
     /// 执行提交
-    async fn execute_commit(&self, params: CommitParams) -> Result<CommitResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_commit(
+        &self,
+        params: CommitParams,
+    ) -> Result<CommitResult, Box<dyn std::error::Error + Send + Sync>> {
         // 构建提交配置
         let mut commit_config = self.default_config.clone();
-        
+
         // 应用参数覆盖
         if let Some(message) = params.message {
             commit_config.message = Some(message);
         }
-        
+
         if let Some(issue_ids) = params.issue_ids {
             commit_config.issue_ids = issue_ids;
         }
-        
+
         if let Some(add_all) = params.add_all {
             commit_config.add_all = add_all;
         }
-        
+
         if let Some(review) = params.review {
             commit_config.review = review;
         }
-        
+
         if let Some(tree_sitter) = params.tree_sitter {
             commit_config.tree_sitter = tree_sitter;
         }
-        
+
         if let Some(dry_run) = params.dry_run {
             commit_config.dry_run = dry_run;
         }
 
         // 执行提交
         let commit_result = commit::execute_commit_with_result(&self.config, commit_config).await?;
-        
+
         // 转换为 MCP 使用的 CommitResult 格式
         let result = CommitResult {
             success: commit_result.success,
@@ -91,13 +94,25 @@ impl CommitService {
             commit_hash: commit_result.commit_hash,
             changes_count: commit_result.changes_count,
             review_results: commit_result.review_results.map(|r| ReviewResults {
-                score: if r.critical_issues > 0 { Some(30) } else if r.issues_found > 0 { Some(60) } else { Some(80) },
-                findings: (0..r.issues_found).map(|i| format!("Issue {}", i + 1)).collect(),
-                recommendations: if let Some(report) = r.report { vec![report] } else { vec![] },
+                score: if r.critical_issues > 0 {
+                    Some(30)
+                } else if r.issues_found > 0 {
+                    Some(60)
+                } else {
+                    Some(80)
+                },
+                findings: (0..r.issues_found)
+                    .map(|i| format!("Issue {}", i + 1))
+                    .collect(),
+                recommendations: if let Some(report) = r.report {
+                    vec![report]
+                } else {
+                    vec![]
+                },
             }),
             details: commit_result.details,
         };
-        
+
         Ok(result)
     }
 }
@@ -116,49 +131,60 @@ impl crate::mcp::GitAiMcpService for CommitService {
         vec![Tool {
             name: "execute_commit".to_string().into(),
             description: self.description().to_string().into(),
-            input_schema: Arc::new(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "提交信息 (可选，未指定时由 AI 生成)"
+            input_schema: Arc::new(
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "提交信息 (可选，未指定时由 AI 生成)"
+                        },
+                        "issue_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "关联的 Issue ID 列表 (可选，空数组表示不关联)"
+                        },
+                        "add_all": {
+                            "type": "boolean",
+                            "description": "是否添加所有修改的文件 (可选，默认 false)"
+                        },
+                        "review": {
+                            "type": "boolean",
+                            "description": "是否在提交前进行代码评审 (可选，默认 false)"
+                        },
+                        "tree_sitter": {
+                            "type": "boolean",
+                            "description": "是否在评审中启用 Tree-sitter 分析 (可选，默认 false)"
+                        },
+                        "dry_run": {
+                            "type": "boolean",
+                            "description": "是否试运行，不实际提交 (可选，默认 false)"
+                        }
                     },
-                    "issue_ids": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "关联的 Issue ID 列表 (可选，空数组表示不关联)"
-                    },
-                    "add_all": {
-                        "type": "boolean",
-                        "description": "是否添加所有修改的文件 (可选，默认 false)"
-                    },
-                    "review": {
-                        "type": "boolean",
-                        "description": "是否在提交前进行代码评审 (可选，默认 false)"
-                    },
-                    "tree_sitter": {
-                        "type": "boolean",
-                        "description": "是否在评审中启用 Tree-sitter 分析 (可选，默认 false)"
-                    },
-                    "dry_run": {
-                        "type": "boolean",
-                        "description": "是否试运行，不实际提交 (可选，默认 false)"
-                    }
-                },
-                "required": []
-            }).as_object().unwrap().clone()),
+                    "required": []
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
         }]
     }
 
-    async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> crate::mcp::McpResult<serde_json::Value> {
         match name {
             "execute_commit" => {
                 let params: CommitParams = serde_json::from_value(arguments)
                     .map_err(|e| crate::mcp::parse_error("commit", e))?;
-                
-                let result = self.execute_commit(params).await
+
+                let result = self
+                    .execute_commit(params)
+                    .await
                     .map_err(|e| crate::mcp::execution_error("Commit", e))?;
-                
+
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("commit", e))?)
             }

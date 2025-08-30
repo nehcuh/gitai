@@ -1,18 +1,18 @@
 use serde::{Deserialize, Serialize};
 
+pub mod ai_context;
 pub mod ast_comparison;
+pub mod breaking_changes;
+pub mod cascade_detector;
 pub mod dependency_graph;
 pub mod git_state_analyzer;
-pub mod ai_context;
-pub mod breaking_changes;
-pub mod risk_assessment;
-pub mod impact_propagation;
-pub mod cascade_detector;
-pub mod impact_report;
 pub mod graph_export;
+pub mod impact_propagation;
+pub mod impact_report;
+pub mod risk_assessment;
 
 // 重新导出git_state_analyzer模块的公共类型
-pub use git_state_analyzer::{GitStateAnalyzer, ArchitecturalImpact};
+pub use git_state_analyzer::{ArchitecturalImpact, GitStateAnalyzer};
 
 // 重新导出dependency_graph模块的公共类型
 pub use dependency_graph::DependencyGraph;
@@ -25,7 +25,6 @@ pub use cascade_detector::{CascadeDetector, CascadeEffect};
 
 // 重新导出影响报告生成功能
 pub use impact_report::generate_markdown_report;
-
 
 /// 架构影响分析的主要结果结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,10 +227,7 @@ impl ArchitecturalImpactAnalysis {
             RiskLevel::None => "无",
         };
 
-        self.summary = format!(
-            "检测到 {} 个架构影响变更，风险级别：{}",
-            count, risk_desc
-        );
+        self.summary = format!("检测到 {} 个架构影响变更，风险级别：{}", count, risk_desc);
     }
 
     /// 检查是否有高风险变更
@@ -313,7 +309,7 @@ mod tests {
     #[test]
     fn test_risk_level_calculation() {
         let mut analysis = ArchitecturalImpactAnalysis::new();
-        
+
         // 添加一个高风险变更
         let change = BreakingChange {
             change_type: BreakingChangeType::FunctionSignatureChanged,

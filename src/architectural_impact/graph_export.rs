@@ -1,26 +1,40 @@
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::collections::{HashMap, HashSet};
 
 use crate::architectural_impact::dependency_graph::{DependencyGraph, DotOptions, NodeType};
 use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 
 fn is_code_file(path: &Path) -> bool {
     match path.extension().and_then(|s| s.to_str()).unwrap_or("") {
-        "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "cc" | "cxx" | "hpp" | "hxx" | "h" => true,
+        "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "cc" | "cxx" | "hpp" | "hxx"
+        | "h" => true,
         _ => false,
     }
 }
 
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    if !dir.exists() { return; }
+    if !dir.exists() {
+        return;
+    }
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
                 // 跳过常见的无关目录
                 if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if [".git", "target", "node_modules", ".cache", ".idea", ".vscode", "vendor", "build"].contains(&name) {
+                    if [
+                        ".git",
+                        "target",
+                        "node_modules",
+                        ".cache",
+                        ".idea",
+                        ".vscode",
+                        "vendor",
+                        "build",
+                    ]
+                    .contains(&name)
+                    {
                         continue;
                     }
                 }
@@ -33,7 +47,9 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// 从给定目录构建全局依赖图（跨文件调用会在后处理阶段尽力解析）
-pub async fn build_global_dependency_graph(scan_dir: &Path) -> Result<DependencyGraph, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn build_global_dependency_graph(
+    scan_dir: &Path,
+) -> Result<DependencyGraph, Box<dyn std::error::Error + Send + Sync>> {
     let mut files = Vec::new();
     collect_files(scan_dir, &mut files);
     files.sort();
@@ -42,22 +58,36 @@ pub async fn build_global_dependency_graph(scan_dir: &Path) -> Result<Dependency
     let mut global_graph = DependencyGraph::new();
 
     // 暂存跨文件调用以便后处理
-    struct PendingCall { file_path: String, line: usize, callee: String }
+    struct PendingCall {
+        file_path: String,
+        line: usize,
+        callee: String,
+    }
     let mut pending_calls: Vec<PendingCall> = Vec::new();
 
     for path in files {
         let path_str = path.to_string_lossy().to_string();
-        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
         let Some(lang) = SupportedLanguage::from_extension(&ext) else {
             continue;
         };
-        let Ok(code) = fs::read_to_string(&path) else { continue };
+        let Ok(code) = fs::read_to_string(&path) else {
+            continue;
+        };
 
         match manager.analyze_structure(&code, lang) {
             Ok(summary) => {
                 // 收集调用信息（用于跨文件解析）
                 for call in &summary.calls {
-                    pending_calls.push(PendingCall { file_path: path_str.clone(), line: call.line, callee: call.callee.clone() });
+                    pending_calls.push(PendingCall {
+                        file_path: path_str.clone(),
+                        line: call.line,
+                        callee: call.callee.clone(),
+                    });
                 }
 
                 let sub_graph = DependencyGraph::from_structural_summary(&summary, &path_str);
@@ -89,14 +119,20 @@ pub async fn build_global_dependency_graph(scan_dir: &Path) -> Result<Dependency
 }
 
 /// 导出 DOT 文本（含高亮关键节点）
-pub async fn export_dot_string(scan_dir: &Path, highlight_threshold: f32) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn export_dot_string(
+    scan_dir: &Path,
+    highlight_threshold: f32,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let graph = build_global_dependency_graph(scan_dir).await?;
     let critical: Vec<String> = graph
         .identify_critical_nodes(highlight_threshold)
         .into_iter()
         .map(|(id, _)| id.clone())
         .collect();
-    let options = DotOptions { include_weights: true, highlight_nodes: critical };
+    let options = DotOptions {
+        include_weights: true,
+        highlight_nodes: critical,
+    };
     Ok(graph.to_dot(Some(&options)))
 }
 
@@ -133,8 +169,14 @@ pub async fn query_call_chain(
     let mut reverse: HashMap<String, Vec<String>> = HashMap::new();
     for e in &graph.edges {
         if let crate::architectural_impact::dependency_graph::EdgeType::Calls = e.edge_type {
-            forward.entry(e.from.clone()).or_default().push(e.to.clone());
-            reverse.entry(e.to.clone()).or_default().push(e.from.clone());
+            forward
+                .entry(e.from.clone())
+                .or_default()
+                .push(e.to.clone());
+            reverse
+                .entry(e.to.clone())
+                .or_default()
+                .push(e.from.clone());
         }
     }
 
@@ -143,7 +185,9 @@ pub async fn query_call_chain(
     let mut end_name = end.map(|s| s.to_string());
     for (id, node) in &graph.nodes {
         if let NodeType::Function(f) = &node.node_type {
-            if f.name == start { start_ids.push(id.clone()); }
+            if f.name == start {
+                start_ids.push(id.clone());
+            }
         }
     }
     if start_ids.is_empty() {
@@ -157,7 +201,9 @@ pub async fn query_call_chain(
     for sid in start_ids {
         let mut stack: Vec<(String, Vec<String>)> = vec![(sid.clone(), vec![sid.clone()])];
         while let Some((node_id, path)) = stack.pop() {
-            if results.len() >= max_paths { break; }
+            if results.len() >= max_paths {
+                break;
+            }
             // 匹配终点（如果指定）
             if let Some(target) = target_name {
                 if let Some(node) = graph.nodes.get(&node_id) {
@@ -170,7 +216,9 @@ pub async fn query_call_chain(
                 }
             }
             // 深度限制
-            if path.len() - 1 >= max_depth { continue; }
+            if path.len() - 1 >= max_depth {
+                continue;
+            }
             // 获取下一步邻居
             let neighbors = match direction {
                 "upstream" => reverse.get(&node_id),
@@ -178,7 +226,8 @@ pub async fn query_call_chain(
             };
             if let Some(neigh) = neighbors {
                 for nxt in neigh {
-                    if !path.contains(nxt) { // 避免环
+                    if !path.contains(nxt) {
+                        // 避免环
                         let mut new_path = path.clone();
                         new_path.push(nxt.clone());
                         stack.push((nxt.clone(), new_path));
@@ -191,14 +240,19 @@ pub async fn query_call_chain(
     // 如果没有指定终点，收集到达边界的路径（叶子/深度上限）已在上面添加
     if target_name.is_none() && results.is_empty() {
         // 兜底：从任一起点进行有限层次遍历，收集边界路径
-        let sid_opt = graph.nodes.iter().find_map(|(id, node)| match &node.node_type {
-            NodeType::Function(f) if f.name == start => Some(id.clone()),
-            _ => None,
-        });
+        let sid_opt = graph
+            .nodes
+            .iter()
+            .find_map(|(id, node)| match &node.node_type {
+                NodeType::Function(f) if f.name == start => Some(id.clone()),
+                _ => None,
+            });
         if let Some(sid) = sid_opt {
             let mut queue: Vec<(String, Vec<String>)> = vec![(sid.clone(), vec![sid.clone()])];
             while let Some((node_id, path)) = queue.pop() {
-                if results.len() >= max_paths { break; }
+                if results.len() >= max_paths {
+                    break;
+                }
                 if path.len() - 1 >= max_depth {
                     results.push(path);
                     continue;
@@ -218,7 +272,9 @@ pub async fn query_call_chain(
                         }
                     }
                 }
-                if !extended { results.push(path); }
+                if !extended {
+                    results.push(path);
+                }
             }
         }
     }
@@ -226,26 +282,31 @@ pub async fn query_call_chain(
     // 去重和裁剪
     results.sort();
     results.dedup();
-    if results.len() > max_paths { results.truncate(max_paths); }
+    if results.len() > max_paths {
+        results.truncate(max_paths);
+    }
 
     // 转换为富节点信息
-    let chains: Vec<CallChain> = results.into_iter().map(|path_ids| {
-        let mut nodes_info = Vec::new();
-        for nid in path_ids {
-            if let Some(node) = graph.nodes.get(&nid) {
-                if let NodeType::Function(f) = &node.node_type {
-                    nodes_info.push(CallNodeInfo {
-                        id: nid.clone(),
-                        name: f.name.clone(),
-                        file_path: node.metadata.file_path.clone(),
-                        line_start: node.metadata.start_line,
-                        line_end: node.metadata.end_line,
-                    });
+    let chains: Vec<CallChain> = results
+        .into_iter()
+        .map(|path_ids| {
+            let mut nodes_info = Vec::new();
+            for nid in path_ids {
+                if let Some(node) = graph.nodes.get(&nid) {
+                    if let NodeType::Function(f) = &node.node_type {
+                        nodes_info.push(CallNodeInfo {
+                            id: nid.clone(),
+                            name: f.name.clone(),
+                            file_path: node.metadata.file_path.clone(),
+                            line_start: node.metadata.start_line,
+                            line_end: node.metadata.end_line,
+                        });
+                    }
                 }
             }
-        }
-        CallChain { nodes: nodes_info }
-    }).collect();
+            CallChain { nodes: nodes_info }
+        })
+        .collect();
 
     Ok(chains)
 }

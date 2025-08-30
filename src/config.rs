@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use serde::Deserialize;
+use std::path::PathBuf;
 
 /// 应用配置
 #[derive(Debug, Clone, Deserialize)]
@@ -32,22 +32,26 @@ impl AiConfig {
         if self.api_url.trim().is_empty() {
             return Err("AI API URL 不能为空".into());
         }
-        
+
         // 验证 URL 格式
         if !self.api_url.starts_with("http://") && !self.api_url.starts_with("https://") {
             return Err(format!("AI API URL 格式无效: {}", self.api_url).into());
         }
-        
+
         // 验证模型名称
         if self.model.trim().is_empty() {
             return Err("AI 模型名称不能为空".into());
         }
-        
+
         // 验证温度参数
         if self.temperature < 0.0 || self.temperature > 1.0 {
-            return Err(format!("AI 温度参数必须在 0.0 到 1.0 之间，当前值: {}", self.temperature).into());
+            return Err(format!(
+                "AI 温度参数必须在 0.0 到 1.0 之间，当前值: {}",
+                self.temperature
+            )
+            .into());
         }
-        
+
         Ok(())
     }
 }
@@ -72,34 +76,34 @@ impl ScanConfig {
         if self.timeout == 0 {
             return Err("扫描超时时间不能为 0".into());
         }
-        
+
         if self.timeout > 3600 {
             return Err("扫描超时时间不能超过 3600 秒（1小时）".into());
         }
-        
+
         // 验证并发数
         if self.jobs == 0 {
             return Err("扫描并发数不能为 0".into());
         }
-        
+
         if self.jobs > 32 {
             return Err("扫描并发数不能超过 32".into());
         }
-        
+
         // 验证默认路径（如果存在）
         if let Some(ref path) = self.default_path {
             if path.trim().is_empty() {
                 return Err("扫描默认路径不能为空字符串".into());
             }
         }
-        
+
         // 验证规则目录（如果存在）
         if let Some(ref rules_dir) = self.rules_dir {
             if rules_dir.trim().is_empty() {
                 return Err("规则目录不能为空字符串".into());
             }
         }
-        
+
         Ok(())
     }
 }
@@ -137,10 +141,10 @@ impl McpConfig {
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证服务器配置
         self.server.validate()?;
-        
+
         // 验证服务配置
         self.services.validate()?;
-        
+
         Ok(())
     }
 }
@@ -164,36 +168,42 @@ impl McpServerConfig {
         // 验证传输协议
         match self.transport.as_str() {
             "stdio" | "tcp" | "sse" => {}
-            _ => return Err(format!("不支持的传输协议: {}，支持的协议: stdio, tcp, sse", self.transport).into()),
+            _ => {
+                return Err(format!(
+                    "不支持的传输协议: {}，支持的协议: stdio, tcp, sse",
+                    self.transport
+                )
+                .into())
+            }
         }
-        
+
         // 验证监听地址（如果需要）
         if (self.transport == "tcp" || self.transport == "sse") && self.listen_addr.is_none() {
             return Err(format!("传输协议为 {} 时必须指定监听地址", self.transport).into());
         }
-        
+
         // 验证服务名称
         if self.name.trim().is_empty() {
             return Err("MCP 服务名称不能为空".into());
         }
-        
+
         // 验证服务版本
         if self.version.trim().is_empty() {
             return Err("MCP 服务版本不能为空".into());
         }
-        
+
         // 验证监听地址格式（如果存在）
         if let Some(ref addr) = self.listen_addr {
             if addr.trim().is_empty() {
                 return Err("监听地址不能为空字符串".into());
             }
-            
+
             // 简单的地址格式验证
             if self.transport == "tcp" && !addr.contains(':') {
                 return Err("TCP 监听地址必须包含端口号，例如: 127.0.0.1:8080".into());
             }
         }
-        
+
         Ok(())
     }
 }
@@ -218,31 +228,35 @@ impl McpServicesConfig {
         let valid_services = ["review", "commit", "scan", "analysis", "dependency"];
         for service in &self.enabled {
             if !valid_services.contains(&service.as_str()) {
-                return Err(format!("不支持的 MCP 服务: {}，支持的服务: {:?}", service, valid_services).into());
+                return Err(format!(
+                    "不支持的 MCP 服务: {}，支持的服务: {:?}",
+                    service, valid_services
+                )
+                .into());
             }
         }
-        
+
         // 验证服务特定配置
         if let Some(ref review) = self.review {
             review.validate()?;
         }
-        
+
         if let Some(ref commit) = self.commit {
             commit.validate()?;
         }
-        
+
         if let Some(ref scan) = self.scan {
             scan.validate()?;
         }
-        
+
         if let Some(ref analysis) = self.analysis {
             analysis.validate()?;
         }
-        
+
         if let Some(ref dependency) = self.dependency {
             dependency.validate()?;
         }
-        
+
         Ok(())
     }
 }
@@ -264,9 +278,13 @@ impl McpReviewConfig {
         // 验证输出格式
         let valid_formats = ["text", "json", "markdown"];
         if !valid_formats.contains(&self.default_format.as_str()) {
-            return Err(format!("不支持的输出格式: {}，支持的格式: {:?}", self.default_format, valid_formats).into());
+            return Err(format!(
+                "不支持的输出格式: {}，支持的格式: {:?}",
+                self.default_format, valid_formats
+            )
+            .into());
         }
-        
+
         Ok(())
     }
 }
@@ -306,16 +324,16 @@ impl McpScanConfig {
         if self.default_tool.trim().is_empty() {
             return Err("扫描工具名称不能为空".into());
         }
-        
+
         // 验证超时时间
         if self.default_timeout == 0 {
             return Err("扫描超时时间不能为 0".into());
         }
-        
+
         if self.default_timeout > 3600 {
             return Err("扫描超时时间不能超过 3600 秒（1小时）".into());
         }
-        
+
         Ok(())
     }
 }
@@ -334,7 +352,7 @@ impl McpAnalysisConfig {
         if self.verbosity > 2 {
             return Err("输出详细程度不能超过 2".into());
         }
-        
+
         Ok(())
     }
 }
@@ -358,14 +376,18 @@ impl McpDependencyConfig {
         // 验证输出格式
         let valid_formats = ["json", "dot", "svg", "mermaid"];
         if !valid_formats.contains(&self.default_format.as_str()) {
-            return Err(format!("不支持的输出格式: {}，支持的格式: {:?}", self.default_format, valid_formats).into());
+            return Err(format!(
+                "不支持的输出格式: {}，支持的格式: {:?}",
+                self.default_format, valid_formats
+            )
+            .into());
         }
-        
+
         // 验证详细程度
         if self.verbosity > 3 {
             return Err("输出详细程度不能超过 3".into());
         }
-        
+
         Ok(())
     }
 }
@@ -396,7 +418,13 @@ impl Default for Config {
                     version: "0.1.0".to_string(),
                 },
                 services: McpServicesConfig {
-                    enabled: vec!["review".to_string(), "commit".to_string(), "scan".to_string(), "analysis".to_string(), "dependency".to_string()],
+                    enabled: vec![
+                        "review".to_string(),
+                        "commit".to_string(),
+                        "scan".to_string(),
+                        "analysis".to_string(),
+                        "dependency".to_string(),
+                    ],
                     review: Some(McpReviewConfig {
                         default_tree_sitter: false,
                         default_security_scan: false,
@@ -411,9 +439,7 @@ impl Default for Config {
                         default_tool: "opengrep".to_string(),
                         default_timeout: 300,
                     }),
-                    analysis: Some(McpAnalysisConfig {
-                        verbosity: 1,
-                    }),
+                    analysis: Some(McpAnalysisConfig { verbosity: 1 }),
                     dependency: Some(McpDependencyConfig {
                         default_format: "svg".to_string(),
                         verbosity: 1,
@@ -434,7 +460,7 @@ impl Config {
             .join(".config")
             .join("gitai")
             .join("config.toml");
-        
+
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
             let config: Config = toml::from_str(&content)?;
@@ -444,20 +470,20 @@ impl Config {
             Ok(Config::default())
         }
     }
-    
+
     /// 验证配置
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证 AI 配置
         self.ai.validate()?;
-        
+
         // 验证扫描配置
         self.scan.validate()?;
-        
+
         // 验证 MCP 配置
         if let Some(mcp) = &self.mcp {
             mcp.validate()?;
         }
-        
+
         Ok(())
     }
 }

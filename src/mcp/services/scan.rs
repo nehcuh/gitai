@@ -2,13 +2,13 @@
 //
 // 提供安全扫描功能的 MCP 服务实现
 
-use crate::{config::Config, scan, mcp::*};
+use crate::{config::Config, mcp::*, scan};
+use log::{debug, error, info, warn};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use log::{debug, info, warn, error};
 
 /// Scan 服务
 pub struct ScanService {
@@ -41,11 +41,14 @@ impl ScanService {
     }
 
     /// 执行扫描
-    async fn execute_scan(&self, params: ScanParams) -> Result<ScanResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_scan(
+        &self,
+        params: ScanParams,
+    ) -> Result<ScanResult, Box<dyn std::error::Error + Send + Sync>> {
         info!("🔍 开始安全扫描: {}", params.path);
         let tool = params.tool.unwrap_or_else(|| self.default_tool.clone());
         let timeout = params.timeout.unwrap_or(self.default_timeout);
-        
+
         // 智能路径解析：处理相对路径和绝对路径
         let path = if Path::new(&params.path).is_absolute() {
             // 如果是绝对路径，直接使用
@@ -53,12 +56,12 @@ impl ScanService {
         } else {
             // 如果是相对路径，尝试多种解析策略
             let relative_path = Path::new(&params.path);
-            
+
             // 策略1：相对于当前工作目录
             let cwd_path = std::env::current_dir()
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .join(relative_path);
-            
+
             if cwd_path.exists() {
                 cwd_path
             } else {
@@ -88,13 +91,27 @@ impl ScanService {
                 }
             }
         };
-        
-        debug!("📋 扫描参数: 工具={}, 超时={}s, 解析后路径={}", tool, timeout, path.display());
-        
+
+        debug!(
+            "📋 扫描参数: 工具={}, 超时={}s, 解析后路径={}",
+            tool,
+            timeout,
+            path.display()
+        );
+
         // 验证路径是否存在
         if !path.exists() {
-            error!("❌ 扫描路径不存在: {} (解析后: {})", params.path, path.display());
-            return Err(format!("扫描路径不存在: {} (解析后: {})", params.path, path.display()).into());
+            error!(
+                "❌ 扫描路径不存在: {} (解析后: {})",
+                params.path,
+                path.display()
+            );
+            return Err(format!(
+                "扫描路径不存在: {} (解析后: {})",
+                params.path,
+                path.display()
+            )
+            .into());
         }
 
         // 使用真实的扫描逻辑
@@ -105,13 +122,13 @@ impl ScanService {
                 if let Some(ref lang) = lang {
                     debug!("🌐 语言过滤: {}", lang);
                 }
-                
+
                 // 确保扫描工具已安装（与 CLI 逻辑一致）
                 if !scan::is_opengrep_installed() {
                     error!("❌ OpenGrep 未安装");
                     return Err("OpenGrep 未安装，请先安装: cargo install opengrep".into());
                 }
-                
+
                 // MCP 服务不应自动更新规则，避免超时
                 // 规则更新应由用户通过 'gitai update' 命令显式触发
                 debug!("🔄 使用现有扫描规则...");
@@ -120,16 +137,31 @@ impl ScanService {
                 //     warn!("⚠️ 规则更新失败: {}", e);
                 //     // 不返回错误，继续使用现有规则
                 // }
-                
+
                 // 使用与 CLI 完全一致的调用方式
                 let include_version = false; // 不获取版本信息以提高性能
-                
-                debug!("🔍 开始扫描: path={:?}, lang={:?}, timeout={:?}", path, lang, Some(timeout));
-                let result = scan::run_opengrep_scan(&self.config, &path, lang, Some(timeout), include_version);
-                
+
+                debug!(
+                    "🔍 开始扫描: path={:?}, lang={:?}, timeout={:?}",
+                    path,
+                    lang,
+                    Some(timeout)
+                );
+                let result = scan::run_opengrep_scan(
+                    &self.config,
+                    &path,
+                    lang,
+                    Some(timeout),
+                    include_version,
+                );
+
                 match &result {
                     Ok(scan_result) => {
-                        debug!("✅ 扫描成功: findings={}, error={:?}", scan_result.findings.len(), scan_result.error);
+                        debug!(
+                            "✅ 扫描成功: findings={}, error={:?}",
+                            scan_result.findings.len(),
+                            scan_result.error
+                        );
                         if let Some(ref error) = scan_result.error {
                             warn!("⚠️ 扫描完成但有错误: {}", error);
                         }
@@ -139,7 +171,7 @@ impl ScanService {
                         return Err(format!("扫描失败: {}", e).into());
                     }
                 }
-                
+
                 result?
             }
             _ => {
@@ -149,7 +181,7 @@ impl ScanService {
         };
 
         debug!("📊 扫描结果: 发现 {} 个问题", scan_result.findings.len());
-        
+
         // 转换扫描结果
         let result = self.convert_scan_result(scan_result);
         info!("✅ 安全扫描完成: {}", params.path);
@@ -158,7 +190,7 @@ impl ScanService {
 
     fn convert_scan_result(&self, scan_result: scan::ScanResult) -> ScanResult {
         let mut findings = Vec::new();
-        
+
         for finding in scan_result.findings {
             findings.push(Finding {
                 title: finding.title,
@@ -179,26 +211,35 @@ impl ScanService {
         let mut details = HashMap::new();
         details.insert("tool".to_string(), scan_result.tool);
         details.insert("version".to_string(), scan_result.version);
-        details.insert("execution_time".to_string(), format!("{:.2}s", scan_result.execution_time));
-        
+        details.insert(
+            "execution_time".to_string(),
+            format!("{:.2}s", scan_result.execution_time),
+        );
+
         if let Some(rules_info) = scan_result.rules_info {
-            details.insert("total_rules".to_string(), rules_info.total_rules.to_string());
+            details.insert(
+                "total_rules".to_string(),
+                rules_info.total_rules.to_string(),
+            );
             details.insert("rules_dir".to_string(), rules_info.dir);
         }
 
         let findings_count = findings.len();
         let severity_counts = self.count_by_severity(&findings);
-        
+
         // 改进成功判断逻辑：只要能得到扫描结果就算成功
         // stderr 输出不应该导致扫描失败
         let success = scan_result.error.is_none() || !findings.is_empty();
-        
+
         ScanResult {
             success,
             message: if let Some(error) = scan_result.error {
                 // 如果有发现但也有错误，说明扫描部分成功
                 if !findings.is_empty() {
-                    format!("扫描完成，发现 {} 个问题（有警告: {}）", findings_count, error)
+                    format!(
+                        "扫描完成，发现 {} 个问题（有警告: {}）",
+                        findings_count, error
+                    )
                 } else {
                     format!("扫描完成，但有错误: {}", error)
                 }
@@ -220,7 +261,7 @@ impl ScanService {
         counts.insert("error".to_string(), 0);
         counts.insert("warning".to_string(), 0);
         counts.insert("info".to_string(), 0);
-        
+
         for finding in findings {
             let key = match finding.severity {
                 Severity::Error => "error",
@@ -229,7 +270,7 @@ impl ScanService {
             };
             *counts.get_mut(key).unwrap() += 1;
         }
-        
+
         counts
     }
 }
@@ -248,41 +289,52 @@ impl crate::mcp::GitAiMcpService for ScanService {
         vec![Tool {
             name: "execute_scan".to_string().into(),
             description: self.description().to_string().into(),
-            input_schema: Arc::new(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "要扫描的路径"
+            input_schema: Arc::new(
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "要扫描的路径"
+                        },
+                        "tool": {
+                            "type": "string",
+                            "enum": ["opengrep"],
+                            "description": "扫描工具 (可选，默认 opengrep)"
+                        },
+                        "lang": {
+                            "type": "string",
+                            "description": "语言过滤 (可选，如 rust, python, java)"
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "超时时间（秒）(可选，默认 300)"
+                        }
                     },
-                    "tool": {
-                        "type": "string",
-                        "enum": ["opengrep"],
-                        "description": "扫描工具 (可选，默认 opengrep)"
-                    },
-                    "lang": {
-                        "type": "string",
-                        "description": "语言过滤 (可选，如 rust, python, java)"
-                    },
-                    "timeout": {
-                        "type": "integer",
-                        "description": "超时时间（秒）(可选，默认 300)"
-                    }
-                },
-                "required": ["path"]
-            }).as_object().unwrap().clone()),
+                    "required": ["path"]
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
         }]
     }
 
-    async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> crate::mcp::McpResult<serde_json::Value> {
         match name {
             "execute_scan" => {
                 let params: ScanParams = serde_json::from_value(arguments)
                     .map_err(|e| crate::mcp::parse_error("scan", e))?;
-                
-                let result = self.execute_scan(params).await
+
+                let result = self
+                    .execute_scan(params)
+                    .await
                     .map_err(|e| crate::mcp::execution_error("Scan", e))?;
-                
+
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("scan", e))?)
             }

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-pub mod trend_analyzer;
 pub mod storage;
+pub mod trend_analyzer;
 pub mod visualizer;
 
 use crate::project_insights::ProjectInsights;
@@ -198,28 +198,28 @@ impl QualityTracker {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("gitai")
             .join("metrics");
-        
+
         std::fs::create_dir_all(&storage_path)?;
-        
+
         let current_branch = Self::get_current_branch()?;
         let snapshots = storage::load_snapshots(&storage_path, &current_branch)?;
-        
+
         Ok(Self {
             storage_path,
             snapshots,
             current_branch,
         })
     }
-    
+
     /// 记录新的质量快照
     pub fn record_snapshot(
         &mut self,
         summary: &StructuralSummary,
-        insights: &ProjectInsights
+        insights: &ProjectInsights,
     ) -> Result<QualitySnapshot, Box<dyn std::error::Error + Send + Sync>> {
         let commit_hash = Self::get_current_commit()?;
         let lines_of_code = Self::count_lines_of_code()?;
-        
+
         let snapshot = QualitySnapshot {
             timestamp: Utc::now(),
             commit_hash,
@@ -231,74 +231,76 @@ impl QualityTracker {
             technical_debt: Self::calculate_technical_debt(insights),
             tags: Vec::new(),
         };
-        
+
         // 保存快照
         self.snapshots.push(snapshot.clone());
         storage::save_snapshot(&self.storage_path, &snapshot)?;
-        
+
         log::info!("记录质量快照: commit {}", snapshot.commit_hash);
-        
+
         Ok(snapshot)
     }
-    
+
     /// 分析趋势
     pub fn analyze_trends(
         &self,
-        days_back: Option<i64>
+        days_back: Option<i64>,
     ) -> Result<TrendAnalysis, Box<dyn std::error::Error + Send + Sync>> {
         let analyzer = trend_analyzer::TrendAnalyzer::new(&self.snapshots);
         analyzer.analyze(days_back)
     }
-    
+
     /// 生成报告
     pub fn generate_report(
         &self,
-        output_path: Option<&Path>
+        output_path: Option<&Path>,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let analysis = self.analyze_trends(None)?;
         let visualizer = visualizer::TrendVisualizer::new();
-        
+
         let report = visualizer.generate_report(&analysis, &self.snapshots)?;
-        
+
         if let Some(path) = output_path {
             std::fs::write(path, &report)?;
             log::info!("质量趋势报告已保存到: {:?}", path);
         }
-        
+
         Ok(report)
     }
-    
+
     /// 获取当前分支
     fn get_current_branch() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = std::process::Command::new("git")
             .args(&["branch", "--show-current"])
             .output()?;
-        
+
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-    
+
     /// 获取当前 commit hash
     fn get_current_commit() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = std::process::Command::new("git")
             .args(&["rev-parse", "HEAD"])
             .output()?;
-        
+
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-    
+
     /// 统计代码行数
     fn count_lines_of_code() -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         // 简化实现，实际可以使用 tokei 或类似工具
         let output = std::process::Command::new("find")
-            .args(&[".", "-type", "f", "-name", "*.rs", "-o", "-name", "*.java", 
-                   "-o", "-name", "*.py", "-o", "-name", "*.js", "-o", "-name", "*.ts"])
+            .args(&[
+                ".", "-type", "f", "-name", "*.rs", "-o", "-name", "*.java", "-o", "-name", "*.py",
+                "-o", "-name", "*.js", "-o", "-name", "*.ts",
+            ])
             .arg("-exec")
             .arg("wc")
             .arg("-l")
             .arg("{}")
             .arg("+")
             .output()?;
-        
+
         let output_str = String::from_utf8_lossy(&output.stdout);
         let lines = output_str
             .lines()
@@ -306,70 +308,80 @@ impl QualityTracker {
             .and_then(|l| l.split_whitespace().next())
             .and_then(|n| n.parse().ok())
             .unwrap_or(0);
-        
+
         Ok(lines)
     }
-    
+
     /// 计算架构指标
     fn calculate_architecture_metrics(insights: &ProjectInsights) -> ArchitectureMetrics {
         ArchitectureMetrics {
             module_count: insights.architecture.module_dependencies.nodes.len(),
             avg_module_size: 0.0, // 需要更详细的实现
-            circular_dependencies: insights.architecture.module_dependencies.circular_dependencies.len(),
+            circular_dependencies: insights
+                .architecture
+                .module_dependencies
+                .circular_dependencies
+                .len(),
             pattern_violations: insights.architecture.pattern_violations.len(),
             coupling_score: insights.architecture.coupling_analysis.average_coupling * 100.0,
             cohesion_score: 75.0, // 简化实现
         }
     }
-    
+
     /// 计算复杂度指标
     fn calculate_complexity_metrics(
         summary: &StructuralSummary,
-        insights: &ProjectInsights
+        insights: &ProjectInsights,
     ) -> ComplexityMetrics {
-        let function_lengths: Vec<usize> = summary.functions.iter()
+        let function_lengths: Vec<usize> = summary
+            .functions
+            .iter()
             .map(|f| f.line_end - f.line_start)
             .collect();
-        
+
         let avg_length = if function_lengths.is_empty() {
             0.0
         } else {
             function_lengths.iter().sum::<usize>() as f64 / function_lengths.len() as f64
         };
-        
+
         let max_length = function_lengths.iter().max().copied().unwrap_or(0);
-        
+
         ComplexityMetrics {
             avg_cyclomatic_complexity: 5.0, // 简化实现
             max_cyclomatic_complexity: 15,  // 简化实现
             avg_function_length: avg_length,
             max_function_length: max_length,
             high_complexity_functions: insights.quality_hotspots.complexity_hotspots.len(),
-            functions_needing_refactor: insights.quality_hotspots.complexity_hotspots
+            functions_needing_refactor: insights
+                .quality_hotspots
+                .complexity_hotspots
                 .iter()
                 .filter(|h| h.complexity_score > 30)
                 .count(),
         }
     }
-    
+
     /// 计算 API 指标
     fn calculate_api_metrics(
         insights: &ProjectInsights,
-        previous: Option<&QualitySnapshot>
+        previous: Option<&QualitySnapshot>,
     ) -> ApiMetrics {
         let public_api_count = insights.api_surface.public_apis.len();
         let deprecated_api_count = insights.api_surface.deprecated_apis.len();
-        
+
         let (breaking_changes, new_apis, removed_apis) = if let Some(prev) = previous {
             (
                 insights.impact_analysis.breaking_changes.len(),
                 public_api_count.saturating_sub(prev.api_metrics.public_api_count),
-                prev.api_metrics.public_api_count.saturating_sub(public_api_count),
+                prev.api_metrics
+                    .public_api_count
+                    .saturating_sub(public_api_count),
             )
         } else {
             (0, public_api_count, 0)
         };
-        
+
         ApiMetrics {
             public_api_count,
             deprecated_api_count,
@@ -379,64 +391,73 @@ impl QualityTracker {
             removed_apis,
         }
     }
-    
+
     /// 计算技术债务
     fn calculate_technical_debt(insights: &ProjectInsights) -> TechnicalDebtMetrics {
         TechnicalDebtMetrics {
-            debt_score: insights.quality_hotspots.maintenance_burden.technical_debt_score,
-            duplication_rate: 0.0, // 需要实现
-            comment_coverage: 0.0, // 需要从 summary 计算
+            debt_score: insights
+                .quality_hotspots
+                .maintenance_burden
+                .technical_debt_score,
+            duplication_rate: 0.0,       // 需要实现
+            comment_coverage: 0.0,       // 需要从 summary 计算
             test_coverage_estimate: 0.0, // 需要实现
-            todo_count: 0, // 需要扫描注释
-            estimated_remediation_hours: insights.quality_hotspots.maintenance_burden.estimated_refactoring_hours,
+            todo_count: 0,               // 需要扫描注释
+            estimated_remediation_hours: insights
+                .quality_hotspots
+                .maintenance_burden
+                .estimated_refactoring_hours,
         }
     }
-    
+
     /// 比较两个快照
     pub fn compare_snapshots(
         &self,
         snapshot1: &QualitySnapshot,
-        snapshot2: &QualitySnapshot
+        snapshot2: &QualitySnapshot,
     ) -> HashMap<String, f64> {
         let mut changes = HashMap::new();
-        
+
         changes.insert(
             "complexity_change".to_string(),
-            snapshot2.complexity_metrics.avg_cyclomatic_complexity - 
-            snapshot1.complexity_metrics.avg_cyclomatic_complexity
+            snapshot2.complexity_metrics.avg_cyclomatic_complexity
+                - snapshot1.complexity_metrics.avg_cyclomatic_complexity,
         );
-        
+
         changes.insert(
             "debt_change".to_string(),
-            snapshot2.technical_debt.debt_score - snapshot1.technical_debt.debt_score
+            snapshot2.technical_debt.debt_score - snapshot1.technical_debt.debt_score,
         );
-        
+
         changes.insert(
             "api_stability_change".to_string(),
-            snapshot2.api_metrics.stability_score - snapshot1.api_metrics.stability_score
+            snapshot2.api_metrics.stability_score - snapshot1.api_metrics.stability_score,
         );
-        
+
         changes
     }
-    
+
     /// 获取历史快照
     pub fn get_snapshots(&self) -> &[QualitySnapshot] {
         &self.snapshots
     }
-    
+
     /// 清理旧快照
-    pub fn cleanup_old_snapshots(&mut self, days_to_keep: i64) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn cleanup_old_snapshots(
+        &mut self,
+        days_to_keep: i64,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let cutoff_date = Utc::now() - chrono::Duration::days(days_to_keep);
-        
+
         let initial_count = self.snapshots.len();
         self.snapshots.retain(|s| s.timestamp > cutoff_date);
         let removed_count = initial_count - self.snapshots.len();
-        
+
         if removed_count > 0 {
             storage::save_all_snapshots(&self.storage_path, &self.current_branch, &self.snapshots)?;
             log::info!("清理了 {} 个旧快照", removed_count);
         }
-        
+
         Ok(removed_count)
     }
 }
@@ -444,37 +465,37 @@ impl QualityTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_quality_tracker_creation() {
         // 注意：这个测试需要 git 仓库环境
         if std::process::Command::new("git")
             .args(&["status"])
             .output()
-            .is_ok() 
+            .is_ok()
         {
             let tracker = QualityTracker::new();
             assert!(tracker.is_ok(), "应该能创建质量追踪器");
         }
     }
-    
+
     #[test]
     fn test_trend_calculation() {
         let snapshot1 = create_test_snapshot(50.0, 30.0);
         let snapshot2 = create_test_snapshot(45.0, 35.0);
-        
+
         let tracker = QualityTracker {
             storage_path: PathBuf::from("."),
             snapshots: vec![snapshot1.clone(), snapshot2.clone()],
             current_branch: "main".to_string(),
         };
-        
+
         let changes = tracker.compare_snapshots(&snapshot1, &snapshot2);
-        
+
         assert!(changes.get("debt_change").unwrap() < &0.0); // debt decreased from 50 to 45
         assert!(changes.get("complexity_change").unwrap() > &0.0); // complexity increased from 30 to 35
     }
-    
+
     fn create_test_snapshot(debt_score: f64, complexity: f64) -> QualitySnapshot {
         QualitySnapshot {
             timestamp: Utc::now(),

@@ -1,12 +1,12 @@
 pub mod analyzer;
-pub mod queries;
-pub mod unified_analyzer;
 pub mod cache;
 pub mod custom_queries;
+pub mod queries;
+pub mod unified_analyzer;
 
+use cache::{CacheKey, TreeSitterCache};
 use std::collections::HashMap;
 use tree_sitter::{Language, Parser};
-use cache::{TreeSitterCache, CacheKey};
 
 /// 支持的编程语言
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -73,37 +73,37 @@ impl SupportedLanguage {
             Self::Java => Some(tree_sitter_java::language()),
             #[cfg(not(feature = "tree-sitter-java"))]
             Self::Java => None,
-            
+
             #[cfg(feature = "tree-sitter-rust")]
             Self::Rust => Some(tree_sitter_rust::language()),
             #[cfg(not(feature = "tree-sitter-rust"))]
             Self::Rust => None,
-            
+
             #[cfg(feature = "tree-sitter-c")]
             Self::C => Some(tree_sitter_c::language()),
             #[cfg(not(feature = "tree-sitter-c"))]
             Self::C => None,
-            
+
             #[cfg(feature = "tree-sitter-cpp")]
             Self::Cpp => Some(tree_sitter_cpp::language()),
             #[cfg(not(feature = "tree-sitter-cpp"))]
             Self::Cpp => None,
-            
+
             #[cfg(feature = "tree-sitter-python")]
             Self::Python => Some(tree_sitter_python::language()),
             #[cfg(not(feature = "tree-sitter-python"))]
             Self::Python => None,
-            
+
             #[cfg(feature = "tree-sitter-go")]
             Self::Go => Some(tree_sitter_go::language()),
             #[cfg(not(feature = "tree-sitter-go"))]
             Self::Go => None,
-            
+
             #[cfg(feature = "tree-sitter-javascript")]
             Self::JavaScript => Some(tree_sitter_javascript::language()),
             #[cfg(not(feature = "tree-sitter-javascript"))]
             Self::JavaScript => None,
-            
+
             #[cfg(feature = "tree-sitter-typescript")]
             Self::TypeScript => Some(tree_sitter_typescript::language_typescript()),
             #[cfg(not(feature = "tree-sitter-typescript"))]
@@ -138,7 +138,7 @@ impl TreeSitterManager {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut parsers = HashMap::new();
         let queries_manager = queries::QueriesManager::new()?;
-        
+
         // 初始化所有语言的解析器（仅已启用的）
         for lang in SupportedLanguage::all() {
             if let Some(language) = lang.language() {
@@ -147,13 +147,13 @@ impl TreeSitterManager {
                 parsers.insert(lang, parser);
             }
         }
-        
+
         // 确保queries已下载
         queries_manager.ensure_queries_downloaded().await?;
-        
+
         // 初始化缓存 (100项，1小时过期)
         let cache = TreeSitterCache::new(100, 3600).ok();
-        
+
         Ok(Self {
             parsers,
             queries_manager,
@@ -177,8 +177,12 @@ impl TreeSitterManager {
         code: &str,
         language: SupportedLanguage,
     ) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>> {
-        log::debug!("开始分析 {:?} 语言代码，代码长度: {} 字符", language, code.len());
-        
+        log::debug!(
+            "开始分析 {:?} 语言代码，代码长度: {} 字符",
+            language,
+            code.len()
+        );
+
         // 检查缓存
         if let Some(ref cache) = self.cache {
             let cache_key = CacheKey::from_content(code, language.name());
@@ -187,39 +191,40 @@ impl TreeSitterManager {
                 return Ok(cached_summary);
             }
         }
-        
-        let parser = self.get_parser(language)
-            .ok_or_else(|| {
-                let error = format!("Parser not found for language {:?}", language);
-                log::error!("{}", error);
-                error
-            })?;
-        
-        let tree = parser.parse(code, None)
-            .ok_or_else(|| {
-                let error = format!("Failed to parse {:?} code", language);
-                log::error!("{}", error);
-                error
-            })?;
-        
+
+        let parser = self.get_parser(language).ok_or_else(|| {
+            let error = format!("Parser not found for language {:?}", language);
+            log::error!("{}", error);
+            error
+        })?;
+
+        let tree = parser.parse(code, None).ok_or_else(|| {
+            let error = format!("Failed to parse {:?} code", language);
+            log::error!("{}", error);
+            error
+        })?;
+
         log::debug!("Tree 解析成功，根节点: {}", tree.root_node().kind());
-        
+
         // 使用新的统一分析器
-        let analyzer = unified_analyzer::UnifiedAnalyzer::new(language)
-            .map_err(|e| {
-                log::error!("Failed to create UnifiedAnalyzer for {:?}: {}", language, e);
-                e
-            })?;
-            
-        let result = analyzer.analyze(&tree, code.as_bytes())
-            .map_err(|e| {
-                log::error!("Failed to analyze structure for {:?}: {}", language, e);
-                e
-            })?;
-            
-        log::info!("结构分析成功：{:?} 语言，函数: {}, 类: {}, 注释: {}", 
-                  language, result.functions.len(), result.classes.len(), result.comments.len());
-        
+        let analyzer = unified_analyzer::UnifiedAnalyzer::new(language).map_err(|e| {
+            log::error!("Failed to create UnifiedAnalyzer for {:?}: {}", language, e);
+            e
+        })?;
+
+        let result = analyzer.analyze(&tree, code.as_bytes()).map_err(|e| {
+            log::error!("Failed to analyze structure for {:?}: {}", language, e);
+            e
+        })?;
+
+        log::info!(
+            "结构分析成功：{:?} 语言，函数: {}, 类: {}, 注释: {}",
+            language,
+            result.functions.len(),
+            result.classes.len(),
+            result.comments.len()
+        );
+
         // 保存到缓存
         if let Some(ref cache) = self.cache {
             let cache_key = CacheKey::from_content(code, language.name());
@@ -227,7 +232,7 @@ impl TreeSitterManager {
                 log::warn!("缓存保存失败: {}", e);
             }
         }
-                  
+
         Ok(result)
     }
 }
@@ -288,14 +293,38 @@ mod tests {
 
     #[test]
     fn test_supported_language_from_extension() {
-        assert_eq!(SupportedLanguage::from_extension("java"), Some(SupportedLanguage::Java));
-        assert_eq!(SupportedLanguage::from_extension("rs"), Some(SupportedLanguage::Rust));
-        assert_eq!(SupportedLanguage::from_extension("py"), Some(SupportedLanguage::Python));
-        assert_eq!(SupportedLanguage::from_extension("js"), Some(SupportedLanguage::JavaScript));
-        assert_eq!(SupportedLanguage::from_extension("ts"), Some(SupportedLanguage::TypeScript));
-        assert_eq!(SupportedLanguage::from_extension("go"), Some(SupportedLanguage::Go));
-        assert_eq!(SupportedLanguage::from_extension("c"), Some(SupportedLanguage::C));
-        assert_eq!(SupportedLanguage::from_extension("cpp"), Some(SupportedLanguage::Cpp));
+        assert_eq!(
+            SupportedLanguage::from_extension("java"),
+            Some(SupportedLanguage::Java)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("rs"),
+            Some(SupportedLanguage::Rust)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("py"),
+            Some(SupportedLanguage::Python)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("js"),
+            Some(SupportedLanguage::JavaScript)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("ts"),
+            Some(SupportedLanguage::TypeScript)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("go"),
+            Some(SupportedLanguage::Go)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("c"),
+            Some(SupportedLanguage::C)
+        );
+        assert_eq!(
+            SupportedLanguage::from_extension("cpp"),
+            Some(SupportedLanguage::Cpp)
+        );
         assert_eq!(SupportedLanguage::from_extension("unknown"), None);
     }
 
@@ -329,23 +358,29 @@ mod tests {
     async fn test_tree_sitter_manager_creation() {
         let result = TreeSitterManager::new().await;
         assert!(result.is_ok(), "TreeSitterManager creation should succeed");
-        
+
         let mut manager = result.unwrap();
-        
+
         // 测试是否可以获取各种语言的解析器
         for lang in SupportedLanguage::all() {
             let parser = manager.get_parser(lang);
-            assert!(parser.is_some(), "Should be able to get parser for {:?}", lang);
+            assert!(
+                parser.is_some(),
+                "Should be able to get parser for {:?}",
+                lang
+            );
         }
     }
 
     #[tokio::test]
     async fn test_analyze_empty_code() {
-        let mut manager = TreeSitterManager::new().await.expect("Failed to create manager");
-        
+        let mut manager = TreeSitterManager::new()
+            .await
+            .expect("Failed to create manager");
+
         let result = manager.analyze_structure("", SupportedLanguage::Java);
         assert!(result.is_ok(), "Should handle empty code gracefully");
-        
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "java");
         assert_eq!(summary.functions.len(), 0);
@@ -354,8 +389,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_simple_java_code() {
-        let mut manager = TreeSitterManager::new().await.expect("Failed to create manager");
-        
+        let mut manager = TreeSitterManager::new()
+            .await
+            .expect("Failed to create manager");
+
         let java_code = r#"
         public class Test {
             public void hello() {
@@ -363,10 +400,10 @@ mod tests {
             }
         }
         "#;
-        
+
         let result = manager.analyze_structure(java_code, SupportedLanguage::Java);
         assert!(result.is_ok(), "Should successfully analyze Java code");
-        
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "java");
         // 简单验证解析结果存在（但不强制要求数量）
@@ -376,8 +413,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_simple_rust_code() {
-        let mut manager = TreeSitterManager::new().await.expect("Failed to create manager");
-        
+        let mut manager = TreeSitterManager::new()
+            .await
+            .expect("Failed to create manager");
+
         let rust_code = r#"
         pub struct TestStruct {
             field: String,
@@ -389,10 +428,10 @@ mod tests {
             }
         }
         "#;
-        
+
         let result = manager.analyze_structure(rust_code, SupportedLanguage::Rust);
         assert!(result.is_ok(), "Should successfully analyze Rust code");
-        
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "rust");
         // 简单验证解析结果存在
@@ -402,20 +441,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_multiple_languages() {
-        let mut manager = TreeSitterManager::new().await.expect("Failed to create manager");
-        
+        let mut manager = TreeSitterManager::new()
+            .await
+            .expect("Failed to create manager");
+
         let test_codes = vec![
-            (SupportedLanguage::Java, "public class Test { void hello() {} }"),
+            (
+                SupportedLanguage::Java,
+                "public class Test { void hello() {} }",
+            ),
             (SupportedLanguage::Rust, "pub fn hello() {}"),
             (SupportedLanguage::Python, "def hello(): pass"),
             (SupportedLanguage::JavaScript, "function hello() {}"),
             (SupportedLanguage::Go, "func hello() {}"),
         ];
-        
+
         for (lang, code) in test_codes {
             let result = manager.analyze_structure(code, lang);
-            assert!(result.is_ok(), "Should successfully analyze {:?} code", lang);
-            
+            assert!(
+                result.is_ok(),
+                "Should successfully analyze {:?} code",
+                lang
+            );
+
             let summary = result.unwrap();
             assert_eq!(summary.language, lang.name());
         }

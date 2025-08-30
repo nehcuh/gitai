@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use gitai::architectural_impact::{
-    ArchitecturalImpactAnalysis, BreakingChange, BreakingChangeType, ImpactLevel,
-    git_state_analyzer::GitStateAnalyzer,
+    git_state_analyzer::GitStateAnalyzer, ArchitecturalImpactAnalysis, BreakingChange,
+    BreakingChangeType, ImpactLevel,
 };
-use gitai::tree_sitter::{StructuralSummary, FunctionInfo, ClassInfo};
+use gitai::tree_sitter::{ClassInfo, FunctionInfo, StructuralSummary};
 /// 创建一个大型的测试 StructuralSummary
 fn create_large_summary(function_count: usize, class_count: usize) -> StructuralSummary {
     let mut functions = Vec::new();
@@ -20,7 +20,7 @@ fn create_large_summary(function_count: usize, class_count: usize) -> Structural
             calls_count: (i % 20) as u32,
         });
     }
-    
+
     let mut classes = Vec::new();
     for i in 0..class_count {
         classes.push(ClassInfo {
@@ -34,7 +34,7 @@ fn create_large_summary(function_count: usize, class_count: usize) -> Structural
             end_line: i * 50 + 45,
         });
     }
-    
+
     StructuralSummary {
         functions,
         classes,
@@ -48,13 +48,16 @@ fn create_large_summary(function_count: usize, class_count: usize) -> Structural
 /// 创建一个大型的测试 diff
 fn create_large_diff(file_count: usize, changes_per_file: usize) -> String {
     let mut diff = String::new();
-    
+
     for f in 0..file_count {
-        diff.push_str(&format!("diff --git a/src/file_{}.rs b/src/file_{}.rs\n", f, f));
+        diff.push_str(&format!(
+            "diff --git a/src/file_{}.rs b/src/file_{}.rs\n",
+            f, f
+        ));
         diff.push_str(&format!("index abc{}..def{} 100644\n", f, f));
         diff.push_str(&format!("--- a/src/file_{}.rs\n", f));
         diff.push_str(&format!("+++ b/src/file_{}.rs\n", f));
-        
+
         for c in 0..changes_per_file {
             diff.push_str(&format!("@@ -{},7 +{},7 @@\n", c * 10, c * 10));
             if c % 3 == 0 {
@@ -71,14 +74,14 @@ fn create_large_diff(file_count: usize, changes_per_file: usize) -> String {
             }
         }
     }
-    
+
     diff
 }
 
 fn benchmark_ast_comparison(c: &mut Criterion) {
     let before = create_large_summary(100, 20);
     let mut after = before.clone();
-    
+
     // 修改一些函数和类
     for i in 0..10 {
         after.functions[i].parameters.push("NewParam".to_string());
@@ -86,7 +89,7 @@ fn benchmark_ast_comparison(c: &mut Criterion) {
     for i in 0..5 {
         after.classes[i].methods_count += 5;
     }
-    
+
     c.bench_function("ast_comparison_100_functions", |b| {
         b.iter(|| {
             gitai::architectural_impact::ast_comparison::compare_structural_summaries(
@@ -99,7 +102,7 @@ fn benchmark_ast_comparison(c: &mut Criterion) {
 
 fn benchmark_risk_assessment(c: &mut Criterion) {
     let mut analysis = ArchitecturalImpactAnalysis::new();
-    
+
     // 添加多个破坏性变更
     for i in 0..50 {
         analysis.add_breaking_change(BreakingChange {
@@ -123,7 +126,7 @@ fn benchmark_risk_assessment(c: &mut Criterion) {
             file_path: format!("src/file_{}.rs", i % 10),
         });
     }
-    
+
     c.bench_function("risk_assessment_50_changes", |b| {
         b.iter(|| {
             let mut a = analysis.clone();
@@ -135,7 +138,7 @@ fn benchmark_risk_assessment(c: &mut Criterion) {
 
 fn benchmark_ai_context_generation(c: &mut Criterion) {
     let mut analysis = ArchitecturalImpactAnalysis::new();
-    
+
     // 添加各种类型的变更
     for i in 0..30 {
         analysis.add_breaking_change(BreakingChange {
@@ -162,7 +165,7 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
             file_path: format!("src/module_{}/file_{}.rs", i % 5, i),
         });
     }
-    
+
     c.bench_function("ai_context_generation_30_changes", |b| {
         b.iter(|| {
             let mut a = analysis.clone();
@@ -175,19 +178,21 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
 fn benchmark_diff_analysis(c: &mut Criterion) {
     let diff_small = create_large_diff(5, 10);
     let diff_large = create_large_diff(20, 20);
-    
+
     c.bench_function("diff_analysis_small", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter(|_| async {
-            let analyzer = GitStateAnalyzer::new();
-            black_box(analyzer.analyze_git_diff(&diff_small).await)
-        })
+        b.to_async(tokio::runtime::Runtime::new().unwrap())
+            .iter(|_| async {
+                let analyzer = GitStateAnalyzer::new();
+                black_box(analyzer.analyze_git_diff(&diff_small).await)
+            })
     });
-    
+
     c.bench_function("diff_analysis_large", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap()).iter(|_| async {
-            let analyzer = GitStateAnalyzer::new();
-            black_box(analyzer.analyze_git_diff(&diff_large).await)
-        })
+        b.to_async(tokio::runtime::Runtime::new().unwrap())
+            .iter(|_| async {
+                let analyzer = GitStateAnalyzer::new();
+                black_box(analyzer.analyze_git_diff(&diff_large).await)
+            })
     });
 }
 

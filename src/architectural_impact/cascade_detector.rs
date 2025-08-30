@@ -1,9 +1,9 @@
 // 级联效应检测模块
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use serde::{Serialize, Deserialize};
 
-use crate::architectural_impact::dependency_graph::{DependencyGraph, EdgeType, NodeType, Node};
-use crate::architectural_impact::{BreakingChange};
+use crate::architectural_impact::dependency_graph::{DependencyGraph, EdgeType, Node, NodeType};
+use crate::architectural_impact::BreakingChange;
 
 /// 级联效应严重性
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,7 +74,10 @@ pub struct CascadeDetector {
 
 impl CascadeDetector {
     pub fn new(graph: DependencyGraph) -> Self {
-        Self { graph, thresholds: CascadeThresholds::default() }
+        Self {
+            graph,
+            thresholds: CascadeThresholds::default(),
+        }
     }
 
     pub fn with_thresholds(mut self, thresholds: CascadeThresholds) -> Self {
@@ -92,19 +95,30 @@ impl CascadeDetector {
             for trigger in trigger_nodes {
                 let chains = self.enumerate_chains(&trigger, self.thresholds.max_depth);
                 for chain in chains {
-                    if chain.len() < self.thresholds.min_chain_len { continue; }
+                    if chain.len() < self.thresholds.min_chain_len {
+                        continue;
+                    }
                     let prob = self.estimate_chain_probability(&chain);
-                    if prob < self.thresholds.min_probability { continue; }
+                    if prob < self.thresholds.min_probability {
+                        continue;
+                    }
 
                     // 去重（相同链路不重复添加）
-                    if !seen.insert(chain.clone()) { continue; }
+                    if !seen.insert(chain.clone()) {
+                        continue;
+                    }
 
                     let severity = self.estimate_severity(&chain, prob);
                     let description = format!(
                         "由 {} 触发，经 {} 层传播的{}级别级联效应",
                         &trigger,
                         chain.len().saturating_sub(1),
-                        match severity { Severity::Critical=>"紧急", Severity::High=>"高", Severity::Medium=>"中等", Severity::Low=>"低" }
+                        match severity {
+                            Severity::Critical => "紧急",
+                            Severity::High => "高",
+                            Severity::Medium => "中等",
+                            Severity::Low => "低",
+                        }
                     );
 
                     effects.push(CascadeEffect {
@@ -133,7 +147,10 @@ impl CascadeDetector {
                 let fan_out = self.graph.get_dependencies(node_id).len();
                 let fan_in = self.graph.get_dependents(node_id).len();
                 critical.push(CriticalNode {
-                    id: node_id.clone(), centrality, fan_in, fan_out
+                    id: node_id.clone(),
+                    centrality,
+                    fan_in,
+                    fan_out,
                 });
             }
         }
@@ -188,10 +205,14 @@ impl CascadeDetector {
 
         while let Some((current, path)) = stack.pop() {
             let depth = path.len() - 1;
-            if depth >= max_depth { continue; }
+            if depth >= max_depth {
+                continue;
+            }
 
             for dep in self.graph.get_dependents(&current) {
-                if path.contains(dep) { continue; } // 避免环
+                if path.contains(dep) {
+                    continue;
+                } // 避免环
                 let mut new_path = path.clone();
                 new_path.push(dep.clone());
                 results.push(new_path.clone());
@@ -203,7 +224,9 @@ impl CascadeDetector {
 
     /// 估算链路概率
     fn estimate_chain_probability(&self, chain: &[String]) -> f32 {
-        if chain.len() < 2 { return 0.0; }
+        if chain.len() < 2 {
+            return 0.0;
+        }
         let mut prob = 1.0_f32;
         for w in chain.windows(2) {
             let from = &w[0];
@@ -225,11 +248,17 @@ impl CascadeDetector {
         let mut max_cent = 0.0_f32;
         for node_id in chain {
             let c = self.graph.calculate_centrality(node_id);
-            if c > max_cent { max_cent = c; }
+            if c > max_cent {
+                max_cent = c;
+            }
         }
-        if probability > 0.8 || length >= 5 || max_cent > (self.thresholds.critical_centrality + 0.1) {
+        if probability > 0.8
+            || length >= 5
+            || max_cent > (self.thresholds.critical_centrality + 0.1)
+        {
             Severity::High
-        } else if probability > 0.6 || length >= 4 || max_cent > self.thresholds.critical_centrality {
+        } else if probability > 0.6 || length >= 4 || max_cent > self.thresholds.critical_centrality
+        {
             Severity::Medium
         } else if probability > self.thresholds.min_probability {
             Severity::Low
@@ -240,7 +269,12 @@ impl CascadeDetector {
 
     /// 辅助：根据边类型返回影响因子
     fn edge_impact_factor(&self, from: &str, to: &str) -> f32 {
-        if let Some(edge) = self.graph.edges.iter().find(|e| e.from == from && e.to == to) {
+        if let Some(edge) = self
+            .graph
+            .edges
+            .iter()
+            .find(|e| e.from == from && e.to == to)
+        {
             match edge.edge_type {
                 EdgeType::Calls => 0.9,
                 EdgeType::Inherits => 0.95,
@@ -261,26 +295,62 @@ impl CascadeDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::architectural_impact::dependency_graph::{DependencyGraph, Node, NodeType, FunctionNode, NodeMetadata, Edge, EdgeType, Visibility};
+    use crate::architectural_impact::dependency_graph::{
+        DependencyGraph, Edge, EdgeType, FunctionNode, Node, NodeMetadata, NodeType, Visibility,
+    };
     use crate::architectural_impact::{BreakingChange, BreakingChangeType, ImpactLevel};
 
     fn setup_graph() -> DependencyGraph {
         let mut g = DependencyGraph::new();
-        for id in ["A","B","C","D","E"] {
+        for id in ["A", "B", "C", "D", "E"] {
             g.add_node(Node {
                 id: id.to_string(),
                 node_type: NodeType::Function(FunctionNode {
-                    name: id.to_string(), visibility: Some(Visibility::Public), parameters: vec![], return_type: None, is_async: false
+                    name: id.to_string(),
+                    visibility: Some(Visibility::Public),
+                    parameters: vec![],
+                    return_type: None,
+                    is_async: false,
                 }),
-                metadata: NodeMetadata { file_path: format!("{}.rs", id), start_line: 1, end_line: 3, complexity: 1, created_at: 0 },
+                metadata: NodeMetadata {
+                    file_path: format!("{}.rs", id),
+                    start_line: 1,
+                    end_line: 3,
+                    complexity: 1,
+                    created_at: 0,
+                },
                 importance_score: if id == "A" { 0.9 } else { 0.7 },
             });
         }
         // A 被 B 和 E 调用；B -> C -> D
-        g.add_edge(Edge { from: "B".into(), to: "A".into(), edge_type: EdgeType::Calls, weight: 1.0, metadata: None });
-        g.add_edge(Edge { from: "C".into(), to: "B".into(), edge_type: EdgeType::Calls, weight: 1.0, metadata: None });
-        g.add_edge(Edge { from: "D".into(), to: "C".into(), edge_type: EdgeType::Calls, weight: 1.0, metadata: None });
-        g.add_edge(Edge { from: "E".into(), to: "A".into(), edge_type: EdgeType::Calls, weight: 1.0, metadata: None });
+        g.add_edge(Edge {
+            from: "B".into(),
+            to: "A".into(),
+            edge_type: EdgeType::Calls,
+            weight: 1.0,
+            metadata: None,
+        });
+        g.add_edge(Edge {
+            from: "C".into(),
+            to: "B".into(),
+            edge_type: EdgeType::Calls,
+            weight: 1.0,
+            metadata: None,
+        });
+        g.add_edge(Edge {
+            from: "D".into(),
+            to: "C".into(),
+            edge_type: EdgeType::Calls,
+            weight: 1.0,
+            metadata: None,
+        });
+        g.add_edge(Edge {
+            from: "E".into(),
+            to: "A".into(),
+            edge_type: EdgeType::Calls,
+            weight: 1.0,
+            metadata: None,
+        });
         g.rebuild_adjacency_lists();
         g
     }
@@ -304,7 +374,10 @@ mod tests {
         assert!(!effects.is_empty());
         // 至少应包含 A -> B 和 A -> E 的反向传播链（以B/E为终点）
         let chains: Vec<Vec<String>> = effects.into_iter().map(|e| e.affected_chain).collect();
-        assert!(chains.iter().any(|c| c.starts_with(&vec!["A".to_string(), "B".to_string()]) || c.ends_with(&vec!["B".to_string()])));
+        assert!(chains
+            .iter()
+            .any(|c| c.starts_with(&vec!["A".to_string(), "B".to_string()])
+                || c.ends_with(&vec!["B".to_string()])));
     }
 
     #[test]
@@ -316,4 +389,3 @@ mod tests {
         assert!(critical[0].centrality >= detector.thresholds.critical_centrality);
     }
 }
-

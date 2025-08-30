@@ -9,7 +9,7 @@ pub struct Args {
     /// 子命令
     #[command(subcommand)]
     pub command: Command,
-    
+
     /// 启用AI解释（为Git命令输出提供智能解释和建议）
     #[arg(long)]
     pub ai: bool,
@@ -17,11 +17,11 @@ pub struct Args {
     /// 显式禁用AI（用于覆盖默认或别名设置）
     #[arg(long)]
     pub noai: bool,
-    
+
     /// 离线模式（不进行网络请求）
     #[arg(long, global = true)]
     pub offline: bool,
-    
+
     /// 自定义配置URL
     #[arg(long, global = true)]
     pub config_url: Option<String>,
@@ -208,7 +208,7 @@ pub enum PromptAction {
     /// 列出可用提示词
     List,
     /// 显示提示词内容
-    Show { 
+    Show {
         /// 提示词名称
         name: String,
         /// 语言

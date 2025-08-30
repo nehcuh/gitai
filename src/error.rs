@@ -2,8 +2,8 @@
 //
 // 提供用户友好的错误信息和详细的日志记录
 
+use log::{debug, error, warn};
 use std::fmt;
-use log::{error, warn, debug};
 
 /// GitAI 统一错误类型
 #[derive(Debug)]
@@ -35,10 +35,16 @@ impl GitAIError {
     pub fn user_message(&self) -> String {
         match self {
             GitAIError::Config(msg) => {
-                format!("❌ 配置错误: {}\n💡 提示: 请检查 ~/.config/gitai/config.toml 配置文件", msg)
+                format!(
+                    "❌ 配置错误: {}\n💡 提示: 请检查 ~/.config/gitai/config.toml 配置文件",
+                    msg
+                )
             }
             GitAIError::Git(msg) => {
-                format!("❌ Git 操作失败: {}\n💡 提示: 确保您在 Git 仓库中，并且有相应的权限", msg)
+                format!(
+                    "❌ Git 操作失败: {}\n💡 提示: 确保您在 Git 仓库中，并且有相应的权限",
+                    msg
+                )
             }
             GitAIError::FileSystem(msg) => {
                 format!("❌ 文件系统错误: {}\n💡 提示: 检查文件路径和权限设置", msg)
@@ -47,26 +53,33 @@ impl GitAIError {
                 format!("❌ 网络连接错误: {}\n💡 提示: 检查网络连接和代理设置", msg)
             }
             GitAIError::ScanTool(msg) => {
-                format!("❌ 扫描工具错误: {}\n💡 提示: 使用 'gitai scan --auto-install' 安装所需工具", msg)
+                format!(
+                    "❌ 扫描工具错误: {}\n💡 提示: 使用 'gitai scan --auto-install' 安装所需工具",
+                    msg
+                )
             }
             GitAIError::AiService(msg) => {
-                format!("❌ AI 服务错误: {}\n💡 提示: 检查 AI 服务配置和 API 密钥", msg)
+                format!(
+                    "❌ AI 服务错误: {}\n💡 提示: 检查 AI 服务配置和 API 密钥",
+                    msg
+                )
             }
             GitAIError::Parse(msg) => {
-                format!("❌ 解析错误: {}\n💡 提示: 数据格式可能不正确，请检查输入", msg)
+                format!(
+                    "❌ 解析错误: {}\n💡 提示: 数据格式可能不正确，请检查输入",
+                    msg
+                )
             }
             GitAIError::MissingDependency(dep) => {
                 format!("❌ 缺少依赖: {}\n💡 提示: 请先安装所需的依赖工具", dep)
             }
-            GitAIError::UserCancelled => {
-                "⚠️ 操作已取消".to_string()
-            }
+            GitAIError::UserCancelled => "⚠️ 操作已取消".to_string(),
             GitAIError::Unknown(msg) => {
                 format!("❌ 未知错误: {}\n💡 提示: 请查看日志文件获取更多信息", msg)
             }
         }
     }
-    
+
     /// 记录错误到日志
     pub fn log(&self) {
         match self {
@@ -168,14 +181,14 @@ pub type Result<T> = std::result::Result<T, GitAIError>;
 pub trait ErrorContext<T> {
     /// 添加上下文信息
     fn context(self, msg: &str) -> Result<T>;
-    
+
     /// 添加用户友好的提示
     fn with_hint(self, hint: &str) -> Result<T>;
 }
 
-impl<T, E> ErrorContext<T> for std::result::Result<T, E> 
+impl<T, E> ErrorContext<T> for std::result::Result<T, E>
 where
-    E: std::error::Error + Send + Sync + 'static
+    E: std::error::Error + Send + Sync + 'static,
 {
     fn context(self, msg: &str) -> Result<T> {
         self.map_err(|e| {
@@ -184,7 +197,7 @@ where
             error
         })
     }
-    
+
     fn with_hint(self, hint: &str) -> Result<T> {
         self.map_err(|e| {
             let mut error_msg = e.to_string();

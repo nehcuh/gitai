@@ -2,13 +2,13 @@
 //
 // 提供代码结构分析功能的 MCP 服务实现
 
-use crate::{config::Config, tree_sitter, mcp::*};
+use crate::{config::Config, mcp::*, tree_sitter};
+use log::{debug, error, info, warn};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
-use log::{debug, info, warn, error};
 
 /// Analysis 服务
 pub struct AnalysisService {
@@ -30,19 +30,22 @@ impl AnalysisService {
             1
         };
 
-        Ok(Self {
-            config,
-            verbosity,
-        })
+        Ok(Self { config, verbosity })
     }
 
     /// 执行代码分析
-    async fn execute_analysis(&self, params: AnalysisParams) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_analysis(
+        &self,
+        params: AnalysisParams,
+    ) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
         info!("🔍 开始代码分析: {}", params.path);
-        debug!("📋 分析参数: 语言={:?}, 详细程度={:?}", params.language, params.verbosity);
-        
+        debug!(
+            "📋 分析参数: 语言={:?}, 详细程度={:?}",
+            params.language, params.verbosity
+        );
+
         let path = Path::new(&params.path);
-        
+
         // 验证路径是否存在
         if !path.exists() {
             error!("❌ 分析路径不存在: {}", params.path);
@@ -62,38 +65,38 @@ impl AnalysisService {
                 .ok_or_else(|| format!("不支持的语言: {}", lang))?
         } else {
             debug!("🔍 自动推断语言");
-            Self::infer_language_from_path(path)
-                .map_err(|e| format!("无法推断语言: {}", e))?
+            Self::infer_language_from_path(path).map_err(|e| format!("无法推断语言: {}", e))?
         };
 
         // 读取文件内容
-        let code_content = std::fs::read_to_string(path)
-            .map_err(|e| {
-                error!("❌ 无法读取文件 {}: {}", path.display(), e);
-                format!("无法读取文件 {}: {}", path.display(), e)
-            })?;
+        let code_content = std::fs::read_to_string(path).map_err(|e| {
+            error!("❌ 无法读取文件 {}: {}", path.display(), e);
+            format!("无法读取文件 {}: {}", path.display(), e)
+        })?;
 
         debug!("📄 代码内容长度: {} 字符", code_content.len());
 
         // 创建 Tree-sitter 管理器并分析
-        let mut manager = tree_sitter::TreeSitterManager::new().await
-            .map_err(|e| {
-                error!("❌ 无法创建 Tree-sitter 管理器: {}", e);
-                format!("无法创建 Tree-sitter 管理器: {}", e)
-            })?;
+        let mut manager = tree_sitter::TreeSitterManager::new().await.map_err(|e| {
+            error!("❌ 无法创建 Tree-sitter 管理器: {}", e);
+            format!("无法创建 Tree-sitter 管理器: {}", e)
+        })?;
 
-        let summary = manager.analyze_structure(&code_content, language)
+        let summary = manager
+            .analyze_structure(&code_content, language)
             .map_err(|e| {
                 error!("❌ 结构分析失败: {}", e);
                 format!("结构分析失败: {}", e)
             })?;
-        
-        debug!("📊 分析结果: 函数={}, 类={}, 注释={}, 复杂度={}", 
-               summary.functions.len(), 
-               summary.classes.len(), 
-               summary.comments.len(),
-               summary.complexity_hints.len());
-        
+
+        debug!(
+            "📊 分析结果: 函数={}, 类={}, 注释={}, 复杂度={}",
+            summary.functions.len(),
+            summary.classes.len(),
+            summary.comments.len(),
+            summary.complexity_hints.len()
+        );
+
         // 转换分析结果
         let result = self.convert_analysis_result(summary, self.verbosity);
         info!("✅ 代码分析完成: {}", params.path);
@@ -101,12 +104,16 @@ impl AnalysisService {
     }
 
     /// 分析目录中的所有代码文件
-    async fn analyze_directory(&self, dir_path: &Path, params: &AnalysisParams) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_directory(
+        &self,
+        dir_path: &Path,
+        params: &AnalysisParams,
+    ) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
         info!("📁 开始分析目录: {}", dir_path.display());
-        
+
         // 查找目录中的代码文件
         let code_files = self.find_code_files(dir_path, params.language.as_deref())?;
-        
+
         if code_files.is_empty() {
             warn!("⚠️ 目录中未找到可分析的代码文件");
             return Ok(AnalysisResult {
@@ -139,9 +146,9 @@ impl AnalysisService {
                 },
             });
         }
-        
+
         info!("📋 找到 {} 个代码文件，开始分析", code_files.len());
-        
+
         // 分析所有文件并聚合结果
         let mut total_summary = CodeSummary {
             total_lines: 0,
@@ -150,15 +157,15 @@ impl AnalysisService {
             blank_lines: 0,
             complexity_score: 0,
         };
-        
+
         let mut all_functions = Vec::new();
         let mut all_classes = Vec::new();
         let mut all_imports = Vec::new();
         let mut language_stats = HashMap::new();
-        
+
         for file_path in &code_files {
             debug!("🔍 分析文件: {}", file_path.display());
-            
+
             match self.analyze_single_file(&file_path).await {
                 Ok(result) => {
                     total_summary.total_lines += result.summary.total_lines;
@@ -166,11 +173,11 @@ impl AnalysisService {
                     total_summary.comment_lines += result.summary.comment_lines;
                     total_summary.blank_lines += result.summary.blank_lines;
                     total_summary.complexity_score += result.summary.complexity_score;
-                    
+
                     all_functions.extend(result.structures.functions);
                     all_classes.extend(result.structures.classes);
                     all_imports.extend(result.structures.imports);
-                    
+
                     *language_stats.entry(result.language.clone()).or_insert(0) += 1;
                 }
                 Err(e) => {
@@ -178,7 +185,7 @@ impl AnalysisService {
                 }
             }
         }
-        
+
         // 计算平均指标
         let file_count = code_files.len();
         let avg_complexity = if file_count > 0 {
@@ -186,26 +193,35 @@ impl AnalysisService {
         } else {
             0
         };
-        
+
         let comment_ratio = if total_summary.total_lines > 0 {
             total_summary.comment_lines as f64 / total_summary.total_lines as f64
         } else {
             0.0
         };
-        
+
         let mut details = HashMap::new();
         details.insert("directory_path".to_string(), dir_path.display().to_string());
         details.insert("file_count".to_string(), file_count.to_string());
         details.insert("total_files_analyzed".to_string(), file_count.to_string());
-        details.insert("language_distribution".to_string(), serde_json::to_string(&language_stats).unwrap_or_default());
-        
+        details.insert(
+            "language_distribution".to_string(),
+            serde_json::to_string(&language_stats).unwrap_or_default(),
+        );
+
         if params.verbosity.unwrap_or(1) > 1 {
-            details.insert("all_functions".to_string(), serde_json::to_string(&all_functions).unwrap_or_default());
-            details.insert("all_classes".to_string(), serde_json::to_string(&all_classes).unwrap_or_default());
+            details.insert(
+                "all_functions".to_string(),
+                serde_json::to_string(&all_functions).unwrap_or_default(),
+            );
+            details.insert(
+                "all_classes".to_string(),
+                serde_json::to_string(&all_classes).unwrap_or_default(),
+            );
         }
-        
+
         info!("✅ 目录分析完成: {} 个文件", file_count);
-        
+
         Ok(AnalysisResult {
             success: true,
             message: format!("目录分析完成，共分析 {} 个文件", file_count),
@@ -224,11 +240,15 @@ impl AnalysisService {
             details,
         })
     }
-    
+
     /// 查找目录中的代码文件
-    fn find_code_files(&self, dir_path: &Path, language_filter: Option<&str>) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
+    fn find_code_files(
+        &self,
+        dir_path: &Path,
+        language_filter: Option<&str>,
+    ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
         let mut code_files = Vec::new();
-        
+
         // 支持的文件扩展名
         let supported_extensions = if let Some(lang) = language_filter {
             // 如果指定了语言，只查找该语言的文件
@@ -245,21 +265,25 @@ impl AnalysisService {
             }
         } else {
             // 否则查找所有支持的代码文件
-            vec!["rs", "java", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "py", "go", "js", "ts"]
+            vec![
+                "rs", "java", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "py", "go", "js", "ts",
+            ]
         };
-        
+
         // 递归查找文件
         let mut entries = std::fs::read_dir(dir_path)
             .map_err(|e| format!("无法读取目录 {}: {}", dir_path.display(), e))?;
-        
+
         while let Some(entry) = entries.next() {
             let entry = entry.map_err(|e| format!("读取目录条目失败: {}", e))?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 // 递归处理子目录，但跳过一些常见的目录
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if !["target", "node_modules", ".git", ".idea", "vendor", "build"].contains(&file_name) {
+                if !["target", "node_modules", ".git", ".idea", "vendor", "build"]
+                    .contains(&file_name)
+                {
                     code_files.extend(self.find_code_files(&path, language_filter)?);
                 }
             } else if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
@@ -268,53 +292,89 @@ impl AnalysisService {
                 }
             }
         }
-        
+
         Ok(code_files)
     }
-    
+
     /// 分析单个文件
-    async fn analyze_single_file(&self, file_path: &Path) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_single_file(
+        &self,
+        file_path: &Path,
+    ) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
         debug!("🔍 分析单个文件: {}", file_path.display());
-        
+
         let language = Self::infer_language_from_path(file_path)?;
-        
+
         let code_content = std::fs::read_to_string(file_path)
             .map_err(|e| format!("无法读取文件 {}: {}", file_path.display(), e))?;
-        
-        let mut manager = tree_sitter::TreeSitterManager::new().await
+
+        let mut manager = tree_sitter::TreeSitterManager::new()
+            .await
             .map_err(|e| format!("无法创建 Tree-sitter 管理器: {}", e))?;
-        
-        let summary = manager.analyze_structure(&code_content, language)
+
+        let summary = manager
+            .analyze_structure(&code_content, language)
             .map_err(|e| format!("结构分析失败: {}", e))?;
-        
+
         // 转换分析结果
         let result = self.convert_analysis_result(summary, 1); // 使用默认详细程度
-        
+
         Ok(result)
     }
-    
-    fn infer_language_from_path(path: &Path) -> Result<tree_sitter::SupportedLanguage, Box<dyn std::error::Error + Send + Sync>> {
-        let extension = path.extension()
+
+    fn infer_language_from_path(
+        path: &Path,
+    ) -> Result<tree_sitter::SupportedLanguage, Box<dyn std::error::Error + Send + Sync>> {
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .ok_or_else(|| "无法确定文件类型".to_string())?;
-        
+
         tree_sitter::SupportedLanguage::from_extension(extension)
             .ok_or_else(|| format!("不支持的文件扩展名: {}", extension).into())
     }
 
-    fn convert_analysis_result(&self, summary: tree_sitter::StructuralSummary, verbosity: u32) -> AnalysisResult {
+    fn convert_analysis_result(
+        &self,
+        summary: tree_sitter::StructuralSummary,
+        verbosity: u32,
+    ) -> AnalysisResult {
         let mut details = HashMap::new();
         details.insert("language".to_string(), summary.language.clone());
-        details.insert("functions_count".to_string(), summary.functions.len().to_string());
-        details.insert("classes_count".to_string(), summary.classes.len().to_string());
-        details.insert("imports_count".to_string(), summary.imports.len().to_string());
-        details.insert("comments_count".to_string(), summary.comments.len().to_string());
-        
+        details.insert(
+            "functions_count".to_string(),
+            summary.functions.len().to_string(),
+        );
+        details.insert(
+            "classes_count".to_string(),
+            summary.classes.len().to_string(),
+        );
+        details.insert(
+            "imports_count".to_string(),
+            summary.imports.len().to_string(),
+        );
+        details.insert(
+            "comments_count".to_string(),
+            summary.comments.len().to_string(),
+        );
+
         if verbosity > 1 {
-            details.insert("functions".to_string(), serde_json::to_string(&summary.functions).unwrap_or_default());
-            details.insert("classes".to_string(), serde_json::to_string(&summary.classes).unwrap_or_default());
-            details.insert("imports".to_string(), serde_json::to_string(&summary.imports).unwrap_or_default());
-            details.insert("comments".to_string(), serde_json::to_string(&summary.comments).unwrap_or_default());
+            details.insert(
+                "functions".to_string(),
+                serde_json::to_string(&summary.functions).unwrap_or_default(),
+            );
+            details.insert(
+                "classes".to_string(),
+                serde_json::to_string(&summary.classes).unwrap_or_default(),
+            );
+            details.insert(
+                "imports".to_string(),
+                serde_json::to_string(&summary.imports).unwrap_or_default(),
+            );
+            details.insert(
+                "comments".to_string(),
+                serde_json::to_string(&summary.comments).unwrap_or_default(),
+            );
         }
 
         // 计算一些指标
@@ -351,7 +411,7 @@ impl AnalysisService {
         }
     }
 
-      // 这个方法暂时不需要，因为我们在 convert_analysis_result 中已经简化了计算
+    // 这个方法暂时不需要，因为我们在 convert_analysis_result 中已经简化了计算
     #[allow(dead_code)]
     fn calculate_maintainability_index(_summary: &tree_sitter::StructuralSummary) -> f64 {
         85.0 // 简化返回固定值
@@ -426,41 +486,76 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
         ]
     }
 
-    async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> crate::mcp::McpResult<serde_json::Value> {
         match name {
             "execute_analysis" => {
                 let mut params: AnalysisParams = serde_json::from_value(arguments)
                     .map_err(|e| crate::mcp::parse_error("analysis", e))?;
-                
+
                 // 使用服务配置的默认详细程度
                 if params.verbosity.is_none() {
                     params.verbosity = Some(self.verbosity);
                 }
-                
-                let result = self.execute_analysis(params).await
+
+                let result = self
+                    .execute_analysis(params)
+                    .await
                     .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
-                
+
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("analysis", e))?)
             }
             "export_dependency_graph" => {
-                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-                let threshold = arguments.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.15) as f32;
-                let dot = crate::architectural_impact::graph_export::export_dot_string(std::path::Path::new(path), threshold)
-                    .await
-                    .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
+                let path = arguments
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
+                let threshold = arguments
+                    .get("threshold")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.15) as f32;
+                let dot = crate::architectural_impact::graph_export::export_dot_string(
+                    std::path::Path::new(path),
+                    threshold,
+                )
+                .await
+                .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
                 let obj = serde_json::json!({"dot": dot, "message": "ok"});
                 Ok(obj)
             }
             "query_call_chain" => {
-                let path = arguments.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-                let start = arguments.get("start").and_then(|v| v.as_str()).ok_or_else(|| invalid_parameters_error("missing 'start'"))?;
+                let path = arguments
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
+                let start = arguments
+                    .get("start")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| invalid_parameters_error("missing 'start'"))?;
                 let end = arguments.get("end").and_then(|v| v.as_str());
-                let direction = arguments.get("direction").and_then(|v| v.as_str()).unwrap_or("downstream");
-                let max_depth = arguments.get("max_depth").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
-                let max_paths = arguments.get("max_paths").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+                let direction = arguments
+                    .get("direction")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("downstream");
+                let max_depth = arguments
+                    .get("max_depth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(8) as usize;
+                let max_paths = arguments
+                    .get("max_paths")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(20) as usize;
                 let chains = crate::architectural_impact::graph_export::query_call_chain(
-                    std::path::Path::new(path), start, end, direction, max_depth, max_paths
+                    std::path::Path::new(path),
+                    start,
+                    end,
+                    direction,
+                    max_depth,
+                    max_paths,
                 )
                 .await
                 .map_err(|e| crate::mcp::execution_error("Analysis", e))?;

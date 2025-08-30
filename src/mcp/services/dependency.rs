@@ -2,12 +2,12 @@
 //
 // 提供依赖图生成和分析功能的 MCP 服务实现
 
-use crate::{config::Config, mcp::*, tree_sitter, architectural_impact::dependency_graph::*};
+use crate::{architectural_impact::dependency_graph::*, config::Config, mcp::*, tree_sitter};
+use log::{debug, error, info, warn};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::collections::HashMap;
-use log::{debug, info, warn, error};
+use std::path::Path;
 
 /// Dependency 服务
 pub struct DependencyService {
@@ -71,19 +71,22 @@ impl DependencyService {
             1
         };
 
-        Ok(Self {
-            config,
-            verbosity,
-        })
+        Ok(Self { config, verbosity })
     }
 
     /// 执行依赖图生成
-    async fn execute_dependency_graph(&self, params: DependencyParams) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn execute_dependency_graph(
+        &self,
+        params: DependencyParams,
+    ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
         info!("🔗 开始生成依赖图: {}", params.path);
-        debug!("📋 分析参数: 格式={:?}, 深度={:?}", params.format, params.depth);
-        
+        debug!(
+            "📋 分析参数: 格式={:?}, 深度={:?}",
+            params.format, params.depth
+        );
+
         let path = Path::new(&params.path);
-        
+
         // 验证路径是否存在
         if !path.exists() {
             error!("❌ 依赖图分析路径不存在: {}", params.path);
@@ -101,7 +104,11 @@ impl DependencyService {
     }
 
     /// 分析单个文件的依赖关系
-    async fn analyze_file_dependencies(&self, file_path: &Path, params: &DependencyParams) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_file_dependencies(
+        &self,
+        file_path: &Path,
+        params: &DependencyParams,
+    ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
         debug!("📄 分析单个文件依赖: {}", file_path.display());
 
         // 推断语言
@@ -109,20 +116,19 @@ impl DependencyService {
             .map_err(|e| format!("无法推断语言: {}", e))?;
 
         // 读取文件内容
-        let code_content = std::fs::read_to_string(file_path)
-            .map_err(|e| {
-                error!("❌ 无法读取文件 {}: {}", file_path.display(), e);
-                format!("无法读取文件 {}: {}", file_path.display(), e)
-            })?;
+        let code_content = std::fs::read_to_string(file_path).map_err(|e| {
+            error!("❌ 无法读取文件 {}: {}", file_path.display(), e);
+            format!("无法读取文件 {}: {}", file_path.display(), e)
+        })?;
 
         // 创建 Tree-sitter 管理器并分析
-        let mut manager = tree_sitter::TreeSitterManager::new().await
-            .map_err(|e| {
-                error!("❌ 无法创建 Tree-sitter 管理器: {}", e);
-                format!("无法创建 Tree-sitter 管理器: {}", e)
-            })?;
+        let mut manager = tree_sitter::TreeSitterManager::new().await.map_err(|e| {
+            error!("❌ 无法创建 Tree-sitter 管理器: {}", e);
+            format!("无法创建 Tree-sitter 管理器: {}", e)
+        })?;
 
-        let summary = manager.analyze_structure(&code_content, language)
+        let summary = manager
+            .analyze_structure(&code_content, language)
             .map_err(|e| {
                 error!("❌ 结构分析失败: {}", e);
                 format!("结构分析失败: {}", e)
@@ -132,16 +138,23 @@ impl DependencyService {
         let file_path_str = file_path.to_string_lossy();
         let dependency_graph = DependencyGraph::from_structural_summary(&summary, &file_path_str);
 
-        debug!("📊 依赖图构建完成: 节点={}, 边={}", 
-               dependency_graph.nodes.len(), 
-               dependency_graph.edges.len());
+        debug!(
+            "📊 依赖图构建完成: 节点={}, 边={}",
+            dependency_graph.nodes.len(),
+            dependency_graph.edges.len()
+        );
 
         // 生成输出
-        self.generate_dependency_output(dependency_graph, params).await
+        self.generate_dependency_output(dependency_graph, params)
+            .await
     }
 
     /// 分析目录中所有文件的依赖关系
-    async fn analyze_directory_dependencies(&self, dir_path: &Path, params: &DependencyParams) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_directory_dependencies(
+        &self,
+        dir_path: &Path,
+        params: &DependencyParams,
+    ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
         info!("📁 开始分析目录依赖关系: {}", dir_path.display());
 
         // 查找所有代码文件
@@ -185,37 +198,47 @@ impl DependencyService {
             match self.analyze_single_file_for_merge(&file_path).await {
                 Ok(file_graph) => {
                     self.merge_dependency_graph(&mut merged_graph, file_graph);
-                },
+                }
                 Err(e) => {
                     warn!("⚠️ 分析文件 {} 失败: {}", file_path.display(), e);
                 }
             }
         }
 
-        debug!("📊 合并依赖图完成: 节点={}, 边={}", 
-               merged_graph.nodes.len(), 
-               merged_graph.edges.len());
+        debug!(
+            "📊 合并依赖图完成: 节点={}, 边={}",
+            merged_graph.nodes.len(),
+            merged_graph.edges.len()
+        );
 
         // 生成输出
         self.generate_dependency_output(merged_graph, params).await
     }
 
     /// 分析单个文件用于合并（内部方法）
-    async fn analyze_single_file_for_merge(&self, file_path: &Path) -> Result<DependencyGraph, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_single_file_for_merge(
+        &self,
+        file_path: &Path,
+    ) -> Result<DependencyGraph, Box<dyn std::error::Error + Send + Sync>> {
         let language = Self::infer_language_from_path(file_path)
             .map_err(|e| format!("无法推断语言: {}", e))?;
 
         let code_content = std::fs::read_to_string(file_path)
             .map_err(|e| format!("无法读取文件 {}: {}", file_path.display(), e))?;
 
-        let mut manager = tree_sitter::TreeSitterManager::new().await
+        let mut manager = tree_sitter::TreeSitterManager::new()
+            .await
             .map_err(|e| format!("无法创建 Tree-sitter 管理器: {}", e))?;
 
-        let summary = manager.analyze_structure(&code_content, language)
+        let summary = manager
+            .analyze_structure(&code_content, language)
             .map_err(|e| format!("结构分析失败: {}", e))?;
 
         let file_path_str = file_path.to_string_lossy();
-        Ok(DependencyGraph::from_structural_summary(&summary, &file_path_str))
+        Ok(DependencyGraph::from_structural_summary(
+            &summary,
+            &file_path_str,
+        ))
     }
 
     /// 合并依赖图
@@ -233,7 +256,11 @@ impl DependencyService {
     }
 
     /// 生成依赖图输出
-    async fn generate_dependency_output(&self, graph: DependencyGraph, params: &DependencyParams) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn generate_dependency_output(
+        &self,
+        graph: DependencyGraph,
+        params: &DependencyParams,
+    ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
         // 从配置中获取默认格式
         let default_format = if let Some(mcp_config) = &self.config.mcp {
             if let Some(dependency_config) = mcp_config.services.dependency.as_ref() {
@@ -244,7 +271,7 @@ impl DependencyService {
         } else {
             "json".to_string()
         };
-        
+
         let format = params.format.clone().unwrap_or(default_format);
         let statistics = graph.get_statistics();
 
@@ -262,7 +289,7 @@ impl DependencyService {
                     mermaid_content: None,
                     details: HashMap::new(),
                 })
-            },
+            }
             "dot" => {
                 info!("📄 生成 DOT 格式依赖图");
                 let dot_options = DotOptions::default();
@@ -286,15 +313,19 @@ impl DependencyService {
                     mermaid_content: None,
                     details: HashMap::new(),
                 })
-            },
+            }
             "svg" => {
                 info!("📄 生成 SVG 格式依赖图");
                 // 先生成 DOT，然后转换为 SVG
                 let dot_options = DotOptions::default();
                 let dot_content = graph.to_dot(Some(&dot_options));
 
-                let output_path = params.output.clone()
-                    .unwrap_or_else(|| format!("{}/dependency_graph.svg", std::env::current_dir().unwrap().display()));
+                let output_path = params.output.clone().unwrap_or_else(|| {
+                    format!(
+                        "{}/dependency_graph.svg",
+                        std::env::current_dir().unwrap().display()
+                    )
+                });
 
                 // 写入临时 DOT 文件
                 let temp_dot_path = format!("{}.dot", output_path.trim_end_matches(".svg"));
@@ -316,22 +347,25 @@ impl DependencyService {
                     mermaid_content: None,
                     details: {
                         let mut details = HashMap::new();
-                        details.insert("note".to_string(), "需要 Graphviz 将 DOT 转换为 SVG".to_string());
+                        details.insert(
+                            "note".to_string(),
+                            "需要 Graphviz 将 DOT 转换为 SVG".to_string(),
+                        );
                         details
                     },
                 })
-            },
+            }
             "mermaid" => {
                 info!("📄 生成 Mermaid 格式依赖图");
                 let mermaid_content = Self::convert_to_mermaid(&graph);
-                
+
                 // 如果指定了输出文件，写入文件
                 if let Some(output_path) = &params.output {
                     std::fs::write(output_path, &mermaid_content)
                         .map_err(|e| format!("无法写入 Mermaid 文件: {}", e))?;
                     info!("📁 Mermaid 文件已保存到: {}", output_path);
                 }
-                
+
                 Ok(DependencyResult {
                     success: true,
                     message: "Mermaid 格式依赖图生成成功".to_string(),
@@ -343,7 +377,7 @@ impl DependencyService {
                     mermaid_content: Some(mermaid_content),
                     details: HashMap::new(),
                 })
-            },
+            }
             _ => {
                 error!("❌ 不支持的格式: {}", format);
                 Err(format!("不支持的格式: {}", format).into())
@@ -352,13 +386,16 @@ impl DependencyService {
     }
 
     /// 查找代码文件
-    fn find_code_files(&self, dir_path: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
+    fn find_code_files(
+        &self,
+        dir_path: &Path,
+    ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
         let mut code_files = Vec::new();
-        
+
         for entry in std::fs::read_dir(dir_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(extension) = path.extension() {
                     if let Some(ext_str) = extension.to_str() {
@@ -373,20 +410,22 @@ impl DependencyService {
                 code_files.extend(sub_files);
             }
         }
-        
+
         Ok(code_files)
     }
 
     /// 检查是否为支持的代码文件
     fn is_supported_code_file(extension: &str) -> bool {
-        matches!(extension.to_lowercase().as_str(),
+        matches!(
+            extension.to_lowercase().as_str(),
             "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "h" | "hpp"
         )
     }
 
     /// 从文件路径推断语言
     fn infer_language_from_path(path: &Path) -> Result<tree_sitter::SupportedLanguage, String> {
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .ok_or_else(|| "无法获取文件扩展名".to_string())?;
 
@@ -406,33 +445,39 @@ impl DependencyService {
     /// 将依赖图转换为 Mermaid 格式
     fn convert_to_mermaid(graph: &DependencyGraph) -> String {
         let mut mermaid = String::new();
-        
+
         // Mermaid 文档头，使用 flowchart 语法
         mermaid.push_str("flowchart TD\n");
         mermaid.push_str("    %% Generated by GitAI Dependency Service\n");
         mermaid.push_str("\n");
-        
+
         // 为不同类型的节点定义样式
         let mut node_id_map = HashMap::new();
         let mut node_counter = 0;
-        
+
         // 首先生成所有节点的定义
         for (node_id, node) in &graph.nodes {
             let safe_id = format!("node{}", node_counter);
             node_id_map.insert(node_id.clone(), safe_id.clone());
-            
+
             let label = Self::get_node_display_name(&node.id);
             let shape_and_style = Self::get_mermaid_node_style(&node.node_type);
-            
-            mermaid.push_str(&format!("    {}{}\n", safe_id, shape_and_style.replace("{label}", &label)));
+
+            mermaid.push_str(&format!(
+                "    {}{}\n",
+                safe_id,
+                shape_and_style.replace("{label}", &label)
+            ));
             node_counter += 1;
         }
-        
+
         mermaid.push_str("\n");
-        
+
         // 然后生成所有边的定义
         for edge in &graph.edges {
-            if let (Some(from_id), Some(to_id)) = (node_id_map.get(&edge.from), node_id_map.get(&edge.to)) {
+            if let (Some(from_id), Some(to_id)) =
+                (node_id_map.get(&edge.from), node_id_map.get(&edge.to))
+            {
                 let arrow_style = Self::get_mermaid_edge_style(&edge.edge_type);
                 let edge_label = if let Some(metadata) = &edge.metadata {
                     if let Some(notes) = &metadata.notes {
@@ -447,19 +492,23 @@ impl DependencyService {
                 } else {
                     String::new()
                 };
-                
-                mermaid.push_str(&format!("    {}{}{} {}\n", from_id, arrow_style, edge_label, to_id));
+
+                mermaid.push_str(&format!(
+                    "    {}{}{} {}\n",
+                    from_id, arrow_style, edge_label, to_id
+                ));
             }
         }
-        
+
         // 添加样式定义
         mermaid.push_str("\n");
         mermaid.push_str("    %% Styles\n");
         mermaid.push_str("    classDef fileNode fill:#e1f5fe,stroke:#01579b,stroke-width:2px\n");
-        mermaid.push_str("    classDef functionNode fill:#f3e5f5,stroke:#4a148c,stroke-width:2px\n");
+        mermaid
+            .push_str("    classDef functionNode fill:#f3e5f5,stroke:#4a148c,stroke-width:2px\n");
         mermaid.push_str("    classDef classNode fill:#fff3e0,stroke:#e65100,stroke-width:2px\n");
         mermaid.push_str("    classDef moduleNode fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px\n");
-        
+
         // 应用样式到节点
         for (node_id, node) in &graph.nodes {
             if let Some(safe_id) = node_id_map.get(node_id) {
@@ -472,10 +521,10 @@ impl DependencyService {
                 mermaid.push_str(&format!("    class {} {}\n", safe_id, class_name));
             }
         }
-        
+
         mermaid
     }
-    
+
     /// 获取节点的显示名称
     fn get_node_display_name(node_id: &str) -> String {
         // 从节点 ID 中提取有意义的名称
@@ -484,7 +533,7 @@ impl DependencyService {
                 return name_part.to_string();
             }
         }
-        
+
         // 如果无法解析，就返回简化的版本
         if node_id.len() > 20 {
             format!("{}...", &node_id[..17])
@@ -492,17 +541,17 @@ impl DependencyService {
             node_id.to_string()
         }
     }
-    
+
     /// 获取 Mermaid 节点样式
     fn get_mermaid_node_style(node_type: &NodeType) -> String {
         match node_type {
-            NodeType::File(_) => "[{label}]".to_string(),        // 矩形表示文件
-            NodeType::Function(_) => "({label})".to_string(),    // 圆形表示函数
-            NodeType::Class(_) => "{{{label}}}".to_string(),     // 菱形表示类
-            NodeType::Module(_) => "[/{label}/]".to_string(),    // 平行四边形表示模块
+            NodeType::File(_) => "[{label}]".to_string(), // 矩形表示文件
+            NodeType::Function(_) => "({label})".to_string(), // 圆形表示函数
+            NodeType::Class(_) => "{{{label}}}".to_string(), // 菱形表示类
+            NodeType::Module(_) => "[/{label}/]".to_string(), // 平行四边形表示模块
         }
     }
-    
+
     /// 获取 Mermaid 边样式
     fn get_mermaid_edge_style(edge_type: &EdgeType) -> String {
         match edge_type {
@@ -530,11 +579,13 @@ impl GitAiMcpService for DependencyService {
     }
 
     fn tools(&self) -> Vec<Tool> {
-        vec![
-            Tool {
-                name: "execute_dependency_graph".to_string().into(),
-                description: "生成代码依赖图，支持 JSON、DOT、SVG 和 Mermaid 格式输出".to_string().into(),
-                input_schema: std::sync::Arc::new(serde_json::json!({
+        vec![Tool {
+            name: "execute_dependency_graph".to_string().into(),
+            description: "生成代码依赖图，支持 JSON、DOT、SVG 和 Mermaid 格式输出"
+                .to_string()
+                .into(),
+            input_schema: std::sync::Arc::new(
+                serde_json::json!({
                     "type": "object",
                     "properties": {
                         "path": {
@@ -570,26 +621,37 @@ impl GitAiMcpService for DependencyService {
                         }
                     },
                     "required": ["path"]
-                }).as_object().unwrap().clone()),
-            },
-        ]
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        }]
     }
 
-    async fn handle_tool_call(&self, tool_name: &str, arguments: serde_json::Value) -> McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> McpResult<serde_json::Value> {
         debug!("🔧 Dependency 服务处理工具调用: {}", tool_name);
 
         match tool_name {
             "execute_dependency_graph" => {
-                let params: DependencyParams = serde_json::from_value(arguments)
-                    .map_err(|e| parse_error("dependency", e))?;
+                let params: DependencyParams =
+                    serde_json::from_value(arguments).map_err(|e| parse_error("dependency", e))?;
 
-                let result = self.execute_dependency_graph(params).await
+                let result = self
+                    .execute_dependency_graph(params)
+                    .await
                     .map_err(|e| execution_error("dependency", e))?;
 
-                serde_json::to_value(&result)
-                    .map_err(|e| serialize_error("dependency", e))
+                serde_json::to_value(&result).map_err(|e| serialize_error("dependency", e))
             }
-            _ => Err(invalid_parameters_error(format!("Unknown tool: {}", tool_name)))
+            _ => Err(invalid_parameters_error(format!(
+                "Unknown tool: {}",
+                tool_name
+            ))),
         }
     }
 }

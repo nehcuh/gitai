@@ -1,7 +1,7 @@
 // review 转换器模块
 // 负责将分析结果转换为评审结果
 
-use super::types::{ReviewResult, ReviewConfig};
+use super::types::{ReviewConfig, ReviewResult};
 use crate::analysis::AnalysisResult;
 
 /// 将分析结果转换为评审结果
@@ -18,10 +18,13 @@ pub fn convert_analysis_result(result: &AnalysisResult, _config: &ReviewConfig) 
 }
 
 /// 将分析结果转换为评审结果（带严重问题检查）
-pub fn convert_analysis_result_with_critical_check(result: &AnalysisResult, config: &ReviewConfig) -> ReviewResult {
+pub fn convert_analysis_result_with_critical_check(
+    result: &AnalysisResult,
+    config: &ReviewConfig,
+) -> ReviewResult {
     let review_result = convert_analysis_result(result, config);
-    
+
     // TODO: 实现严重问题检查逻辑
-    
+
     review_result
 }
