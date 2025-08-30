@@ -58,6 +58,9 @@ pub enum Command {
         /// 启用偏离度分析
         #[arg(long)]
         deviation_analysis: bool,
+        /// 启用完整深度分析（架构影响、危险改动、依赖分析等）
+        #[arg(long)]
+        full: bool,
     },
     /// 代码安全扫描（基于OpenGrep）
     Scan {

@@ -45,13 +45,11 @@ impl QueriesManager {
 
         std::fs::create_dir_all(&cache_dir).map_err(|e| {
             let error = format!(
-                "Failed to create cache directory {}: {}",
-                cache_dir.display(),
-                e
+                "Failed to create cache directory {}: {e}",
+                cache_dir.display()
             );
-            log::error!("{}", error);
-            Box::new(std::io::Error::new(std::io::ErrorKind::Other, error))
-                as Box<dyn std::error::Error + Send + Sync>
+            log::error!("{error}");
+            Box::new(std::io::Error::other(error)) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
         log::info!("Tree-sitter 查询管理器初始化成功");

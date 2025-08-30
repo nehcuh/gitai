@@ -179,6 +179,7 @@ impl OperationOptions {
     }
 
     /// 从评审参数创建选项
+    #[allow(clippy::too_many_arguments)]
     pub fn for_review(
         language: Option<String>,
         format: String,

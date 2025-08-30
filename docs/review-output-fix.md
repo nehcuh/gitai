@@ -1,15 +1,15 @@
-# GitAI Review Output Fix Documentation
+# GitAI 评审输出修复说明
 
-## Problem Description
-When running `gitai review --tree-sitter --scan-tool opengrep`, the command executed without errors but didn't display any AI review output or analysis results to the console.
+## 问题描述
+在运行 `gitai review --tree-sitter --scan-tool opengrep` 时，命令执行无报错，但控制台未显示任何 AI 评审输出或分析结果。
 
-## Root Cause Analysis
-The `execute_review` function in `src/review.rs` was only saving the review results to a file (when output path was specified) but never printing the AI review content, security findings, or recommendations to the console.
+## 根因分析
+`src/review.rs` 中的 `execute_review` 只在指定输出路径时将结果写入文件，但没有打印 AI 评审内容、安全发现或改进建议到控制台。
 
-## Solution Implemented
+## 解决方案
 
-### 1. Enhanced Console Output in `execute_review`
-Modified the `execute_review` function to print comprehensive review results to the console:
+### 1. 增强 `execute_review` 的控制台输出
+修改 `execute_review`，在控制台输出完整的评审结果：
 
 ```rust
 // Print AI review results to console
@@ -52,8 +52,8 @@ if let Some(score) = result.score {
 }
 ```
 
-### 2. Added Summary Field to ReviewResult
-Enhanced the `ReviewResult` struct to include a `summary` field for better result presentation:
+### 2. 为 ReviewResult 增加 `summary` 字段
+为更好的展示效果，在 `ReviewResult` 结构体中新增 `summary` 字段：
 
 ```rust
 pub struct ReviewResult {
@@ -67,8 +67,8 @@ pub struct ReviewResult {
 }
 ```
 
-### 3. Added Code Snippet to Finding
-Enhanced the `Finding` struct to include code snippets for better context:
+### 3. 为 Finding 增加 `code_snippet`
+为提升上下文可读性，在 `Finding` 结构体中新增 `code_snippet` 字段：
 
 ```rust
 pub struct Finding {
@@ -81,45 +81,45 @@ pub struct Finding {
 }
 ```
 
-### 4. Improved Result Conversion
-Updated the `convert_analysis_result` function to properly populate the new fields:
-- Stores the AI review result in both `details["review_result"]` and `summary`
-- Properly maps security findings with code snippets
-- Maintains backward compatibility with file output
+### 4. 改进结果转换逻辑
+更新 `convert_analysis_result` 以正确填充新增字段：
+- 将 AI 评审结果同时写入 `details["review_result"]` 与 `summary`
+- 正确映射安全发现并填充代码片段
+- 保持文件输出的向后兼容
 
-## Testing
-After implementing these fixes:
+## 测试
+实施修复后：
 
-1. Rebuild the project:
+1. 重新构建项目：
 ```bash
 cd /Users/huchen/Projects/gitai && cargo build --release
 ```
 
-2. Run the review command:
+2. 执行评审命令：
 ```bash
 ./target/release/gitai review --tree-sitter --scan-tool opengrep
 ```
 
-The command now displays:
-- AI review results with header and separator lines
-- Security findings with file paths and line numbers
-- Code snippets for each security issue
-- Improvement recommendations
-- Overall quality score
-- Formatted output with emojis for better readability
+预期输出包括：
+- 带标题与分隔线的 AI 评审结果
+- 带文件路径与行号的安全发现
+- 每个安全问题的代码片段
+- 改进建议列表
+- 总体质量评分
+- 友好的控制台排版（含表情符号）
 
-## Benefits
-1. **Immediate Feedback**: Users can see review results directly in the terminal without requiring an output file
-2. **Better UX**: Structured output with clear sections and visual separators
-3. **Comprehensive Information**: Shows all analysis results including AI review, security findings, and recommendations
-4. **Backward Compatibility**: Still supports saving to file when output path is specified
+## 收益
+1. 直接反馈：无需指定输出文件即可在终端查看评审结果
+2. 更佳体验：有结构的输出和清晰的分区与分隔
+3. 信息全面：展示 AI 评审、安全发现与建议等全部关键信息
+4. 向后兼容：可选地仍支持将结果写入文件
 
-## Related Files Modified
-- `/Users/huchen/Projects/gitai/src/review.rs`: Main review execution logic and output formatting
+## 相关修改文件
+- `/Users/huchen/Projects/gitai/src/review.rs`：评审执行与输出格式化的主要逻辑
 
-## Future Improvements
-Consider adding:
-- Color coding for different severity levels
-- Progress indicators for long-running analyses
-- Option to control output verbosity
-- JSON output format for programmatic consumption
+## 未来改进
+可考虑：
+- 按严重级别着色显示
+- 长耗时分析的进度指示
+- 可配置的输出详细程度
+- 面向程序消费的 JSON 输出格式

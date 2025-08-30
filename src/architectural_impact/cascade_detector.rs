@@ -260,8 +260,6 @@ impl CascadeDetector {
         } else if probability > 0.6 || length >= 4 || max_cent > self.thresholds.critical_centrality
         {
             Severity::Medium
-        } else if probability > self.thresholds.min_probability {
-            Severity::Low
         } else {
             Severity::Low
         }
@@ -313,7 +311,7 @@ mod tests {
                     is_async: false,
                 }),
                 metadata: NodeMetadata {
-                    file_path: format!("{}.rs", id),
+                    file_path: format!("{id}.rs"),
                     start_line: 1,
                     end_line: 3,
                     complexity: 1,
@@ -374,10 +372,10 @@ mod tests {
         assert!(!effects.is_empty());
         // 至少应包含 A -> B 和 A -> E 的反向传播链（以B/E为终点）
         let chains: Vec<Vec<String>> = effects.into_iter().map(|e| e.affected_chain).collect();
-        assert!(chains
-            .iter()
-            .any(|c| c.starts_with(&vec!["A".to_string(), "B".to_string()])
-                || c.ends_with(&vec!["B".to_string()])));
+        let has_chain = chains.iter().any(|c| {
+            c.starts_with(&["A".to_string(), "B".to_string()]) || c.ends_with(&["B".to_string()])
+        });
+        assert!(has_chain);
     }
 
     #[test]

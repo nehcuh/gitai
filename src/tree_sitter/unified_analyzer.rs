@@ -40,7 +40,7 @@ impl UnifiedAnalyzer {
 
         let lang = language
             .language()
-            .ok_or_else(|| format!("Language {:?} is not enabled in this build", language))?;
+            .ok_or_else(|| format!("Language {language:?} is not enabled in this build"))?;
 
         // 编译查询
         let function_query = Query::new(lang, &queries.function_query).ok();
@@ -53,18 +53,18 @@ impl UnifiedAnalyzer {
 
         // 记录加载情况
         if function_query.is_none() {
-            log::warn!("无法加载 {:?} 的函数查询", language);
+            log::warn!("无法加载 {language:?} 的函数查询");
         }
         if class_query.is_none() {
-            log::warn!("无法加载 {:?} 的类查询", language);
+            log::warn!("无法加载 {language:?} 的类查询");
         }
         if comment_query.is_none() {
-            log::warn!("无法加载 {:?} 的注释查询", language);
+            log::warn!("无法加载 {language:?} 的注释查询");
         }
         if queries.call_query.is_none() {
-            log::info!("未定义 {:?} 的调用查询，将跳过调用提取", language);
+            log::info!("未定义 {language:?} 的调用查询，将跳过调用提取");
         } else if call_query.is_none() {
-            log::warn!("无法编译 {:?} 的调用查询", language);
+            log::warn!("无法编译 {language:?} 的调用查询");
         }
 
         Ok(Self {
@@ -92,7 +92,7 @@ impl UnifiedAnalyzer {
             if let Ok(queries) =
                 custom_manager.get_queries_for_language(language, default_queries.clone())
             {
-                log::info!("使用自定义查询: {:?}", language);
+                log::info!("使用自定义查询: {language:?}");
                 return Ok(queries);
             }
 
@@ -142,7 +142,7 @@ impl UnifiedAnalyzer {
         config
             .get(lang_name)
             .cloned()
-            .ok_or_else(|| format!("未找到 {} 语言的查询配置", lang_name).into())
+            .ok_or_else(|| format!("未找到 {lang_name} 语言的查询配置").into())
     }
 
     /// 加载默认查询（内嵌备份）
@@ -380,7 +380,7 @@ impl UnifiedAnalyzer {
                     let comment = CommentInfo {
                         text: text.to_string(),
                         line: captured_node.start_position().row + 1,
-                        is_doc_comment: self.is_doc_comment(&text),
+                        is_doc_comment: self.is_doc_comment(text),
                     };
                     comments.push(comment);
                 }
@@ -420,13 +420,13 @@ impl UnifiedAnalyzer {
         // 函数数量分析
         let func_count = summary.functions.len();
         if func_count > 50 {
-            hints.push(format!("文件包含{}个函数，建议考虑拆分", func_count));
+            hints.push(format!("文件包含{func_count}个函数，建议考虑拆分"));
         }
 
         // 类数量分析
         let class_count = summary.classes.len();
         if class_count > 10 {
-            hints.push(format!("文件包含{}个类，建议考虑模块化", class_count));
+            hints.push(format!("文件包含{class_count}个类，建议考虑模块化"));
         }
 
         // 长函数检测
@@ -462,7 +462,7 @@ mod tests {
         // 测试各语言的分析器创建
         for lang in SupportedLanguage::all() {
             let result = UnifiedAnalyzer::new(lang);
-            assert!(result.is_ok(), "应该能为 {:?} 创建分析器", lang);
+            assert!(result.is_ok(), "应该能为 {lang:?} 创建分析器");
         }
     }
 
@@ -492,9 +492,15 @@ mod tests {
 
         let mut parser = Parser::new();
         parser
-            .set_language(SupportedLanguage::Rust.language())
-            .unwrap();
-        let tree = parser.parse(rust_code, None).unwrap();
+            .set_language(
+                SupportedLanguage::Rust
+                    .language()
+                    .expect("Rust language not enabled in this build"),
+            )
+            .expect("Failed to set Rust language for parser");
+        let tree = parser
+            .parse(rust_code, None)
+            .expect("Failed to parse Rust code with tree-sitter");
 
         let result = analyzer.analyze(&tree, rust_code.as_bytes());
         assert!(result.is_ok(), "应该成功分析 Rust 代码");
@@ -503,12 +509,12 @@ mod tests {
         assert_eq!(summary.language, "rust");
         // 放宽断言条件，因为查询可能不同
         assert!(
-            summary.functions.len() >= 1,
+            !summary.functions.is_empty(),
             "应该至少找到一个函数，实际: {}",
             summary.functions.len()
         );
         assert!(
-            summary.classes.len() >= 1,
+            !summary.classes.is_empty(),
             "应该至少找到一个结构体，实际: {}",
             summary.classes.len()
         );

@@ -196,12 +196,13 @@ impl ScanService {
                 title: finding.title,
                 file_path: finding.file_path.to_string_lossy().to_string(),
                 line: finding.line,
-                severity: match finding.severity {
-                    scan::Severity::Error => Severity::Error,
-                    scan::Severity::Warning => Severity::Warning,
-                    scan::Severity::Info => Severity::Info,
+                severity: match finding.severity.as_str() {
+                    "ERROR" | "error" => Severity::Error,
+                    "WARNING" | "warning" => Severity::Warning,
+                    "INFO" | "info" => Severity::Info,
+                    _ => Severity::Info,
                 },
-                rule_id: finding.rule_id,
+                rule_id: finding.rule_id.unwrap_or_else(|| "unknown".to_string()),
                 description: format!("发现安全问题的代码段"),
                 suggestion: None,
                 code_snippet: finding.code_snippet,

@@ -6,10 +6,10 @@ use gitai::architectural_impact::dependency_graph::DotOptions;
 use gitai::architectural_impact::graph_export::build_global_dependency_graph;
 
 fn is_code_file(path: &Path) -> bool {
-    match path.extension().and_then(|s| s.to_str()).unwrap_or("") {
-        "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "cc" | "cxx" => true,
-        _ => false,
-    }
+    matches!(
+        path.extension().and_then(|s| s.to_str()).unwrap_or(""),
+        "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "cc" | "cxx"
+    )
 }
 
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let scan_dir = if args.len() > 1 { &args[1] } else { "src" };
     let out_file = if args.len() > 2 { &args[2] } else { "deps.dot" };
 
-    println!("Scanning directory: {}", scan_dir);
+    println!("Scanning directory: {scan_dir}");
 
     let mut files = Vec::new();
     collect_files(Path::new(scan_dir), &mut files);
@@ -72,14 +72,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     // Re-build graph via builder already done; here we compute critical again
-    use gitai::architectural_impact::graph_export::build_global_dependency_graph as _;
+    
     // Write file
     build_global_dependency_graph(Path::new(scan_dir)).await?; // no-op to ensure await context
                                                                // We need the graph from earlier scope; recompute critical via options already set.
                                                                // For simplicity, rebuild and write using options
     let graph = build_global_dependency_graph(Path::new(scan_dir)).await?;
     graph.write_dot_file(out_file, Some(&options))?;
-    println!("DOT written to {}", out_file);
+    println!("DOT written to {out_file}");
 
     Ok(())
 }

@@ -23,12 +23,12 @@ impl AutoUpdater {
 
         // 确保状态目录存在
         if let Err(e) = fs::create_dir_all(&state_dir) {
-            error!("无法创建状态目录 {}: {}", state_dir.display(), e);
+            error!("无法创建状态目录 {}: {e}", state_dir.display());
         } else {
             info!("更新器状态目录: {}", state_dir.display());
         }
 
-        debug!("初始化AutoUpdater，配置: {:?}", config.ai);
+        debug!("初始化AutoUpdater，配置: {config:?}", config = config.ai);
         let notifier = UpdateNotifier::new(config.clone());
         Self {
             config,
@@ -54,11 +54,11 @@ impl AutoUpdater {
                     updates.push(update);
                 }
                 Err(e) => {
-                    error!("扫描规则更新失败: {}", e);
+                    error!("扫描规则更新失败: {e}");
                     updates.push(UpdateItem {
                         name: "扫描规则更新".to_string(),
                         success: false,
-                        message: format!("更新失败: {}", e),
+                        message: format!("更新失败: {e}"),
                     });
                 }
             }
@@ -75,11 +75,11 @@ impl AutoUpdater {
                     updates.push(update);
                 }
                 Err(e) => {
-                    error!("Prompts更新失败: {}", e);
+                    error!("Prompts更新失败: {e}");
                     updates.push(UpdateItem {
                         name: "Prompts更新".to_string(),
                         success: false,
-                        message: format!("更新失败: {}", e),
+                        message: format!("更新失败: {e}"),
                     });
                 }
             }
@@ -96,11 +96,11 @@ impl AutoUpdater {
                     updates.push(update);
                 }
                 Err(e) => {
-                    error!("版本检查失败: {}", e);
+                    error!("版本检查失败: {e}");
                     updates.push(UpdateItem {
                         name: "版本检查".to_string(),
                         success: false,
-                        message: format!("检查失败: {}", e),
+                        message: format!("检查失败: {e}"),
                     });
                 }
             }

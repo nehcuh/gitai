@@ -273,12 +273,14 @@ impl Analyzer {
 
         #[cfg(feature = "ai")]
         {
+            // 依赖洞察：在 Analyzer 流程中暂无依赖图，传入空文本（留给 review --full 路径）
             match crate::ai::review_code_with_template(
                 &context.config,
                 &context.diff,
                 Some(&tree_sitter_info),
                 &security_scan_results,
                 &devops_issue_context,
+                "",
             )
             .await
             {
@@ -287,7 +289,7 @@ impl Analyzer {
                     Ok(result)
                 }
                 Err(template_error) => {
-                    log::warn!("使用模板失败，降级为硬编码提示词: {}", template_error);
+                    log::warn!("使用模板失败，降级为硬编码提示词: {template_error}");
 
                     // 降级为原有的硬编码逻辑
                     let mut prompt = format!(
@@ -297,7 +299,7 @@ impl Analyzer {
 
                     // 添加结构分析信息
                     if context.structural_info.is_some() {
-                        prompt.push_str(&format!("\n\n{}", tree_sitter_info));
+                        prompt.push_str(&format!("\n\n{tree_sitter_info}"));
                     }
 
                     if context.has_issues() {
@@ -317,7 +319,7 @@ impl Analyzer {
 
                     match crate::ai::call_ai(&context.config, &prompt).await {
                         Ok(result) => Ok(result),
-                        Err(e) => Err(format!("AI服务错误: {}", e).into()),
+                        Err(e) => Err(format!("AI服务错误: {e}").into()),
                     }
                 }
             }
@@ -356,15 +358,15 @@ impl Analyzer {
                             title: f.title,
                             file_path: f.file_path.display().to_string(),
                             line: f.line,
-                            severity: format!("{:?}", f.severity),
-                            rule_id: f.rule_id,
+                            severity: f.severity,
+                            rule_id: f.rule_id.unwrap_or_else(|| "unknown".to_string()),
                             code_snippet: f.code_snippet,
                         })
                         .collect();
                     Ok(findings)
                 }
                 Err(e) => {
-                    eprintln!("⚠️ 安全扫描失败: {}", e);
+                    eprintln!("⚠️ 安全扫描失败: {e}");
                     Ok(Vec::new())
                 }
             }
@@ -372,6 +374,7 @@ impl Analyzer {
 
         #[cfg(not(feature = "security"))]
         {
+            let _ = context; // silence unused parameter when security feature is disabled
             log::debug!("Security scan feature is not enabled");
             Ok(Vec::new())
         }
@@ -403,7 +406,7 @@ impl Analyzer {
                         suggestions: vec![ai_response.to_string()],
                     })
                 }
-                Err(e) => Err(format!("AI服务错误: {}", e).into()),
+                Err(e) => Err(format!("AI服务错误: {e}").into()),
             }
         }
 

@@ -431,7 +431,7 @@ impl StructureAnalyzer {
             summary.functions = self
                 .extract_functions(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract functions: {}", e);
+                    log::error!("Failed to extract functions: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个函数", summary.functions.len());
@@ -445,7 +445,7 @@ impl StructureAnalyzer {
             summary.classes = self
                 .extract_classes(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract classes: {}", e);
+                    log::error!("Failed to extract classes: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个类/结构体", summary.classes.len());
@@ -459,7 +459,7 @@ impl StructureAnalyzer {
             summary.comments = self
                 .extract_comments(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract comments: {}", e);
+                    log::error!("Failed to extract comments: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个注释", summary.comments.len());
@@ -614,7 +614,7 @@ impl StructureAnalyzer {
                     let comment = CommentInfo {
                         text: text.to_string(),
                         line: captured_node.start_position().row + 1,
-                        is_doc_comment: self.is_doc_comment(&text),
+                        is_doc_comment: self.is_doc_comment(text),
                     };
                     comments.push(comment);
                 }
@@ -655,13 +655,13 @@ impl StructureAnalyzer {
         // 函数数量分析
         let func_count = summary.functions.len();
         if func_count > 50 {
-            hints.push(format!("文件包含{}个函数，建议考虑拆分", func_count));
+            hints.push(format!("文件包含{func_count}个函数，建议考虑拆分"));
         }
 
         // 类数量分析
         let class_count = summary.classes.len();
         if class_count > 10 {
-            hints.push(format!("文件包含{}个类，建议考虑模块化", class_count));
+            hints.push(format!("文件包含{class_count}个类，建议考虑模块化"));
         }
 
         // 长函数检测
@@ -721,21 +721,21 @@ mod tests {
 
         // Java
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("/**"), true);
-        assert_eq!(analyzer.is_doc_comment("/*"), false);
-        assert_eq!(analyzer.is_doc_comment("//"), false);
+        assert!(analyzer.is_doc_comment("/**"));
+        assert!(!analyzer.is_doc_comment("/*"));
+        assert!(!analyzer.is_doc_comment("//"));
 
         // Rust
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("///"), true);
-        assert_eq!(analyzer.is_doc_comment("//!"), true);
-        assert_eq!(analyzer.is_doc_comment("//"), false);
+        assert!(analyzer.is_doc_comment("///"));
+        assert!(analyzer.is_doc_comment("//!"));
+        assert!(!analyzer.is_doc_comment("//"));
 
         // Python
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""), true);
-        assert_eq!(analyzer.is_doc_comment("'''docstring'''"), true);
-        assert_eq!(analyzer.is_doc_comment("# comment"), false);
+        assert!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""));
+        assert!(analyzer.is_doc_comment("'''docstring'''"));
+        assert!(!analyzer.is_doc_comment("# comment"));
     }
 
     #[test]
@@ -784,7 +784,7 @@ mod tests {
         // 添加更多的函数以达到数量限制
         for i in 0..60 {
             summary.functions.push(FunctionInfo {
-                name: format!("function{}", i),
+                name: format!("function{i}"),
                 parameters: vec!["param".to_string()],
                 return_type: None,
                 line_start: i * 10,
@@ -816,8 +816,7 @@ mod tests {
             let result = StructureAnalyzer::new(lang, &queries_manager);
             assert!(
                 result.is_ok(),
-                "Should be able to create analyzer for {:?}",
-                lang
+                "Should be able to create analyzer for {lang:?}"
             );
         }
     }
@@ -844,9 +843,15 @@ mod tests {
         // 创建解析器并解析代码
         let mut parser = Parser::new();
         parser
-            .set_language(SupportedLanguage::Java.language())
-            .unwrap();
-        let tree = parser.parse(java_code, None).unwrap();
+            .set_language(
+                SupportedLanguage::Java
+                    .language()
+                    .expect("Java language not enabled in this build"),
+            )
+            .expect("Failed to set Java language for parser");
+        let tree = parser
+            .parse(java_code, None)
+            .expect("Failed to parse Java code with tree-sitter");
 
         let result = analyzer.analyze(&tree, java_code.as_bytes());
         assert!(result.is_ok(), "Should successfully analyze Java code");
@@ -855,9 +860,6 @@ mod tests {
         assert_eq!(summary.language, "java");
 
         // 基本验证结构摘要不为空
-        assert!(summary.functions.len() >= 0);
-        assert!(summary.classes.len() >= 0);
-        assert!(summary.complexity_hints.len() >= 0);
     }
 
     #[tokio::test]
@@ -905,9 +907,15 @@ mod tests {
 
         let mut parser = Parser::new();
         parser
-            .set_language(SupportedLanguage::C.language())
-            .unwrap();
-        let tree = parser.parse(c_code, None).unwrap();
+            .set_language(
+                SupportedLanguage::C
+                    .language()
+                    .expect("C language not enabled in this build"),
+            )
+            .expect("Failed to set C language for parser");
+        let tree = parser
+            .parse(c_code, None)
+            .expect("Failed to parse C code with tree-sitter");
 
         let result = analyzer.analyze(&tree, c_code.as_bytes());
         assert!(
@@ -938,7 +946,7 @@ mod tests {
         // Basic validation - adjusted expectations for Tree-sitter parsing capabilities
         // Note: The actual parsing might find more or fewer structures depending on Tree-sitter grammar
         assert!(
-            summary.functions.len() >= 1,
+            !summary.functions.is_empty(),
             "Should find at least some functions"
         );
         // Some parsing issues may prevent finding all structures, so we just ensure it runs
@@ -947,8 +955,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_cpp_code() {
-        let queries_manager = QueriesManager::new().unwrap();
-        let analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager).unwrap();
+        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager)
+            .expect("Failed to create StructureAnalyzer for C++");
 
         let cpp_code = r#"
         #include <iostream>
@@ -1017,9 +1026,15 @@ mod tests {
 
         let mut parser = Parser::new();
         parser
-            .set_language(SupportedLanguage::Cpp.language())
-            .unwrap();
-        let tree = parser.parse(cpp_code, None).unwrap();
+            .set_language(
+                SupportedLanguage::Cpp
+                    .language()
+                    .expect("C++ language not enabled in this build"),
+            )
+            .expect("Failed to set C++ language for parser");
+        let tree = parser
+            .parse(cpp_code, None)
+            .expect("Failed to parse C++ code with tree-sitter");
 
         let result = analyzer.analyze(&tree, cpp_code.as_bytes());
         assert!(
@@ -1054,8 +1069,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_go_code() {
-        let queries_manager = QueriesManager::new().unwrap();
-        let analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager).unwrap();
+        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager)
+            .expect("Failed to create StructureAnalyzer for Go");
 
         let go_code = r#"
         package main
@@ -1157,9 +1173,15 @@ mod tests {
 
         let mut parser = Parser::new();
         parser
-            .set_language(SupportedLanguage::Go.language())
-            .unwrap();
-        let tree = parser.parse(go_code, None).unwrap();
+            .set_language(
+                SupportedLanguage::Go
+                    .language()
+                    .expect("Go language not enabled in this build"),
+            )
+            .expect("Failed to set Go language for parser");
+        let tree = parser
+            .parse(go_code, None)
+            .expect("Failed to parse Go code with tree-sitter");
 
         let result = analyzer.analyze(&tree, go_code.as_bytes());
         assert!(

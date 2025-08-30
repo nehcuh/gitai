@@ -8,6 +8,12 @@ use std::fmt::Write;
 /// 趋势可视化器
 pub struct TrendVisualizer;
 
+impl Default for TrendVisualizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrendVisualizer {
     /// 创建新的可视化器
     pub fn new() -> Self {
@@ -99,8 +105,8 @@ impl TrendVisualizer {
             .filter(|t| matches!(t.trend, Trend::Degrading))
             .count();
 
-        writeln!(report, "- ✅ **改善的指标**: {}", improving)?;
-        writeln!(report, "- ⚠️ **恶化的指标**: {}", degrading)?;
+        writeln!(report, "- ✅ **改善的指标**: {improving}")?;
+        writeln!(report, "- ⚠️ **恶化的指标**: {degrading}")?;
         writeln!(report, "- 🔍 **关键发现**: {}", analysis.key_findings.len())?;
         writeln!(
             report,
@@ -159,7 +165,7 @@ impl TrendVisualizer {
             Trend::Mixed => "项目质量表现混合，部分指标改善而其他指标恶化。",
         };
 
-        writeln!(report, "{}", description)?;
+        writeln!(report, "{description}")?;
         writeln!(report)?;
 
         Ok(())
@@ -183,7 +189,7 @@ impl TrendVisualizer {
             "|------|--------|--------|--------|------|--------|"
         )?;
 
-        for (key, trend) in &analysis.metric_trends {
+        for (_key, trend) in &analysis.metric_trends {
             let trend_symbol = match trend.trend {
                 Trend::Improving => "↗️",
                 Trend::Stable => "→",
@@ -280,7 +286,7 @@ impl TrendVisualizer {
 
         for i in (0..=chart_height).rev() {
             let threshold = (i as f64 / chart_height as f64) * max_debt;
-            write!(report, "{:6.1} | ", threshold)?;
+            write!(report, "{threshold:6.1} | ")?;
 
             for j in 0..chart_width {
                 let snapshot_idx = j * snapshots.len() / chart_width;
@@ -317,7 +323,7 @@ impl TrendVisualizer {
 
         for i in (0..=chart_height).rev() {
             let threshold = (i as f64 / chart_height as f64) * max_complexity;
-            write!(report, "{:6.1} | ", threshold)?;
+            write!(report, "{threshold:6.1} | ")?;
 
             for j in 0..chart_width {
                 let snapshot_idx = j * snapshots.len() / chart_width;

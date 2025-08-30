@@ -18,4 +18,5 @@ pub use types::{Finding, ReviewCache, ReviewConfig, ReviewResult, Severity};
 #[deprecated(
     note = "Use static functions execute_review and execute_review_with_result instead"
 )]
+#[allow(deprecated)]
 pub use executor::ReviewExecutor;

@@ -9,39 +9,39 @@ fn create_large_summary(function_count: usize, class_count: usize) -> Structural
     let mut functions = Vec::new();
     for i in 0..function_count {
         functions.push(FunctionInfo {
-            name: format!("function_{}", i),
-            visibility: if i % 2 == 0 { "public" } else { "private" }.to_string(),
+            name: format!("function_{i}"),
+            visibility: Some(if i % 2 == 0 { "public" } else { "private" }.to_string()),
             is_async: i % 3 == 0,
             parameters: vec!["String".to_string(); i % 5],
             return_type: Some(format!("Type{}", i % 10)),
-            start_line: i * 10,
-            end_line: i * 10 + 8,
-            complexity: (i % 10) as u32,
-            calls_count: (i % 20) as u32,
+            line_start: i * 10,
+            line_end: i * 10 + 8,
         });
     }
 
     let mut classes = Vec::new();
     for i in 0..class_count {
         classes.push(ClassInfo {
-            name: format!("Class_{}", i),
-            visibility: if i % 2 == 0 { "public" } else { "private" }.to_string(),
-            methods_count: (i % 20) as u32,
-            fields_count: (i % 10) as u32,
+            name: format!("Class_{i}"),
+            methods: vec![],
+            fields: vec![],
             is_abstract: i % 5 == 0,
-            has_tests: i % 3 == 0,
-            start_line: i * 50,
-            end_line: i * 50 + 45,
+            line_start: i * 50,
+            line_end: i * 50 + 45,
+            extends: None,
+            implements: vec![],
         });
     }
 
     StructuralSummary {
+        language: "rust".to_string(),
         functions,
         classes,
         comments: vec![],
         imports: vec![],
-        complexity_metrics: Default::default(),
-        code_quality_metrics: Default::default(),
+        exports: vec![],
+        complexity_hints: vec![],
+        calls: vec![],
     }
 }
 
@@ -51,24 +51,23 @@ fn create_large_diff(file_count: usize, changes_per_file: usize) -> String {
 
     for f in 0..file_count {
         diff.push_str(&format!(
-            "diff --git a/src/file_{}.rs b/src/file_{}.rs\n",
-            f, f
+            "diff --git a/src/file_{f}.rs b/src/file_{f}.rs\n"
         ));
-        diff.push_str(&format!("index abc{}..def{} 100644\n", f, f));
-        diff.push_str(&format!("--- a/src/file_{}.rs\n", f));
-        diff.push_str(&format!("+++ b/src/file_{}.rs\n", f));
+        diff.push_str(&format!("index abc{f}..def{f} 100644\n"));
+        diff.push_str(&format!("--- a/src/file_{f}.rs\n"));
+        diff.push_str(&format!("+++ b/src/file_{f}.rs\n"));
 
         for c in 0..changes_per_file {
             diff.push_str(&format!("@@ -{},7 +{},7 @@\n", c * 10, c * 10));
             if c % 3 == 0 {
-                diff.push_str(&format!("-fn old_function_{}() {{\n", c));
-                diff.push_str(&format!("+fn new_function_{}(param: String) {{\n", c));
+                diff.push_str(&format!("-fn old_function_{c}() {{\n"));
+                diff.push_str(&format!("+fn new_function_{c}(param: String) {{\n"));
             } else if c % 3 == 1 {
-                diff.push_str(&format!("+struct NewStruct_{} {{\n", c));
+                diff.push_str(&format!("+struct NewStruct_{c} {{\n"));
                 diff.push_str("+    field: String,\n");
                 diff.push_str("+}\n");
             } else {
-                diff.push_str(&format!("+trait NewTrait_{} {{\n", c));
+                diff.push_str(&format!("+trait NewTrait_{c} {{\n"));
                 diff.push_str("+    fn method(&self);\n");
                 diff.push_str("+}\n");
             }
@@ -87,7 +86,7 @@ fn benchmark_ast_comparison(c: &mut Criterion) {
         after.functions[i].parameters.push("NewParam".to_string());
     }
     for i in 0..5 {
-        after.classes[i].methods_count += 5;
+        after.classes[i].methods.push("new_method".to_string());
     }
 
     c.bench_function("ast_comparison_100_functions", |b| {
@@ -113,16 +112,16 @@ fn benchmark_risk_assessment(c: &mut Criterion) {
             } else {
                 BreakingChangeType::StructureChanged
             },
-            component: format!("component_{}", i),
-            description: format!("Change {}", i),
+            component: format!("component_{i}"),
+            description: format!("Change {i}"),
             impact_level: if i % 2 == 0 {
                 ImpactLevel::Module
             } else {
                 ImpactLevel::Local
             },
             suggestions: vec![],
-            before: Some(format!("before_{}", i)),
-            after: Some(format!("after_{}", i)),
+            before: Some(format!("before_{i}")),
+            after: Some(format!("after_{i}")),
             file_path: format!("src/file_{}.rs", i % 10),
         });
     }
@@ -149,8 +148,8 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
                 3 => BreakingChangeType::InterfaceChanged,
                 _ => BreakingChangeType::FunctionAdded,
             },
-            component: format!("component_{}", i),
-            description: format!("Detailed description of change {}", i),
+            component: format!("component_{i}"),
+            description: format!("Detailed description of change {i}"),
             impact_level: match i % 3 {
                 0 => ImpactLevel::Project,
                 1 => ImpactLevel::Module,
@@ -160,8 +159,8 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
                 format!("Suggestion 1 for change {}", i),
                 format!("Suggestion 2 for change {}", i),
             ],
-            before: Some(format!("// Before state {}", i)),
-            after: Some(format!("// After state {}", i)),
+            before: Some(format!("// Before state {i}")),
+            after: Some(format!("// After state {i}")),
             file_path: format!("src/module_{}/file_{}.rs", i % 5, i),
         });
     }
@@ -170,7 +169,7 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
         b.iter(|| {
             let mut a = analysis.clone();
             a.generate_ai_context();
-            black_box(a.get_ai_context())
+            black_box(a.get_ai_context().to_string())
         })
     });
 }
@@ -178,21 +177,24 @@ fn benchmark_ai_context_generation(c: &mut Criterion) {
 fn benchmark_diff_analysis(c: &mut Criterion) {
     let diff_small = create_large_diff(5, 10);
     let diff_large = create_large_diff(20, 20);
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
     c.bench_function("diff_analysis_small", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap())
-            .iter(|_| async {
+        b.iter(|| {
+            rt.block_on(async {
                 let analyzer = GitStateAnalyzer::new();
                 black_box(analyzer.analyze_git_diff(&diff_small).await)
             })
+        })
     });
 
     c.bench_function("diff_analysis_large", |b| {
-        b.to_async(tokio::runtime::Runtime::new().unwrap())
-            .iter(|_| async {
+        b.iter(|| {
+            rt.block_on(async {
                 let analyzer = GitStateAnalyzer::new();
                 black_box(analyzer.analyze_git_diff(&diff_large).await)
             })
+        })
     });
 }
 

@@ -29,6 +29,7 @@ impl ReviewService {
                     block_on_critical: false,
                     issue_ids: Vec::new(),
                     deviation_analysis: false,
+                    full: false,
                 }
             } else {
                 Self::default_review_config()
@@ -54,6 +55,7 @@ impl ReviewService {
             block_on_critical: false,
             issue_ids: Vec::new(),
             deviation_analysis: false,
+            full: false,
         }
     }
 
@@ -104,14 +106,18 @@ impl ReviewService {
                 .map(|f| Finding {
                     title: f.title,
                     file_path: f.file_path,
-                    line: f.line.map(|l| l as usize),
+                    line: f.line,
                     severity: match f.severity {
-                        review::Severity::Error => Severity::Error,
-                        review::Severity::Warning => Severity::Warning,
-                        review::Severity::Info => Severity::Info,
+                        review::types::Severity::Critical => Severity::Error,
+                        review::types::Severity::High => Severity::Error,
+                        review::types::Severity::Medium => Severity::Warning,
+                        review::types::Severity::Low => Severity::Warning,
+                        review::types::Severity::Info => Severity::Info,
+                        review::types::Severity::Error => Severity::Error,
+                        review::types::Severity::Warning => Severity::Warning,
                     },
-                    description: f.description,
-                    suggestion: None,
+                    description: f.message,
+                    suggestion: f.recommendation,
                 })
                 .collect(),
             score: review_result.score,

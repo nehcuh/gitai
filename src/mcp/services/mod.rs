@@ -7,6 +7,7 @@ pub mod commit;
 pub mod dependency;
 pub mod review;
 pub mod scan;
+pub mod deviation;
 
 // 重新导出服务
 pub use analysis::AnalysisService;
@@ -14,3 +15,4 @@ pub use commit::CommitService;
 pub use dependency::DependencyService;
 pub use review::ReviewService;
 pub use scan::ScanService;
+pub use deviation::DeviationService;

@@ -13,6 +13,7 @@ use std::path::Path;
 pub struct DependencyService {
     #[allow(dead_code)]
     config: Config,
+    #[allow(dead_code)]
     verbosity: u32,
 }
 
@@ -79,18 +80,19 @@ impl DependencyService {
         &self,
         params: DependencyParams,
     ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
-        info!("🔗 开始生成依赖图: {}", params.path);
+        info!("🔗 开始生成依赖图: {path}", path = params.path);
         debug!(
-            "📋 分析参数: 格式={:?}, 深度={:?}",
-            params.format, params.depth
+            "📋 分析参数: 格式={format:?}, 深度={depth:?}",
+            format = params.format,
+            depth = params.depth
         );
 
         let path = Path::new(&params.path);
 
         // 验证路径是否存在
         if !path.exists() {
-            error!("❌ 依赖图分析路径不存在: {}", params.path);
-            return Err(format!("分析路径不存在: {}", params.path).into());
+            error!("❌ 依赖图分析路径不存在: {path}", path = params.path);
+            return Err(format!("分析路径不存在: {path}", path = params.path).into());
         }
 
         // 检查是否为目录
@@ -109,29 +111,37 @@ impl DependencyService {
         file_path: &Path,
         params: &DependencyParams,
     ) -> Result<DependencyResult, Box<dyn std::error::Error + Send + Sync>> {
-        debug!("📄 分析单个文件依赖: {}", file_path.display());
+        debug!("📄 分析单个文件依赖: {path}", path = file_path.display());
 
         // 推断语言
-        let language = Self::infer_language_from_path(file_path)
-            .map_err(|e| format!("无法推断语言: {}", e))?;
+        let language =
+            Self::infer_language_from_path(file_path).map_err(|e| format!("无法推断语言: {e}"))?;
 
         // 读取文件内容
         let code_content = std::fs::read_to_string(file_path).map_err(|e| {
-            error!("❌ 无法读取文件 {}: {}", file_path.display(), e);
-            format!("无法读取文件 {}: {}", file_path.display(), e)
+            error!(
+                "❌ 无法读取文件 {path}: {e}",
+                path = file_path.display(),
+                e = e
+            );
+            format!(
+                "无法读取文件 {path}: {e}",
+                path = file_path.display(),
+                e = e
+            )
         })?;
 
         // 创建 Tree-sitter 管理器并分析
         let mut manager = tree_sitter::TreeSitterManager::new().await.map_err(|e| {
-            error!("❌ 无法创建 Tree-sitter 管理器: {}", e);
-            format!("无法创建 Tree-sitter 管理器: {}", e)
+            error!("❌ 无法创建 Tree-sitter 管理器: {e}");
+            format!("无法创建 Tree-sitter 管理器: {e}")
         })?;
 
         let summary = manager
             .analyze_structure(&code_content, language)
             .map_err(|e| {
-                error!("❌ 结构分析失败: {}", e);
-                format!("结构分析失败: {}", e)
+                error!("❌ 结构分析失败: {e}");
+                format!("结构分析失败: {e}")
             })?;
 
         // 从结构化摘要构建依赖图
@@ -195,12 +205,16 @@ impl DependencyService {
         for file_path in &code_files {
             debug!("🔍 分析文件依赖: {}", file_path.display());
 
-            match self.analyze_single_file_for_merge(&file_path).await {
+            match self.analyze_single_file_for_merge(file_path).await {
                 Ok(file_graph) => {
                     self.merge_dependency_graph(&mut merged_graph, file_graph);
                 }
                 Err(e) => {
-                    warn!("⚠️ 分析文件 {} 失败: {}", file_path.display(), e);
+                    warn!(
+                        "⚠️ 分析文件 {path} 失败: {e}",
+                        path = file_path.display(),
+                        e = e
+                    );
                 }
             }
         }
@@ -298,8 +312,8 @@ impl DependencyService {
                 // 如果指定了输出文件，写入文件
                 if let Some(output_path) = &params.output {
                     std::fs::write(output_path, &dot_content)
-                        .map_err(|e| format!("无法写入 DOT 文件: {}", e))?;
-                    info!("📁 DOT 文件已保存到: {}", output_path);
+                        .map_err(|e| format!("无法写入 DOT 文件: {e}"))?;
+                    info!("📁 DOT 文件已保存到: {output_path}");
                 }
 
                 Ok(DependencyResult {
@@ -328,9 +342,10 @@ impl DependencyService {
                 });
 
                 // 写入临时 DOT 文件
-                let temp_dot_path = format!("{}.dot", output_path.trim_end_matches(".svg"));
+                let temp_dot_path =
+                    format!("{base}.dot", base = output_path.trim_end_matches(".svg"));
                 std::fs::write(&temp_dot_path, &dot_content)
-                    .map_err(|e| format!("无法写入临时 DOT 文件: {}", e))?;
+                    .map_err(|e| format!("无法写入临时 DOT 文件: {e}"))?;
 
                 // TODO: 这里可以调用 Graphviz 的 dot 命令将 DOT 转换为 SVG
                 // 目前先返回 DOT 内容
@@ -362,8 +377,8 @@ impl DependencyService {
                 // 如果指定了输出文件，写入文件
                 if let Some(output_path) = &params.output {
                     std::fs::write(output_path, &mermaid_content)
-                        .map_err(|e| format!("无法写入 Mermaid 文件: {}", e))?;
-                    info!("📁 Mermaid 文件已保存到: {}", output_path);
+                        .map_err(|e| format!("无法写入 Mermaid 文件: {e}"))?;
+                    info!("📁 Mermaid 文件已保存到: {output_path}");
                 }
 
                 Ok(DependencyResult {
@@ -379,13 +394,14 @@ impl DependencyService {
                 })
             }
             _ => {
-                error!("❌ 不支持的格式: {}", format);
-                Err(format!("不支持的格式: {}", format).into())
+                error!("❌ 不支持的格式: {format}");
+                Err(format!("不支持的格式: {format}").into())
             }
         }
     }
 
     /// 查找代码文件
+    #[allow(clippy::only_used_in_recursion)]
     fn find_code_files(
         &self,
         dir_path: &Path,
@@ -438,7 +454,7 @@ impl DependencyService {
             "go" => Ok(tree_sitter::SupportedLanguage::Go),
             "c" | "h" => Ok(tree_sitter::SupportedLanguage::C),
             "cpp" | "hpp" => Ok(tree_sitter::SupportedLanguage::Cpp),
-            _ => Err(format!("不支持的文件扩展名: {}", extension)),
+            _ => Err(format!("不支持的文件扩展名: {extension}")),
         }
     }
 
@@ -449,29 +465,24 @@ impl DependencyService {
         // Mermaid 文档头，使用 flowchart 语法
         mermaid.push_str("flowchart TD\n");
         mermaid.push_str("    %% Generated by GitAI Dependency Service\n");
-        mermaid.push_str("\n");
+        mermaid.push('\n');
 
         // 为不同类型的节点定义样式
         let mut node_id_map = HashMap::new();
-        let mut node_counter = 0;
 
         // 首先生成所有节点的定义
-        for (node_id, node) in &graph.nodes {
-            let safe_id = format!("node{}", node_counter);
+        for (node_counter, (node_id, node)) in graph.nodes.iter().enumerate() {
+            let safe_id = format!("node{node_counter}");
             node_id_map.insert(node_id.clone(), safe_id.clone());
 
             let label = Self::get_node_display_name(&node.id);
             let shape_and_style = Self::get_mermaid_node_style(&node.node_type);
+            let replaced = shape_and_style.replace("{label}", &label);
 
-            mermaid.push_str(&format!(
-                "    {}{}\n",
-                safe_id,
-                shape_and_style.replace("{label}", &label)
-            ));
-            node_counter += 1;
+            mermaid.push_str(&format!("    {safe_id}{replaced}\n"));
         }
 
-        mermaid.push_str("\n");
+        mermaid.push('\n');
 
         // 然后生成所有边的定义
         for edge in &graph.edges {
@@ -482,7 +493,7 @@ impl DependencyService {
                 let edge_label = if let Some(metadata) = &edge.metadata {
                     if let Some(notes) = &metadata.notes {
                         if !notes.is_empty() {
-                            format!("|{}|", notes)
+                            format!("|{notes}|")
                         } else {
                             String::new()
                         }
@@ -493,15 +504,12 @@ impl DependencyService {
                     String::new()
                 };
 
-                mermaid.push_str(&format!(
-                    "    {}{}{} {}\n",
-                    from_id, arrow_style, edge_label, to_id
-                ));
+                mermaid.push_str(&format!("    {from_id}{arrow_style}{edge_label} {to_id}\n"));
             }
         }
 
         // 添加样式定义
-        mermaid.push_str("\n");
+        mermaid.push('\n');
         mermaid.push_str("    %% Styles\n");
         mermaid.push_str("    classDef fileNode fill:#e1f5fe,stroke:#01579b,stroke-width:2px\n");
         mermaid
@@ -518,7 +526,7 @@ impl DependencyService {
                     NodeType::Class(_) => "classNode",
                     NodeType::Module(_) => "moduleNode",
                 };
-                mermaid.push_str(&format!("    class {} {}\n", safe_id, class_name));
+                mermaid.push_str(&format!("    class {safe_id} {class_name}\n"));
             }
         }
 
@@ -529,7 +537,7 @@ impl DependencyService {
     fn get_node_display_name(node_id: &str) -> String {
         // 从节点 ID 中提取有意义的名称
         if let Some(last_part) = node_id.split("::").last() {
-            if let Some(name_part) = last_part.split('/').last() {
+            if let Some(name_part) = last_part.split('/').next_back() {
                 return name_part.to_string();
             }
         }

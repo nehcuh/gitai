@@ -22,6 +22,8 @@
 
 <devops_issue_context> {devops_issue_context} </devops_issue_context>
 
+<dependency_insights> {dependency_insights} </dependency_insights>
+
 ## 分析流程
 
 请按照以下步骤进行系统性分析：

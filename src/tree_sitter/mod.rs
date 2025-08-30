@@ -187,20 +187,20 @@ impl TreeSitterManager {
         if let Some(ref cache) = self.cache {
             let cache_key = CacheKey::from_content(code, language.name());
             if let Some(cached_summary) = cache.get(&cache_key) {
-                log::info!("使用缓存的分析结果 - {:?} 语言", language);
+                log::info!("使用缓存的分析结果 - {language:?} 语言");
                 return Ok(cached_summary);
             }
         }
 
         let parser = self.get_parser(language).ok_or_else(|| {
-            let error = format!("Parser not found for language {:?}", language);
-            log::error!("{}", error);
+            let error = format!("Parser not found for language {language:?}");
+            log::error!("{error}");
             error
         })?;
 
         let tree = parser.parse(code, None).ok_or_else(|| {
-            let error = format!("Failed to parse {:?} code", language);
-            log::error!("{}", error);
+            let error = format!("Failed to parse {language:?} code");
+            log::error!("{error}");
             error
         })?;
 
@@ -208,12 +208,12 @@ impl TreeSitterManager {
 
         // 使用新的统一分析器
         let analyzer = unified_analyzer::UnifiedAnalyzer::new(language).map_err(|e| {
-            log::error!("Failed to create UnifiedAnalyzer for {:?}: {}", language, e);
+            log::error!("Failed to create UnifiedAnalyzer for {language:?}: {e}");
             e
         })?;
 
         let result = analyzer.analyze(&tree, code.as_bytes()).map_err(|e| {
-            log::error!("Failed to analyze structure for {:?}: {}", language, e);
+            log::error!("Failed to analyze structure for {language:?}: {e}");
             e
         })?;
 
@@ -229,7 +229,7 @@ impl TreeSitterManager {
         if let Some(ref cache) = self.cache {
             let cache_key = CacheKey::from_content(code, language.name());
             if let Err(e) = cache.set(cache_key, result.clone()) {
-                log::warn!("缓存保存失败: {}", e);
+                log::warn!("缓存保存失败: {e}");
             }
         }
 
@@ -366,8 +366,7 @@ mod tests {
             let parser = manager.get_parser(lang);
             assert!(
                 parser.is_some(),
-                "Should be able to get parser for {:?}",
-                lang
+                "Should be able to get parser for {lang:?}"
             );
         }
     }
@@ -407,8 +406,7 @@ mod tests {
         let summary = result.unwrap();
         assert_eq!(summary.language, "java");
         // 简单验证解析结果存在（但不强制要求数量）
-        assert!(summary.functions.len() >= 0);
-        assert!(summary.classes.len() >= 0);
+        // Length is always >= 0, no need to check
     }
 
     #[tokio::test]
@@ -435,8 +433,7 @@ mod tests {
         let summary = result.unwrap();
         assert_eq!(summary.language, "rust");
         // 简单验证解析结果存在
-        assert!(summary.functions.len() >= 0);
-        assert!(summary.classes.len() >= 0);
+        // Length is always >= 0, no need to check
     }
 
     #[tokio::test]
@@ -458,11 +455,7 @@ mod tests {
 
         for (lang, code) in test_codes {
             let result = manager.analyze_structure(code, lang);
-            assert!(
-                result.is_ok(),
-                "Should successfully analyze {:?} code",
-                lang
-            );
+            assert!(result.is_ok(), "Should successfully analyze {lang:?} code");
 
             let summary = result.unwrap();
             assert_eq!(summary.language, lang.name());

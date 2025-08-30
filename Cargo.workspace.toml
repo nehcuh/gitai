@@ -16,10 +16,10 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["GitAI Team"]
+authors = ["nehcuh"]
 license = "MIT"
-repository = "https://github.com/gitai/gitai"
-homepage = "https://gitai.dev"
+repository = "https://github.com/nehcuh/gitai"
+homepage = "https://github.com/nehcuh/gitai"
 
 [workspace.dependencies]
 # Core dependencies

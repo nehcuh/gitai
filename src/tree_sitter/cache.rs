@@ -269,7 +269,7 @@ impl TreeSitterCache {
                 match serde_json::from_str::<CacheEntry>(&content) {
                     Ok(entry) => Some(entry),
                     Err(e) => {
-                        log::warn!("缓存文件解析失败: {}", e);
+                        log::warn!("缓存文件解析失败: {e}");
                         // 删除损坏的缓存文件
                         let _ = std::fs::remove_file(&file_path);
                         None
@@ -277,7 +277,7 @@ impl TreeSitterCache {
                 }
             }
             Err(e) => {
-                log::warn!("缓存文件读取失败: {}", e);
+                log::warn!("缓存文件读取失败: {e}");
                 None
             }
         }
@@ -354,7 +354,7 @@ impl TreeSitterCache {
             }
         }
 
-        log::info!("清理了 {} 个过期缓存项", cleaned);
+        log::info!("清理了 {cleaned} 个过期缓存项");
         Ok(cleaned)
     }
 }

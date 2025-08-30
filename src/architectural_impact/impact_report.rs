@@ -32,7 +32,7 @@ pub fn generate_markdown_report(scope: &ImpactScope, graph: Option<&DependencyGr
                 c.component_type
             ));
         }
-        s.push_str("\n");
+        s.push('\n');
     }
 
     // 间接影响组件（Top 10）
@@ -49,7 +49,7 @@ pub fn generate_markdown_report(scope: &ImpactScope, graph: Option<&DependencyGr
                 c.component_type
             ));
         }
-        s.push_str("\n");
+        s.push('\n');
     }
 
     // 关键传播路径
@@ -64,7 +64,7 @@ pub fn generate_markdown_report(scope: &ImpactScope, graph: Option<&DependencyGr
                 .join(" -> ");
             s.push_str(&format!("{}. {} (权重 {:.2})\n", i + 1, line, p.weight));
         }
-        s.push_str("\n");
+        s.push('\n');
     }
 
     // 建议（基于统计）

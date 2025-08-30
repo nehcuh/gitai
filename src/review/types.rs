@@ -29,24 +29,51 @@ pub struct ReviewResult {
 pub struct Finding {
     /// 问题描述
     pub title: String,
+    /// 严重程度
+    pub severity: Severity,
     /// 文件路径
     pub file_path: Option<String>,
     /// 行号
-    pub line: Option<u32>,
-    /// 严重程度
-    pub severity: Severity,
-    /// 详细描述
-    pub description: String,
+    pub line: Option<usize>,
+    /// 列号
+    pub column: Option<usize>,
     /// 代码片段
     pub code_snippet: Option<String>,
+    /// 详细消息
+    pub message: String,
+    /// 规则 ID
+    pub rule_id: Option<String>,
+    /// 修复建议
+    pub recommendation: Option<String>,
 }
 
 /// 严重程度
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Severity {
+    Critical,
+    High,
+    Medium,
+    Low,
+    Info,
     Error,
     Warning,
-    Info,
+}
+
+impl std::str::FromStr for Severity {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
+            "critical" => Self::Critical,
+            "high" => Self::High,
+            "medium" => Self::Medium,
+            "low" => Self::Low,
+            "info" => Self::Info,
+            "error" => Self::Error,
+            "warning" => Self::Warning,
+            _ => Self::Info,
+        })
+    }
 }
 
 /// 评审配置
@@ -60,10 +87,14 @@ pub struct ReviewConfig {
     pub scan_tool: Option<String>,
     pub block_on_critical: bool,
     pub issue_ids: Vec<String>,
+    /// 是否启用“完整模式”（包含依赖图、PageRank等深入分析与更丰富的AI上下文）
+    pub full: bool,
+    /// 是否启用“偏离度分析”（DevOps 需求级偏离分析，保留该命名供 Issue 相关分析使用）
     pub deviation_analysis: bool,
 }
 
 impl ReviewConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_args(
         language: Option<String>,
         format: String,
@@ -73,6 +104,7 @@ impl ReviewConfig {
         scan_tool: Option<String>,
         block_on_critical: bool,
         issue_id: Option<String>,
+        full: bool,
         deviation_analysis: bool,
     ) -> Self {
         let issue_ids = issue_id
@@ -91,6 +123,7 @@ impl ReviewConfig {
             scan_tool,
             block_on_critical,
             issue_ids,
+            full,
             deviation_analysis,
         }
     }

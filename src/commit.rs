@@ -98,7 +98,7 @@ pub fn sample_util_add(x: i32, y: i32) -> i32 {
 /// 提交操作 - Linus式静态函数设计
 ///
 /// 干掉无意义的Executor包装器，直接用函数处理事情！
-
+///
 /// 执行提交流程
 pub async fn execute_commit(
     config: &Config,
@@ -179,6 +179,7 @@ async fn get_issue_context(
     config: &Config,
     issue_ids: &[String],
 ) -> Result<Vec<Issue>, Box<dyn std::error::Error + Send + Sync>> {
+    let _ = config; // silence unused when devops feature is disabled
     if issue_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -187,7 +188,7 @@ async fn get_issue_context(
     {
         if let Some(ref devops_config) = config.devops {
             let client = crate::devops::DevOpsClient::new(devops_config.clone());
-            return client.get_issues(issue_ids).await.map_err(|e| e);
+            return client.get_issues(issue_ids).await;
         }
     }
 
@@ -204,7 +205,7 @@ async fn generate_commit_message(
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     if let Some(ref message) = commit_config.message {
         let final_message = format_commit_message(message, &commit_config.issue_ids);
-        println!("📝 提交信息: {}", final_message);
+        println!("📝 提交信息: {final_message}");
         return Ok(final_message);
     }
 
@@ -228,10 +229,7 @@ async fn generate_commit_message(
     {
         Ok(message) => message,
         Err(template_error) => {
-            log::warn!(
-                "使用模板生成提交信息失败，降级为传统方式: {}",
-                template_error
-            );
+            log::warn!("使用模板生成提交信息失败，降级为传统方式: {template_error}");
 
             // 降级为传统方式：构建prompt然后调用AI
             let prompt = build_commit_prompt_fallback(config, diff, issues, commit_config).await?;
@@ -244,7 +242,7 @@ async fn generate_commit_message(
         // 未启用 AI 时的简易提交信息
         let changes = count_changes(diff).unwrap_or(0);
         let mut msg = if changes > 0 {
-            format!("chore: update code ({} lines changed)", changes)
+            format!("chore: update code ({changes} lines changed)")
         } else {
             "chore: update code".to_string()
         };
@@ -255,7 +253,7 @@ async fn generate_commit_message(
     };
 
     let final_message = format_commit_message(ai_message.trim(), &commit_config.issue_ids);
-    println!("📝 提交信息: {}", final_message);
+    println!("📝 提交信息: {final_message}");
     Ok(final_message)
 }
 
@@ -277,19 +275,20 @@ async fn build_commit_prompt_fallback(
     issues: &[Issue],
     commit_config: &CommitConfig,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let mut prompt = format!("请为以下代码变更生成一个简洁的提交信息：\n\n{}", diff);
+    let _ = config; // config not used in fallback prompt builder
+    let mut prompt = format!("请为以下代码变更生成一个简洁的提交信息：\n\n{diff}");
 
     // 添加Tree-sitter结构分析（如果启用）
     if commit_config.tree_sitter {
         if let Some(structural_summary) = perform_structural_analysis(diff).await? {
             let structure_info = format_structure_info(&structural_summary);
-            prompt.push_str(&format!("\n\n{}", structure_info));
+            prompt.push_str(&format!("\n\n{structure_info}"));
         }
     }
 
     if !issues.is_empty() {
         let context = build_issue_context(issues);
-        prompt.push_str(&format!("\n\n相关Issue信息：\n{}", context));
+        prompt.push_str(&format!("\n\n相关Issue信息：\n{context}"));
     }
 
     Ok(prompt)
@@ -329,7 +328,7 @@ async fn perform_structural_analysis(
         return Ok(None);
     };
 
-    println!("  检测到语言: {:?}", supported_lang);
+    println!("  检测到语言: {supported_lang:?}");
 
     // 创建Tree-sitter管理器并分析
     match TreeSitterManager::new().await {
@@ -341,12 +340,12 @@ async fn perform_structural_analysis(
                 Ok(Some(summary))
             }
             Err(e) => {
-                println!("  ⚠️ 结构分析失败: {}", e);
+                println!("  ⚠️ 结构分析失败: {e}");
                 Ok(None)
             }
         },
         Err(e) => {
-            println!("  ⚠️ Tree-sitter管理器初始化失败: {}", e);
+            println!("  ⚠️ Tree-sitter管理器初始化失败: {e}");
             Ok(None)
         }
     }
@@ -368,8 +367,8 @@ fn extract_code_from_diff(diff: &str) -> String {
         }
 
         // 提取添加的行（+开头）和上下文行（没有+/-前缀）
-        if line.starts_with('+') {
-            code_lines.push(&line[1..]);
+        if let Some(stripped) = line.strip_prefix('+') {
+            code_lines.push(stripped);
         } else if !line.starts_with('-') && !line.is_empty() {
             code_lines.push(line);
         }
@@ -429,7 +428,7 @@ fn format_structure_info(summary: &StructuralSummary) -> String {
     if !summary.complexity_hints.is_empty() {
         info.push("复杂度提示:".to_string());
         for hint in summary.complexity_hints.iter().take(2) {
-            info.push(format!("- {}", hint));
+            info.push(format!("- {hint}"));
         }
     }
 
@@ -452,6 +451,7 @@ async fn perform_review_with_result(
         scan_tool: None,
         block_on_critical: false,
         issue_ids: issues.iter().map(|i| i.id.clone()).collect(),
+        full: false,
         deviation_analysis: true,
     };
 
@@ -495,14 +495,14 @@ async fn execute_git_operations_with_result(
     }
 
     // 执行提交
-    println!("📝 执行提交: {}", commit_message);
+    println!("📝 执行提交: {commit_message}");
     match crate::git::git_commit(commit_message) {
         Ok(hash) => {
-            println!("✅ 提交成功: {}", hash);
+            println!("✅ 提交成功: {hash}");
             Ok(Some(hash))
         }
         Err(e) => {
-            eprintln!("❌ 提交失败: {}", e);
+            eprintln!("❌ 提交失败: {e}");
             Err(e)
         }
     }

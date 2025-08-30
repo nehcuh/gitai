@@ -67,7 +67,7 @@ impl PromptManager {
         let search_dirs = vec![prompts_dir, assets_dir];
 
         for base_dir in search_dirs {
-            let template_path = base_dir.join(format!("{}.md", template_name));
+            let template_path = base_dir.join(format!("{template_name}.md"));
             if template_path.exists() {
                 return Some(template_path);
             }
@@ -84,12 +84,12 @@ impl PromptManager {
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let template_path = self
             .get_template_path(template_name)
-            .ok_or_else(|| format!("未找到提示词模板: {}", template_name))?;
+            .ok_or_else(|| format!("未找到提示词模板: {template_name}"))?;
 
-        log::debug!("加载提示词模板: {:?}", template_path);
+        log::debug!("加载提示词模板: {template_path:?}");
 
         fs::read_to_string(&template_path)
-            .map_err(|e| format!("读取提示词模板失败: {} - {}", template_path.display(), e).into())
+            .map_err(|e| format!("读取提示词模板失败: {} - {e}", template_path.display()).into())
     }
 
     /// 渲染提示词模板
@@ -98,7 +98,7 @@ impl PromptManager {
 
         // 替换变量
         for (key, value) in &context.variables {
-            let placeholder = format!("{{{}}}", key);
+            let placeholder = format!("{{{key}}}");
             rendered = rendered.replace(&placeholder, value);
         }
 
@@ -171,8 +171,10 @@ mod tests {
 
     #[test]
     fn test_language_detection() {
-        let mut config = Config::default();
-        config.language = Some("cn".to_string());
+        let config = Config {
+            language: Some("cn".to_string()),
+            ..Default::default()
+        };
         let manager = PromptManager::new(config);
 
         assert_eq!(manager.get_language(), Some("cn"));

@@ -227,7 +227,7 @@ impl ArchitecturalImpactAnalysis {
             RiskLevel::None => "无",
         };
 
-        self.summary = format!("检测到 {} 个架构影响变更，风险级别：{}", count, risk_desc);
+        self.summary = format!("检测到 {count} 个架构影响变更，风险级别：{risk_desc}");
     }
 
     /// 检查是否有高风险变更

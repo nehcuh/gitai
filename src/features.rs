@@ -126,7 +126,7 @@ pub fn get_feature_summary() -> FeatureSummary {
     for feature in features {
         by_category
             .entry(feature.category.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(feature);
     }
 
@@ -174,7 +174,7 @@ fn display_default(features: &[FeatureInfo], summary: &FeatureSummary) {
             let enabled_count = cat_features.iter().filter(|f| f.enabled).count();
             let total_count = cat_features.len();
 
-            println!("📦 {} ({}/{})", category, enabled_count, total_count);
+            println!("📦 {category} ({enabled_count}/{total_count})");
 
             for feature in cat_features {
                 let status = if feature.enabled { "✅" } else { "❌" };
@@ -238,7 +238,7 @@ fn display_table(features: &[FeatureInfo], summary: &FeatureSummary) {
             status,
             reset,
             feature.category,
-            truncate_string(&feature.description, 34)
+            truncate_string(feature.description, 34)
         );
     }
 

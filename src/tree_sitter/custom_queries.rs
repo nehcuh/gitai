@@ -51,7 +51,7 @@ impl CustomQueryManager {
         // 如果目录不存在，创建它
         if !user_queries_dir.exists() {
             std::fs::create_dir_all(&user_queries_dir)?;
-            log::info!("创建用户查询目录: {:?}", user_queries_dir);
+            log::info!("创建用户查询目录: {user_queries_dir:?}");
 
             // 创建示例配置文件
             Self::create_example_config(&user_queries_dir)?;
@@ -127,7 +127,7 @@ comment_query = """
 # - 测试查询可以使用 tree-sitter CLI 工具
 "#;
             std::fs::write(&example_path, example_content)?;
-            log::info!("创建示例查询配置: {:?}", example_path);
+            log::info!("创建示例查询配置: {example_path:?}");
         }
 
         Ok(())
@@ -166,14 +166,14 @@ comment_query = """
                         );
                     }
                     Err(e) => {
-                        log::warn!("加载自定义查询失败 {:?}: {}", path, e);
+                        log::warn!("加载自定义查询失败 {path:?}: {e}");
                     }
                 }
             }
         }
 
         if loaded_count > 0 {
-            log::info!("成功加载 {} 个自定义查询配置", loaded_count);
+            log::info!("成功加载 {loaded_count} 个自定义查询配置");
         }
 
         Ok(())
@@ -245,12 +245,12 @@ comment_query = """
 
         // 检查是否有针对未知语言的自定义查询
         // 例如：用户可能为 GitAI 不原生支持的语言添加了查询
-        if let Some(custom) = self.custom_queries.get(&format!("custom_{}", lang_name)) {
+        if let Some(custom) = self.custom_queries.get(&format!("custom_{lang_name}")) {
             return Ok(custom.clone());
         }
 
         // 使用默认查询
-        default_queries.ok_or_else(|| format!("没有找到 {} 语言的查询配置", lang_name).into())
+        default_queries.ok_or_else(|| format!("没有找到 {lang_name} 语言的查询配置").into())
     }
 
     /// 合并查询（自定义优先）
@@ -312,7 +312,7 @@ comment_query = """
             metadata: QueryMetadata {
                 language: name.to_string(),
                 version: Some("1.0.0".to_string()),
-                description: Some(format!("Custom queries for {}", name)),
+                description: Some(format!("Custom queries for {name}")),
                 override_default: true,
                 extends: None,
             },
@@ -320,14 +320,14 @@ comment_query = """
         };
 
         // 保存到文件
-        let file_path = self.user_queries_dir.join(format!("{}_queries.toml", name));
+        let file_path = self.user_queries_dir.join(format!("{name}_queries.toml"));
         let content = toml::to_string_pretty(&config)?;
         std::fs::write(&file_path, content)?;
 
         // 添加到内存缓存
         self.custom_queries.insert(name.to_string(), config.queries);
 
-        log::info!("添加自定义语言查询: {} -> {:?}", name, file_path);
+        log::info!("添加自定义语言查询: {name} -> {file_path:?}");
         Ok(())
     }
 
@@ -341,7 +341,7 @@ comment_query = """
 
         let lang = language
             .language()
-            .ok_or_else(|| format!("Language {:?} is not enabled in this build", language))?;
+            .ok_or_else(|| format!("Language {language:?} is not enabled in this build"))?;
         Query::new(lang, query)?;
 
         Ok(())

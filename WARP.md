@@ -1,34 +1,34 @@
 # WARP.md
 
-This file provides guidance to WARP (warp.dev) when working with code in this repository.
+本文件为 WARP (warp.dev) 在此仓库中工作时提供指南。
 
-## Project Overview
+## 项目概览
 
-GitAI is an AI-driven Git workflow assistant that provides **instant**, **non-mandatory** developer tools without disrupting existing workflows. It combines multi-dimensional code analysis with AI-powered insights to enhance development productivity.
+GitAI 是一个 AI 驱动的 Git 工作流助手，提供**即时**、**非强制性**的开发者工具，不会干扰现有工作流程。它结合多维度代码分析与 AI 洞察力，提升开发生产力。
 
-### Core Philosophy
-- **Instant assistance**: Available at any moment during development
-- **Non-mandatory**: All features are optional, users choose when to engage
-- **Full compatibility**: Works seamlessly with existing Git workflows
+### 核心理念
+- **即时辅助**：在开发过程中随时可用
+- **非强制性**：所有功能都是可选的，用户自主选择何时使用
+- **完全兼容**：与现有 Git 工作流无缝配合
 
-### Key Capabilities
-- **Intelligent Code Review**: Multi-dimensional analysis combining Tree-sitter structure analysis, security scanning, and DevOps task context
-- **Smart Commits**: AI-generated commit messages with automatic issue linking and DevOps integration
-- **Security Scanning**: OpenGrep-powered security analysis with auto-installation and rule management
-- **MCP Server**: Model Context Protocol server for seamless LLM integration
-- **Quality Metrics**: Architectural quality tracking with trend analysis and reporting
+### 关键能力
+- **智能代码评审**：结合 Tree-sitter 结构分析、安全扫描和 DevOps 任务上下文的多维分析
+- **智能提交**：AI 生成的提交信息，自动关联 Issue 并集成 DevOps
+- **安全扫描**：基于 OpenGrep 的安全分析，支持自动安装和规则管理
+- **MCP 服务器**：Model Context Protocol 服务器，实现与 LLM 的无缝集成
+- **质量指标**：架构质量跟踪，包含趋势分析和报告
 
-### Technology Stack
-- **Language**: Rust 2021 edition
-- **Analysis**: Tree-sitter for 8+ programming languages
-- **Security**: OpenGrep integration for SAST scanning
-- **AI Integration**: OpenAI-compatible API support (Ollama, GPT, Claude, Qwen)
-- **Protocols**: MCP (Model Context Protocol) for LLM integration
-- **DevOps**: API integrations for Coding.net and planned GitHub/Jira support
+### 技术栈
+- **语言**：Rust 2021 edition
+- **分析**：Tree-sitter 支持 8+ 种编程语言
+- **安全**：OpenGrep 集成用于 SAST 扫描
+- **AI 集成**：OpenAI 兼容 API 支持（Ollama、GPT、Claude、Qwen）
+- **协议**：MCP (Model Context Protocol) 用于 LLM 集成
+- **DevOps**：Coding.net API 集成，计划支持 GitHub/Jira
 
-## Development Commands
+## 开发命令
 
-### Build Commands
+### 构建命令
 ```bash
 # Debug build
 cargo build
@@ -49,7 +49,7 @@ cargo build --bin gitai-mcp
 # - target/debug/gitai-mcp (MCP server)
 ```
 
-### Testing
+### 测试
 ```bash
 # Run all unit tests
 cargo test
@@ -68,7 +68,7 @@ cargo test config_test
 # - Unit tests are embedded in source files with #[cfg(test)]
 ```
 
-### Code Quality
+### 代码质量
 ```bash
 # Format code
 cargo fmt --all
@@ -86,9 +86,9 @@ cargo clippy --all-targets -- -D warnings
 cargo fix --lib -p gitai
 ```
 
-### Running GitAI
+### 运行 GitAI
 
-#### Basic Commands
+#### 基本命令
 ```bash
 # Initialize GitAI configuration
 cargo run --bin gitai -- init
@@ -116,7 +116,7 @@ cargo run --bin gitai -- metrics record
 cargo run --bin gitai -- metrics analyze --days 30
 ```
 
-#### Debugging Commands
+#### 调试命令
 ```bash
 # Enable debug logging
 RUST_LOG=debug cargo run --bin gitai -- review
@@ -131,7 +131,7 @@ RUST_LOG=gitai=debug cargo run --bin gitai -- scan
 time cargo run --bin gitai -- review --tree-sitter
 ```
 
-### Environment Setup
+### 环境配置
 ```bash
 # Required for AI functionality (example with Ollama)
 export GITAI_AI_API_URL="http://localhost:11434/v1/chat/completions"
@@ -148,11 +148,11 @@ export GITAI_DEVOPS_BASE_URL="https://your-org.coding.net"
 export GITAI_RULES_URL="https://your-rules-repo/rules.tar.gz"
 ```
 
-## Architecture Overview
+## 架构概览
 
-### Multi-dimensional Analysis Engine
+### 多维度分析引擎
 
-GitAI's core strength is its ability to combine multiple analysis dimensions:
+GitAI 的核心优势在于能够融合多种分析维度：
 
 ```
 Code Changes (git diff)
@@ -184,36 +184,36 @@ Code Changes (git diff)
 └─────────────────────────────────────────────────┘
 ```
 
-### Module Structure
+### 模块结构
 
-#### Core Modules
+#### 核心模块
 - **`src/main.rs`**: CLI entry point and command routing
 - **`src/args.rs`**: Command-line argument definitions using clap
 - **`src/config.rs`**: Configuration management for ~/.config/gitai/config.toml
 - **`src/lib.rs`**: Library interface and re-exports
 
-#### Analysis Modules  
+#### 分析模块  
 - **`src/analysis.rs`**: Multi-dimensional analysis coordinator
 - **`src/review.rs`**: Code review execution engine
 - **`src/commit.rs`**: Smart commit message generation
 - **`src/scan.rs`**: OpenGrep security scanning integration
 - **`src/tree_sitter/`**: Structure analysis (8 language support)
 
-#### Integration Modules
+#### 集成模块
 - **`src/ai.rs`**: AI service integration (OpenAI-compatible APIs)
 - **`src/devops.rs`**: DevOps platform API clients
 - **`src/mcp/`**: Model Context Protocol server implementation
 - **`src/metrics/`**: Quality tracking and trend analysis
 
-#### Support Modules
+#### 支持模块
 - **`src/git.rs`**: Git command execution and parsing
 - **`src/config_init.rs`**: Configuration initialization
 - **`src/resource_manager.rs`**: Resource downloading and caching
 - **`src/prompts.rs`**: AI prompt template management
 
-### MCP (Model Context Protocol) Integration
+### MCP（Model Context Protocol）集成
 
-The MCP server enables seamless integration with LLM clients:
+MCP 服务器用于与 LLM 客户端进行无缝集成：
 
 ```
 ┌─────────────────────────────────────┐
@@ -237,21 +237,21 @@ The MCP server enables seamless integration with LLM clients:
 └─────────────────────────────────────┘
 ```
 
-#### MCP Services
+#### MCP 服务
 - **Review Service**: Code quality analysis with security scanning
 - **Commit Service**: Smart commit message generation with issue linking
 - **Scan Service**: Security vulnerability detection
 - **Analysis Service**: Tree-sitter structure analysis
 
-### Caching Strategy
+### 缓存策略
 - **Review Cache**: `~/.cache/gitai/review_cache/` (MD5-based cache keys)
 - **Scan History**: `~/.cache/gitai/scan_history/` (JSON scan results)  
 - **Tree-sitter Cache**: In-memory LRU cache with disk persistence
 - **Rules Cache**: `~/.cache/gitai/rules/` (OpenGrep security rules)
 
-## Configuration & Setup
+## 配置与设置
 
-### Initial Setup
+### 初始化
 ```bash
 # Initialize configuration with default settings
 gitai init
@@ -263,9 +263,9 @@ gitai init --config-url https://your-org.com/gitai-config.toml
 gitai init --offline
 ```
 
-### Configuration File Structure
+### 配置文件结构
 
-The main configuration is stored in `~/.config/gitai/config.toml`:
+主配置存放于 `~/.config/gitai/config.toml`：
 
 ```toml
 [ai]
@@ -301,9 +301,9 @@ default_tool = "opengrep"
 default_timeout = 300
 ```
 
-### AI Model Configuration
+### AI 模型配置
 
-#### Ollama (Recommended for local development)
+#### Ollama（本地开发推荐）
 ```toml
 [ai]
 api_url = "http://localhost:11434/v1/chat/completions"
@@ -320,7 +320,7 @@ api_key = "sk-your-openai-key"
 temperature = 0.3
 ```
 
-#### Claude (via API)
+#### Claude（通过 API）
 ```toml
 [ai]
 api_url = "https://api.anthropic.com/v1/messages"
@@ -329,16 +329,16 @@ api_key = "your-anthropic-key"
 temperature = 0.3
 ```
 
-### Resource Directories
+### 资源目录
 - **Configuration**: `~/.config/gitai/`
 - **Cache**: `~/.cache/gitai/`
 - **Rules**: `~/.cache/gitai/rules/`
 - **Prompts**: `~/.config/gitai/prompts/`
 - **Tree-sitter**: `~/.cache/gitai/tree-sitter/`
 
-## Supported Languages & Technologies
+## 支持的语言与技术
 
-### Programming Languages (Tree-sitter Support)
+### 编程语言（Tree-sitter 支持）
 | Language   | Extension | Tree-sitter Parser |
 |------------|-----------|-------------------|
 | Rust       | `.rs`     | tree-sitter-rust  |
@@ -350,28 +350,28 @@ temperature = 0.3
 | C          | `.c`, `.h`| tree-sitter-c     |
 | C++        | `.cpp`, `.hpp` | tree-sitter-cpp |
 
-### DevOps Platform Integration
-- **Coding.net** ✅ (Fully supported)
-- **GitHub Issues** 🔄 (Planned)  
-- **Jira** 🔄 (In development)
-- **Azure DevOps** 📋 (Roadmap)
+### DevOps 平台集成
+- **Coding.net** ✅（完全支持）
+- **GitHub Issues** 🔄（计划中）  
+- **Jira** 🔄（开发中）
+- **Azure DevOps** 📋（路线图）
 
-### AI Model Support
+### AI 模型支持
 - **Ollama** ✅ (Local LLMs, recommended)
 - **OpenAI** ✅ (GPT-3.5, GPT-4 series)
 - **Claude** ✅ (Anthropic API)
 - **Qwen** ✅ (Alibaba Cloud)
 - **Custom APIs** ✅ (OpenAI-compatible endpoints)
 
-### Security Scanning
+### 安全扫描
 - **OpenGrep** ✅ (Primary engine, 30+ language rules)
 - **Custom Rules** ✅ (YAML/JSON rule definitions)
 - **Auto-installation** ✅ (Cargo-based tool installation)
 - **Rule Updates** ✅ (Automatic rule repository sync)
 
-## Testing & Debugging
+## 测试与调试
 
-### Unit Tests
+### 单元测试
 ```bash
 # Run all unit tests
 cargo test
@@ -388,7 +388,7 @@ cargo test -- --nocapture
 cargo test test_parse_commit_config
 ```
 
-### Integration Tests
+### 集成测试
 ```bash
 # MCP integration tests (requires Python)
 cd tests/mcp_integration
@@ -399,9 +399,9 @@ python test_mcp_scan.py
 cargo test --test integration_tests
 ```
 
-### Debugging & Troubleshooting
+### 调试与故障排除
 
-#### Debug Logging
+#### 调试日志
 ```bash
 # Enable debug logs for all modules
 RUST_LOG=debug gitai review
@@ -416,7 +416,7 @@ RUST_LOG=gitai::ai=debug gitai commit
 RUST_LOG=debug gitai mcp --transport stdio
 ```
 
-#### Performance Analysis
+#### 性能分析
 ```bash
 # Benchmark scanning performance
 time gitai scan --benchmark --no-history
@@ -428,7 +428,7 @@ valgrind --tool=massif target/release/gitai review
 RUST_LOG=gitai::tree_sitter::cache=debug gitai review --tree-sitter
 ```
 
-#### Common Issues
+#### 常见问题
 
 **Q: "AI service connection failed"**
 ```bash
@@ -477,11 +477,11 @@ rm -rf ~/.cache/gitai/tree-sitter/
 gitai review --language=rust --tree-sitter
 ```
 
-## Quick Reference
+## 速查
 
-### Common Development Workflows
+### 常见开发工作流
 
-**Code Review Workflow:**
+**代码评审工作流：**
 ```bash
 # 1. Quick code quality check
 gitai review
@@ -493,7 +493,7 @@ gitai review --security-scan --tree-sitter
 gitai review --issue-id "#123" --deviation-analysis
 ```
 
-**Smart Commit Workflow:**
+**智能提交工作流：**
 ```bash
 # 1. AI-generated commit message
 gitai commit
@@ -505,7 +505,7 @@ gitai commit --issue-id "#123,#456"
 gitai commit --review --all
 ```
 
-**Security Scanning Workflow:**
+**安全扫描工作流：**
 ```bash
 # 1. Quick security scan
 gitai scan
@@ -517,7 +517,7 @@ gitai scan --update-rules --full
 gitai scan --lang java --timeout 600
 ```
 
-**Quality Metrics Workflow:**
+**质量指标工作流：**
 ```bash
 # 1. Record current quality snapshot
 gitai metrics record
@@ -529,14 +529,14 @@ gitai metrics analyze --days 30
 gitai metrics report --format html --output quality-report.html
 ```
 
-### Key File Locations
+### 关键文件位置
 - **Main config**: `~/.config/gitai/config.toml`
 - **AI prompts**: `~/.config/gitai/prompts/`
 - **Security rules**: `~/.cache/gitai/rules/`
 - **Review cache**: `~/.cache/gitai/review_cache/`
 - **Scan history**: `~/.cache/gitai/scan_history/`
 
-### Related Documentation
+### 相关文档
 - **Architecture details**: `docs/ARCHITECTURE.md` 
 - **Feature overview**: `README.md`
 - **Regression testing**: `docs/REGRESSION.md`

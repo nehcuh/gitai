@@ -63,9 +63,8 @@ pub struct PerformanceCollector {
     tool_stats: Arc<parking_lot::RwLock<HashMap<String, ToolStats>>>,
 }
 
-impl PerformanceCollector {
-    /// 创建新的性能统计收集器
-    pub fn new() -> Self {
+impl Default for PerformanceCollector {
+    fn default() -> Self {
         Self {
             total_calls: AtomicU64::new(0),
             successful_calls: AtomicU64::new(0),
@@ -73,6 +72,13 @@ impl PerformanceCollector {
             total_execution_time_ms: AtomicU64::new(0),
             tool_stats: Arc::new(parking_lot::RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl PerformanceCollector {
+    /// 创建新的性能统计收集器
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// 记录工具调用开始
@@ -414,6 +420,18 @@ impl GitAiMcpManager {
                             }
                             Err(e) => {
                                 error!("❌ 服务 'dependency' 初始化失败: {}", e);
+                            }
+                        },
+                        "deviation" => match services::DeviationService::new(config.clone()) {
+                            Ok(service) => {
+                                services.insert(
+                                    "deviation".to_string(),
+                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
+                                );
+                                info!("✅ 服务 'deviation' 初始化成功");
+                            }
+                            Err(e) => {
+                                error!("❌ 服务 'deviation' 初始化失败: {}", e);
                             }
                         },
                         _ => {

@@ -148,11 +148,13 @@ pub async fn review_code_with_template(
     tree_sitter_summary: Option<&str>,
     security_scan_results: &str,
     devops_issue_context: &str,
+    dependency_insights: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut context = PromptContext::new()
         .with_variable("diff", diff)
         .with_variable("security_scan_results", security_scan_results)
-        .with_variable("devops_issue_context", devops_issue_context);
+        .with_variable("devops_issue_context", devops_issue_context)
+        .with_variable("dependency_insights", dependency_insights);
 
     // 使用增强的架构洞察替代简单的统计
     if let Some(summary) = tree_sitter_summary {
@@ -242,5 +244,5 @@ pub async fn generate_commit_message_with_template(
         }
     }
 
-    call_ai_with_template(config, "commit-generator", &context).await
+    call_ai_with_template(config, "commit", &context).await
 }

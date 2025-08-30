@@ -24,6 +24,8 @@ Thumbs.db
 *.log
 *.cache
 *.bak
+*.out
+*.pid
 
 # Test directories
 test-java-sec-code/
@@ -50,6 +52,7 @@ test-java-sec-code/
 .cache/
 *.cache/
 .serena/
+.claude/
 
 # Configuration
 config.toml

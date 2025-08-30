@@ -42,9 +42,12 @@ pub struct Finding {
     pub title: String,
     pub file_path: std::path::PathBuf,
     pub line: usize,
-    pub severity: Severity,
-    pub rule_id: String,
+    pub column: usize,
+    pub severity: String,
+    pub rule_id: Option<String>,
     pub code_snippet: Option<String>,
+    pub message: String,
+    pub remediation: Option<String>,
 }
 
 /// 严重程度
@@ -283,24 +286,32 @@ fn create_finding_from_result(
         .to_string();
     let file_path = item["path"].as_str().unwrap_or("").to_string();
     let line = item["start"]["line"].as_u64().unwrap_or(0) as usize;
-    let rule_id = item["check_id"].as_str().unwrap_or("unknown").to_string();
+    let column = item["start"]["col"].as_u64().unwrap_or(0) as usize;
+    let rule_id = item["check_id"].as_str().map(|s| s.to_string());
 
     let severity_str = item["severity"].as_str().unwrap_or("WARNING");
-    let severity = match severity_str {
-        "ERROR" => Severity::Error,
-        "WARNING" => Severity::Warning,
-        _ => Severity::Info,
-    };
 
     let code_snippet = item["lines"].as_str().map(|s| s.to_string());
+    
+    let message = item["extra"]["message"]
+        .as_str()
+        .unwrap_or(title.as_str())
+        .to_string();
+    
+    let remediation = item["extra"]["fix"]
+        .as_str()
+        .map(|s| s.to_string());
 
     Ok(Finding {
         title,
         file_path: std::path::PathBuf::from(file_path),
         line,
-        severity,
+        column,
+        severity: severity_str.to_string(),
         rule_id,
         code_snippet,
+        message,
+        remediation,
     })
 }
 

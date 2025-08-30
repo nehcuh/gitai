@@ -23,7 +23,7 @@ pub fn format_for_ai_context(analysis: &ArchitecturalImpactAnalysis) -> String {
 
     // 风险摘要
     let risk_summary = super::risk_assessment::generate_risk_summary(analysis);
-    context.push_str(&format!("### 📊 风险评估\n{}\n\n", risk_summary));
+    context.push_str(&format!("### 📊 风险评估\n{risk_summary}\n\n"));
 
     // 按风险级别分组显示变更
     context.push_str("### 🔍 检测到的变更\n\n");
@@ -135,15 +135,15 @@ fn format_change_detail(change: &BreakingChange) -> String {
     // 显示变更前后对比
     if let (Some(before), Some(after)) = (&change.before, &change.after) {
         detail.push_str("  - 🔄 变更对比:\n");
-        detail.push_str(&format!("    - 变更前: `{}`\n", before));
-        detail.push_str(&format!("    - 变更后: `{}`\n", after));
+        detail.push_str(&format!("    - 变更前: `{before}`\n"));
+        detail.push_str(&format!("    - 变更后: `{after}`\n"));
     }
 
     // 显示建议
     if !change.suggestions.is_empty() {
         detail.push_str("  - 💡 建议:\n");
         for suggestion in &change.suggestions {
-            detail.push_str(&format!("    - {}\n", suggestion));
+            detail.push_str(&format!("    - {suggestion}\n"));
         }
     }
 

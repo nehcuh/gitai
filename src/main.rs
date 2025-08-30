@@ -1,9 +1,12 @@
 // Use modules from the library crate
 use gitai::{
-    args::{self, Args, Command, ConfigAction, MetricsAction, PromptAction},
-    config::{self, Config},
-    error, git, prompts,
+    args::{Args, Command, ConfigAction, PromptAction},
+    config::{self},
+    git,
 };
+
+#[cfg(feature = "metrics")]
+use gitai::args::MetricsAction;
 
 // Conditionally import feature-gated modules
 #[cfg(feature = "ai")]
@@ -25,9 +28,7 @@ use gitai::mcp;
 use gitai::metrics;
 
 // Always available modules
-use gitai::{
-    analysis, architectural_impact, commit, features, project_insights, review, tree_sitter,
-};
+use gitai::{commit, features, review};
 
 use std::fs;
 use std::path::PathBuf;
@@ -60,6 +61,7 @@ fn init_logger() {
 }
 
 /// 获取缓存目录
+#[allow(dead_code)]
 fn get_cache_dir() -> Result<PathBuf> {
     let cache_dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -100,10 +102,10 @@ async fn main() -> Result<()> {
             config
         }
         Err(e) => {
-            eprintln!("❌ 配置加载失败: {}", e);
+            eprintln!("❌ 配置加载失败: {e}");
             eprintln!("💡 提示: 请检查 ~/.config/gitai/config.toml 文件");
             eprintln!("💡 可以使用 'gitai init' 初始化配置");
-            return Err(format!("配置加载失败: {}", e).into());
+            return Err(format!("配置加载失败: {e}").into());
         }
     };
 
@@ -117,7 +119,9 @@ async fn main() -> Result<()> {
             scan_tool,
             block_on_critical,
             issue_id,
+            full,
             deviation_analysis,
+            ..
         } => {
             let review_config = review::ReviewConfig::from_args(
                 language,
@@ -128,6 +132,7 @@ async fn main() -> Result<()> {
                 scan_tool,
                 block_on_critical,
                 issue_id,
+                full,
                 deviation_analysis,
             );
             review::execute_review(&config, review_config).await?;
@@ -219,13 +224,7 @@ async fn main() -> Result<()> {
         }
         Command::Git(git_args) => {
             // 默认不启用AI解释；--ai 显式开启；--noai 可显式关闭（当外部别名强制开启时）
-            let use_ai = if args.ai {
-                true
-            } else if args.noai {
-                false
-            } else {
-                false
-            };
+            let use_ai = args.ai && !args.noai;
 
             #[cfg(feature = "ai")]
             {
@@ -297,7 +296,7 @@ async fn handle_graph_export(
         std::fs::write(out, dot)?;
         println!("📁 依赖图已导出: {}", out.display());
     } else {
-        println!("{}", dot);
+        println!("{dot}");
     }
     Ok(())
 }
@@ -537,10 +536,10 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
     match ai::call_ai(config, &prompt).await {
         Ok(explanation) => {
             println!("\n🤖 AI解释:");
-            println!("{}", explanation);
+            println!("{explanation}");
         }
         Err(e) => {
-            log::warn!("AI解释失败: {}", e);
+            log::warn!("AI解释失败: {e}");
         }
     }
 
@@ -562,10 +561,11 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
             // 创建默认模板
             let templates = [
                 (
-                    "commit-generator.md",
-                    include_str!("../assets/prompts/commit-generator.md"),
+                    "commit.md",
+                    include_str!("../assets/prompts/commit.md"),
                 ),
                 ("review.md", include_str!("../assets/prompts/review.md")),
+                ("deviation.md", include_str!("../assets/prompts/deviation.md")),
             ];
 
             for (filename, content) in &templates {
@@ -591,13 +591,11 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
 
             println!("📝 可用的提示词模板:");
             let entries = fs::read_dir(&prompts_dir)?;
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                        if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                            println!("  - {}", name);
-                        }
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("md") {
+                    if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                        println!("  - {name}");
                     }
                 }
             }
@@ -609,13 +607,13 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
                 .join("gitai")
                 .join("prompts");
 
-            let file_path = prompts_dir.join(format!("{}.md", name));
+            let file_path = prompts_dir.join(format!("{name}.md"));
             if file_path.exists() {
                 let content = fs::read_to_string(&file_path)?;
-                println!("📝 提示词模板: {}", name);
-                println!("{}", content);
+                println!("📝 提示词模板: {name}");
+                println!("{content}");
             } else {
-                println!("❌ 未找到提示词模板: {}", name);
+                println!("❌ 未找到提示词模板: {name}");
             }
         }
         PromptAction::Update => {
@@ -639,7 +637,7 @@ async fn handle_init(
     let mut initializer = ConfigInitializer::new();
 
     if let Some(url) = config_url {
-        println!("📥 使用配置URL: {}", url);
+        println!("📥 使用配置URL: {url}");
         initializer = initializer.with_config_url(Some(url));
     }
 
@@ -660,7 +658,7 @@ async fn handle_init(
             println!("  gitai --help     - 查看更多命令");
         }
         Err(e) => {
-            eprintln!("❌ 初始化失败: {}", e);
+            eprintln!("❌ 初始化失败: {e}");
             return Err(e.into());
         }
     }
@@ -849,9 +847,9 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
 
 #[cfg(feature = "metrics")]
 async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Result<()> {
-    use metrics::QualityTracker;
-    use project_insights::InsightsGenerator;
-    use tree_sitter::TreeSitterManager;
+    use gitai::metrics::QualityTracker;
+    use gitai::project_insights::InsightsGenerator;
+    use gitai::tree_sitter::TreeSitterManager;
 
     match action {
         MetricsAction::Record { tags, force } => {
@@ -875,13 +873,13 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             let mut manager = TreeSitterManager::new().await?;
 
             // 获取当前目录的代码文件并分析
-            let mut summary = tree_sitter::StructuralSummary::default();
+            let mut summary = gitai::tree_sitter::StructuralSummary::default();
             let code_files = find_code_files(".")?;
 
             for file_path in &code_files {
                 if let Ok(content) = std::fs::read_to_string(file_path) {
                     if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
-                        if let Some(lang) = tree_sitter::SupportedLanguage::from_extension(ext) {
+                        if let Some(lang) = gitai::tree_sitter::SupportedLanguage::from_extension(ext) {
                             if let Ok(file_summary) = manager.analyze_structure(&content, lang) {
                                 // 合并结果
                                 summary.functions.extend(file_summary.functions);
@@ -1144,9 +1142,10 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
 }
 
 // 辅助函数：查找代码文件
+#[cfg(feature = "metrics")]
 fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    let supported_extensions = vec!["rs", "java", "py", "js", "ts", "go", "c", "cpp"];
+    let supported_extensions = ["rs", "java", "py", "js", "ts", "go", "c", "cpp"];
 
     for entry in walkdir::WalkDir::new(dir)
         .into_iter()
@@ -1157,7 +1156,7 @@ fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
 
         // 跳过隐藏目录和常见的排除目录
         if path.components().any(|c| {
-            c.as_os_str().to_str().map_or(false, |s| {
+            c.as_os_str().to_str().is_some_and(|s| {
                 s.starts_with('.') || s == "target" || s == "node_modules" || s == "build"
             })
         }) {

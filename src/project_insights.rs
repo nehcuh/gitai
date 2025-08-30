@@ -348,7 +348,7 @@ impl InsightsGenerator {
         for edge in edges {
             graph
                 .entry(edge.from.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(edge.to.clone());
         }
 
@@ -445,15 +445,13 @@ impl InsightsGenerator {
     /// 识别架构层次
     fn identify_architectural_layers(_summary: &StructuralSummary) -> Vec<ArchitecturalLayer> {
         // 基于命名约定识别层次
-        let mut layers = Vec::new();
-
         // 这里是简化的实现，实际可以基于文件路径、包结构等识别
-        layers.push(ArchitecturalLayer {
+        let layers = vec![ArchitecturalLayer {
             name: "Domain".to_string(),
             components: vec![],
             allowed_dependencies: vec!["Infrastructure".to_string()],
             violations: vec![],
-        });
+        }];
 
         layers
     }
@@ -574,7 +572,7 @@ impl InsightsGenerator {
         let public_apis: Vec<PublicApi> = summary
             .functions
             .iter()
-            .filter(|f| f.visibility.as_ref().map_or(false, |v| v == "public"))
+            .filter(|f| f.visibility.as_ref().is_some_and(|v| v == "public"))
             .map(|f| PublicApi {
                 name: f.name.clone(),
                 api_type: ApiType::Function,
@@ -657,15 +655,15 @@ impl ProjectInsights {
         if !self.architecture.pattern_violations.is_empty() {
             context.push_str("### 架构模式违规\n");
             for violation in &self.architecture.pattern_violations {
+                let pattern_type = &violation.pattern_type;
+                let violation_description = &violation.violation_description;
+                let location = &violation.location;
+                let suggestion = &violation.suggestion;
                 context.push_str(&format!(
-                    "- **{}**: {} (位置: {})\n  建议: {}\n",
-                    format!("{:?}", violation.pattern_type),
-                    violation.violation_description,
-                    violation.location,
-                    violation.suggestion
+                    "- **{pattern_type:?}**: {violation_description} (位置: {location})\n  建议: {suggestion}\n",
                 ));
             }
-            context.push_str("\n");
+            context.push('\n');
         }
 
         // 循环依赖
@@ -683,7 +681,7 @@ impl ProjectInsights {
                     circular.severity
                 ));
             }
-            context.push_str("\n");
+            context.push('\n');
         }
 
         // 破坏性变更
@@ -698,7 +696,7 @@ impl ProjectInsights {
                     change.migration_suggestion
                 ));
             }
-            context.push_str("\n");
+            context.push('\n');
         }
 
         // 质量热点
@@ -713,7 +711,7 @@ impl ProjectInsights {
                     hotspot.refactoring_suggestions.join("; ")
                 ));
             }
-            context.push_str("\n");
+            context.push('\n');
         }
 
         // 影响评估

@@ -35,47 +35,34 @@ impl GitAIError {
     pub fn user_message(&self) -> String {
         match self {
             GitAIError::Config(msg) => {
-                format!(
-                    "❌ 配置错误: {}\n💡 提示: 请检查 ~/.config/gitai/config.toml 配置文件",
-                    msg
-                )
+                format!("❌ 配置错误: {msg}\n💡 提示: 请检查 ~/.config/gitai/config.toml 配置文件")
             }
             GitAIError::Git(msg) => {
-                format!(
-                    "❌ Git 操作失败: {}\n💡 提示: 确保您在 Git 仓库中，并且有相应的权限",
-                    msg
-                )
+                format!("❌ Git 操作失败: {msg}\n💡 提示: 确保您在 Git 仓库中，并且有相应的权限")
             }
             GitAIError::FileSystem(msg) => {
-                format!("❌ 文件系统错误: {}\n💡 提示: 检查文件路径和权限设置", msg)
+                format!("❌ 文件系统错误: {msg}\n💡 提示: 检查文件路径和权限设置")
             }
             GitAIError::Network(msg) => {
-                format!("❌ 网络连接错误: {}\n💡 提示: 检查网络连接和代理设置", msg)
+                format!("❌ 网络连接错误: {msg}\n💡 提示: 检查网络连接和代理设置")
             }
             GitAIError::ScanTool(msg) => {
                 format!(
-                    "❌ 扫描工具错误: {}\n💡 提示: 使用 'gitai scan --auto-install' 安装所需工具",
-                    msg
+                    "❌ 扫描工具错误: {msg}\n💡 提示: 使用 'gitai scan --auto-install' 安装所需工具"
                 )
             }
             GitAIError::AiService(msg) => {
-                format!(
-                    "❌ AI 服务错误: {}\n💡 提示: 检查 AI 服务配置和 API 密钥",
-                    msg
-                )
+                format!("❌ AI 服务错误: {msg}\n💡 提示: 检查 AI 服务配置和 API 密钥")
             }
             GitAIError::Parse(msg) => {
-                format!(
-                    "❌ 解析错误: {}\n💡 提示: 数据格式可能不正确，请检查输入",
-                    msg
-                )
+                format!("❌ 解析错误: {msg}\n💡 提示: 数据格式可能不正确，请检查输入")
             }
             GitAIError::MissingDependency(dep) => {
-                format!("❌ 缺少依赖: {}\n💡 提示: 请先安装所需的依赖工具", dep)
+                format!("❌ 缺少依赖: {dep}\n💡 提示: 请先安装所需的依赖工具")
             }
             GitAIError::UserCancelled => "⚠️ 操作已取消".to_string(),
             GitAIError::Unknown(msg) => {
-                format!("❌ 未知错误: {}\n💡 提示: 请查看日志文件获取更多信息", msg)
+                format!("❌ 未知错误: {msg}\n💡 提示: 请查看日志文件获取更多信息")
             }
         }
     }
@@ -84,13 +71,13 @@ impl GitAIError {
     pub fn log(&self) {
         match self {
             GitAIError::Config(_) | GitAIError::MissingDependency(_) => {
-                error!("{:?}", self);
+                error!("{self:?}");
             }
             GitAIError::UserCancelled => {
                 debug!("User cancelled operation");
             }
             _ => {
-                warn!("{:?}", self);
+                warn!("{self:?}");
             }
         }
     }
@@ -113,7 +100,7 @@ impl From<std::io::Error> for GitAIError {
 
 impl From<serde_json::Error> for GitAIError {
     fn from(err: serde_json::Error) -> Self {
-        GitAIError::Parse(format!("JSON 解析失败: {}", err))
+        GitAIError::Parse(format!("JSON 解析失败: {err}"))
     }
 }
 
@@ -131,19 +118,19 @@ impl From<reqwest::Error> for GitAIError {
 
 impl From<toml::de::Error> for GitAIError {
     fn from(err: toml::de::Error) -> Self {
-        GitAIError::Parse(format!("TOML 解析失败: {}", err))
+        GitAIError::Parse(format!("TOML 解析失败: {err}"))
     }
 }
 
 impl From<toml::ser::Error> for GitAIError {
     fn from(err: toml::ser::Error) -> Self {
-        GitAIError::Parse(format!("TOML 序列化失败: {}", err))
+        GitAIError::Parse(format!("TOML 序列化失败: {err}"))
     }
 }
 
 impl From<walkdir::Error> for GitAIError {
     fn from(err: walkdir::Error) -> Self {
-        GitAIError::FileSystem(format!("目录遍历失败: {}", err))
+        GitAIError::FileSystem(format!("目录遍历失败: {err}"))
     }
 }
 
@@ -192,7 +179,7 @@ where
 {
     fn context(self, msg: &str) -> Result<T> {
         self.map_err(|e| {
-            let error = GitAIError::Unknown(format!("{}: {}", msg, e));
+            let error = GitAIError::Unknown(format!("{msg}: {e}"));
             error.log();
             error
         })
@@ -201,7 +188,7 @@ where
     fn with_hint(self, hint: &str) -> Result<T> {
         self.map_err(|e| {
             let mut error_msg = e.to_string();
-            error_msg.push_str(&format!("\n💡 {}", hint));
+            error_msg.push_str(&format!("\n💡 {hint}"));
             GitAIError::Unknown(error_msg)
         })
     }

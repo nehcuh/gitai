@@ -168,6 +168,12 @@ impl Visibility {
     }
 }
 
+impl Default for DependencyGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyGraph {
     /// 创建新的依赖图
     pub fn new() -> Self {
@@ -184,7 +190,7 @@ impl DependencyGraph {
         let mut graph = Self::new();
 
         // 添加文件节点
-        let file_id = format!("file:{}", file_path);
+        let file_id = format!("file:{file_path}");
         graph.add_file_node(&file_id, file_path);
 
         // 添加函数节点
@@ -219,7 +225,7 @@ impl DependencyGraph {
 
         // 处理导入关系（为每个导入创建模块节点）
         for import in &summary.imports {
-            let module_id = format!("module:{}", import);
+            let module_id = format!("module:{import}");
             graph.add_module_node(&module_id, import);
             graph.add_edge(Edge {
                 from: file_id.clone(),
@@ -233,7 +239,7 @@ impl DependencyGraph {
         // 处理导出关系（将文件导出符号与本文件项目相连）
         for export in &summary.exports {
             // 函数优先
-            let func_id = format!("func:{}::{}", file_path, export);
+            let func_id = format!("func:{file_path}::{export}");
             if graph.nodes.contains_key(&func_id) {
                 graph.add_edge(Edge {
                     from: file_id.clone(),
@@ -245,7 +251,7 @@ impl DependencyGraph {
                 continue;
             }
             // 类/结构体
-            let class_id = format!("class:{}::{}", file_path, export);
+            let class_id = format!("class:{file_path}::{export}");
             if graph.nodes.contains_key(&class_id) {
                 graph.add_edge(Edge {
                     from: file_id.clone(),
@@ -448,7 +454,7 @@ impl DependencyGraph {
     /// 添加模块节点（用于 imports 等场景）
     fn add_module_node(&mut self, id: &str, import_path: &str) {
         let name = import_path
-            .rsplit(|c| c == '.' || c == '/' || c == ':')
+            .rsplit(['.', '/', ':'])
             .next()
             .unwrap_or(import_path)
             .to_string();
@@ -486,12 +492,12 @@ impl DependencyGraph {
         for edge in &self.edges {
             self.adjacency_list
                 .entry(edge.from.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(edge.to.clone());
 
             self.reverse_adjacency_list
                 .entry(edge.to.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(edge.from.clone());
         }
     }
@@ -541,6 +547,201 @@ impl DependencyGraph {
         }
 
         visited
+    }
+    
+    /// 计算 PageRank 分数
+    /// 使用经典的 PageRank 算法，考虑节点的入度和出度
+    pub fn calculate_pagerank(
+        &mut self,
+        damping_factor: f32,
+        max_iterations: usize,
+        tolerance: f32,
+    ) -> HashMap<String, f32> {
+        let n = self.nodes.len() as f32;
+        if n == 0.0 {
+            return HashMap::new();
+        }
+        
+        // 初始化 PageRank 分数
+        let mut pagerank: HashMap<String, f32> = HashMap::new();
+        for node_id in self.nodes.keys() {
+            pagerank.insert(node_id.clone(), 1.0 / n);
+        }
+        
+        // 预计算每个节点的出度
+        let mut out_degree: HashMap<String, usize> = HashMap::new();
+        for node_id in self.nodes.keys() {
+            let degree = self.adjacency_list.get(node_id)
+                .map(|neighbors| neighbors.len())
+                .unwrap_or(0);
+            out_degree.insert(node_id.clone(), degree);
+        }
+        
+        // 迭代计算 PageRank
+        for iteration in 0..max_iterations {
+            let mut new_pagerank: HashMap<String, f32> = HashMap::new();
+            let mut total_change = 0.0;
+            
+            for node_id in self.nodes.keys() {
+                let mut rank = (1.0 - damping_factor) / n;
+                
+                // 从所有指向该节点的节点收集 PageRank 贡献
+                if let Some(incoming) = self.reverse_adjacency_list.get(node_id) {
+                    for source in incoming {
+                        if let Some(&source_rank) = pagerank.get(source) {
+                            if let Some(&out_deg) = out_degree.get(source) {
+                                if out_deg > 0 {
+                                    // 考虑边的权重
+                                    let edge_weight = self.get_edge_weight(source, node_id).unwrap_or(1.0);
+                                    rank += damping_factor * source_rank * edge_weight / out_deg as f32;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 处理没有出边的节点（dangling nodes）
+                for (source_id, &source_rank) in &pagerank {
+                    if let Some(&out_deg) = out_degree.get(source_id) {
+                        if out_deg == 0 {
+                            rank += damping_factor * source_rank / n;
+                        }
+                    }
+                }
+                
+                let old_rank = pagerank.get(node_id).copied().unwrap_or(0.0);
+                total_change += (rank - old_rank).abs();
+                new_pagerank.insert(node_id.clone(), rank);
+            }
+            
+            pagerank = new_pagerank;
+            
+            // 检查收敛
+            if iteration > 0 && total_change < tolerance {
+                log::debug!("PageRank 在第 {} 次迭代后收敛", iteration + 1);
+                break;
+            }
+        }
+        
+        // 更新节点的 importance_score
+        for (node_id, &score) in &pagerank {
+            if let Some(node) = self.nodes.get_mut(node_id) {
+                node.importance_score = score;
+            }
+        }
+        
+        pagerank
+    }
+    
+    /// 获取边的权重
+    fn get_edge_weight(&self, from: &str, to: &str) -> Option<f32> {
+        self.edges.iter()
+            .find(|e| e.from == from && e.to == to)
+            .map(|e| e.weight)
+    }
+    
+    /// 计算加权影响传播
+    /// 使用 PageRank 分数和边权重来计算影响传播
+    pub fn calculate_weighted_impact(
+        &self,
+        start_node: &str,
+        impact_strength: f32,
+        decay_factor: f32,
+        min_impact: f32,
+    ) -> HashMap<String, f32> {
+        let mut impact_scores: HashMap<String, f32> = HashMap::new();
+        let mut queue = VecDeque::new();
+        
+        // 初始节点的影响力
+        queue.push_back((start_node.to_string(), impact_strength));
+        impact_scores.insert(start_node.to_string(), impact_strength);
+        
+        while let Some((node_id, current_impact)) = queue.pop_front() {
+            // 传播影响到依赖节点
+            if let Some(neighbors) = self.reverse_adjacency_list.get(&node_id) {
+                for neighbor in neighbors {
+                    // 计算传播的影响力
+                    let edge_weight = self.get_edge_weight(&node_id, neighbor).unwrap_or(1.0);
+                    let neighbor_importance = self.nodes.get(neighbor)
+                        .map(|n| n.importance_score)
+                        .unwrap_or(0.5);
+                    
+                    // 影响力 = 当前影响 * 边权重 * 节点重要性 * 衰减因子
+                    let propagated_impact = current_impact * edge_weight * neighbor_importance * decay_factor;
+                    
+                    if propagated_impact >= min_impact {
+                        let existing_impact = impact_scores.get(neighbor).copied().unwrap_or(0.0);
+                        if propagated_impact > existing_impact {
+                            impact_scores.insert(neighbor.clone(), propagated_impact);
+                            queue.push_back((neighbor.clone(), propagated_impact));
+                        }
+                    }
+                }
+            }
+        }
+        
+        impact_scores
+    }
+    
+    /// 识别关键路径（基于 PageRank 分数）
+    pub fn find_critical_paths(&self, top_n: usize) -> Vec<Vec<String>> {
+        let mut critical_paths = Vec::new();
+        
+        // 获取 PageRank 分数最高的节点
+        let mut nodes_by_importance: Vec<_> = self.nodes.iter()
+            .map(|(id, node)| (id.clone(), node.importance_score))
+            .collect();
+        nodes_by_importance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        
+        // 对每个重要节点，找到其关键依赖路径
+        for (node_id, _) in nodes_by_importance.iter().take(top_n) {
+            let paths = self.find_dependency_paths(node_id, 3);
+            for path in paths {
+                if path.len() > 1 {
+                    critical_paths.push(path);
+                }
+            }
+        }
+        
+        critical_paths
+    }
+    
+    /// 查找从指定节点开始的依赖路径
+    fn find_dependency_paths(&self, start: &str, max_depth: usize) -> Vec<Vec<String>> {
+        let mut paths = Vec::new();
+        let mut current_path = vec![start.to_string()];
+        self.dfs_paths(start, &mut current_path, &mut paths, max_depth);
+        paths
+    }
+    
+    /// 深度优先搜索依赖路径
+    fn dfs_paths(
+        &self,
+        node: &str,
+        current_path: &mut Vec<String>,
+        all_paths: &mut Vec<Vec<String>>,
+        max_depth: usize,
+    ) {
+        if current_path.len() >= max_depth {
+            all_paths.push(current_path.clone());
+            return;
+        }
+        
+        if let Some(neighbors) = self.adjacency_list.get(node) {
+            if neighbors.is_empty() {
+                all_paths.push(current_path.clone());
+            } else {
+                for neighbor in neighbors {
+                    if !current_path.contains(neighbor) {
+                        current_path.push(neighbor.clone());
+                        self.dfs_paths(neighbor, current_path, all_paths, max_depth);
+                        current_path.pop();
+                    }
+                }
+            }
+        } else {
+            all_paths.push(current_path.clone());
+        }
     }
 
     /// 检测环路
@@ -707,7 +908,7 @@ impl DependencyGraph {
     pub fn to_dot(&self, options: Option<&DotOptions>) -> String {
         let include_weights = options.map(|o| o.include_weights).unwrap_or(false);
         let highlight_nodes: std::collections::HashSet<String> = options
-            .and_then(|o| Some(o.highlight_nodes.iter().cloned().collect()))
+            .map(|o| o.highlight_nodes.iter().cloned().collect())
             .unwrap_or_default();
 
         let mut node_ids: Vec<String> = self.nodes.keys().cloned().collect();
@@ -743,15 +944,14 @@ impl DependencyGraph {
                     NodeType::Module(m) => m.name.clone(),
                     NodeType::File(f) => f.path.clone(),
                 };
-                let safe_label = label.replace('"', "\"");
+                let safe_label = label.replace("\\", "\\\\").replace("\"", "\\\"");
                 let mut attrs = format!(
-                    "shape=\"{}\", style=\"filled\", fillcolor=\"{}\", label=\"{}\"",
-                    shape, fillcolor, safe_label
+                    "shape=\"{shape}\", style=\"filled\", fillcolor=\"{fillcolor}\", label=\"{safe_label}\"",
                 );
                 if highlight_nodes.contains(&id) {
                     attrs.push_str(", color=\"red\", penwidth=2");
                 }
-                s.push_str(&format!("  \"{}\" [{}];\n", id, attrs));
+                s.push_str(&format!("  \"{id}\" [{attrs}];\n"));
             }
         }
 
@@ -783,7 +983,7 @@ impl DependencyGraph {
             if include_weights {
                 label.push_str(&format!(" (w={:.2})", e.weight));
             }
-            let safe_label = label.replace('"', "\"");
+            let safe_label = label.replace("\\", "\\\\").replace("\"", "\\\"");
             s.push_str(&format!(
                 "  \"{}\" -> \"{}\" [color=\"{}\", label=\"{}\"];\n",
                 e.from, e.to, color, safe_label
@@ -1039,9 +1239,11 @@ mod tests {
 
     #[test]
     fn test_import_nodes_from_summary() {
-        let mut summary = crate::tree_sitter::StructuralSummary::default();
-        summary.language = "rust".to_string();
-        summary.imports = vec!["std::fmt".to_string(), "serde::Serialize".to_string()];
+        let summary = crate::tree_sitter::StructuralSummary {
+            language: "rust".to_string(),
+            imports: vec!["std::fmt".to_string(), "serde::Serialize".to_string()],
+            ..Default::default()
+        };
 
         let graph = DependencyGraph::from_structural_summary(&summary, "src/lib.rs");
 
@@ -1078,13 +1280,16 @@ mod tests {
             is_async: false,
             visibility: None,
         };
-        let mut summary = StructuralSummary::default();
-        summary.functions = vec![func];
-        summary.exports = vec!["foo".to_string()];
+        let summary = StructuralSummary {
+            functions: vec![func],
+            exports: vec!["foo".to_string()],
+            ..Default::default()
+        };
 
         let graph = DependencyGraph::from_structural_summary(&summary, file_path);
-        let file_id = format!("file:{}", file_path);
-        let func_id = format!("func:{}::{}", file_path, "foo");
+        let file_id = format!("file:{file_path}");
+        let func_name = "foo";
+        let func_id = format!("func:{file_path}::{func_name}");
 
         // 存在 Exports 边
         assert!(graph

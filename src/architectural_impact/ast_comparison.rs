@@ -70,10 +70,10 @@ fn compare_functions(
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::FunctionRemoved,
                 component: name.clone(),
-                description: format!("函数 '{}' 被删除", name),
+                description: format!("函数 '{name}' 被删除"),
                 impact_level: ImpactLevel::Project,
                 suggestions: vec![
-                    format!("考虑标记 '{}' 为 deprecated 而不是直接删除", name),
+                    format!("考虑标记 '{name}' 为 deprecated 而不是直接删除"),
                     "提供迁移指南和替代方案".to_string(),
                 ],
                 before: Some(format_function_signature(before_func)),
@@ -94,7 +94,7 @@ fn compare_functions(
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::FunctionAdded,
                 component: name.clone(),
-                description: format!("新增函数 '{}'", name),
+                description: format!("新增函数 '{name}'"),
                 impact_level: ImpactLevel::Minimal,
                 suggestions: vec![
                     "确保新函数的API设计合理".to_string(),
@@ -220,18 +220,18 @@ fn compare_classes(
         after_classes.iter().map(|c| (c.name.clone(), c)).collect();
 
     // 检测类删除
-    for (name, _before_class) in &before_map {
+    for name in before_map.keys() {
         if !after_map.contains_key(name) {
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::StructureChanged,
                 component: name.clone(),
-                description: format!("类/结构体 '{}' 被删除", name),
+                description: format!("类/结构体 '{name}' 被删除"),
                 impact_level: ImpactLevel::Project,
                 suggestions: vec![
-                    format!("考虑标记 '{}' 为 deprecated", name),
+                    format!("考虑标记 '{name}' 为 deprecated"),
                     "提供迁移指南".to_string(),
                 ],
-                before: Some(format!("类/结构体 {}", name)),
+                before: Some(format!("类/结构体 {name}")),
                 after: None,
                 file_path: "unknown".to_string(),
             });
@@ -239,19 +239,19 @@ fn compare_classes(
     }
 
     // 检测类新增
-    for (name, _after_class) in &after_map {
+    for name in after_map.keys() {
         if !before_map.contains_key(name) {
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::StructureChanged,
                 component: name.clone(),
-                description: format!("新增类/结构体 '{}'", name),
+                description: format!("新增类/结构体 '{name}'"),
                 impact_level: ImpactLevel::Minimal,
                 suggestions: vec![
                     "确保新类的设计合理".to_string(),
                     "添加相应的文档".to_string(),
                 ],
                 before: None,
-                after: Some(format!("类/结构体 {}", name)),
+                after: Some(format!("类/结构体 {name}")),
                 file_path: "unknown".to_string(),
             });
         }
@@ -274,8 +274,8 @@ fn compare_imports(before_imports: &[String], after_imports: &[String]) -> Vec<B
         if !after_set.contains(import) {
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::ModuleStructureChanged,
-                component: format!("导入: {}", import),
-                description: format!("删除了导入 '{}'", import),
+                component: format!("导入: {import}"),
+                description: format!("删除了导入 '{import}'"),
                 impact_level: ImpactLevel::Local,
                 suggestions: vec!["检查是否仍需要该依赖".to_string()],
                 before: Some((*import).clone()),
@@ -290,8 +290,8 @@ fn compare_imports(before_imports: &[String], after_imports: &[String]) -> Vec<B
         if !before_set.contains(import) {
             changes.push(BreakingChange {
                 change_type: BreakingChangeType::ModuleStructureChanged,
-                component: format!("导入: {}", import),
-                description: format!("新增了导入 '{}'", import),
+                component: format!("导入: {import}"),
+                description: format!("新增了导入 '{import}'"),
                 impact_level: ImpactLevel::Minimal,
                 suggestions: vec!["确保新依赖是必要的".to_string()],
                 before: None,
@@ -326,7 +326,6 @@ fn format_function_signature(func: &crate::tree_sitter::FunctionInfo) -> String 
 mod tests {
     use super::*;
     use crate::tree_sitter::{FunctionInfo, StructuralSummary};
-    use std::collections::HashMap;
 
     fn create_test_summary_with_function(
         name: &str,
@@ -426,11 +425,15 @@ mod tests {
 
     #[test]
     fn test_import_changes_detection() {
-        let mut before = StructuralSummary::default();
-        before.imports = vec!["std::collections::HashMap".to_string()];
+        let before = StructuralSummary {
+            imports: vec!["std::collections::HashMap".to_string()],
+            ..Default::default()
+        };
 
-        let mut after = StructuralSummary::default();
-        after.imports = vec!["std::collections::HashSet".to_string()];
+        let after = StructuralSummary {
+            imports: vec!["std::collections::HashSet".to_string()],
+            ..Default::default()
+        };
 
         let analysis = compare_structural_summaries(&before, &after);
         assert_eq!(analysis.breaking_changes.len(), 2); // 一个删除，一个新增

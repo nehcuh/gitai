@@ -78,8 +78,7 @@ pub fn generate_risk_summary(analysis: &ArchitecturalImpactAnalysis) -> String {
     let risk_desc = analysis.risk_level.description();
 
     format!(
-        "{} 风险评分：{}/100\n📊 变更数量：{} 个\n📈 风险级别：{}",
-        risk_emoji, risk_score, change_count, risk_desc
+        "{risk_emoji} 风险评分：{risk_score}/100\n📊 变更数量：{change_count} 个\n📈 风险级别：{risk_desc}"
     )
 }
 

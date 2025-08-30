@@ -205,6 +205,6 @@ full = ["ai", "security", "mcp", "metrics", "devops", "tree-sitter-all"]
 
 ## 相关文档
 
-- [架构重构文档](./ARCHITECTURE_REFACTOR.md)
+- [架构重构文档](./archive/ARCHITECTURE_REFACTOR.md)
 - [README](../README.md)
-- [构建脚本](../scripts/build-variants.sh)
+- [构建脚本](../tools/build-variants.sh)

@@ -64,6 +64,12 @@ pub struct GitStateAnalyzer {
     tree_sitter_manager: Option<TreeSitterManager>,
 }
 
+impl Default for GitStateAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GitStateAnalyzer {
     /// 创建新的 Git 状态分析器（同步版本）
     pub fn new() -> Self {
@@ -86,7 +92,10 @@ impl GitStateAnalyzer {
         if self.tree_sitter_manager.is_none() {
             self.tree_sitter_manager = Some(TreeSitterManager::new().await?);
         }
-        Ok(self.tree_sitter_manager.as_mut().unwrap())
+        Ok(self
+            .tree_sitter_manager
+            .as_mut()
+            .expect("TreeSitterManager should be initialized"))
     }
 
     /// 获取指定文件在指定提交中的内容
@@ -96,34 +105,32 @@ impl GitStateAnalyzer {
         commit_ref: &str,
     ) -> Result<String, GitAIError> {
         let output = Command::new("git")
-            .args(&["show", &format!("{}:{}", commit_ref, file_path)])
+            .args(["show", &format!("{commit_ref}:{file_path}")])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git show 命令: {}", e)))?;
+            .map_err(|e| GitAIError::Git(format!("无法执行 git show 命令: {e}")))?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             return Err(GitAIError::Git(format!(
-                "git show 命令执行失败: {}",
-                error_msg
+                "git show 命令执行失败: {error_msg}"
             )));
         }
 
         String::from_utf8(output.stdout)
-            .map_err(|e| GitAIError::Git(format!("无法解析文件内容为UTF-8: {}", e)))
+            .map_err(|e| GitAIError::Git(format!("无法解析文件内容为UTF-8: {e}")))
     }
 
     /// 获取当前工作目录相对于 git 根目录的文件列表
     pub fn get_changed_files(&self) -> Result<Vec<String>, GitAIError> {
         let output = Command::new("git")
-            .args(&["diff", "--name-only", "HEAD~1..HEAD"])
+            .args(["diff", "--name-only", "HEAD~1..HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git diff 命令: {}", e)))?;
+            .map_err(|e| GitAIError::Git(format!("无法执行 git diff 命令: {e}")))?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             return Err(GitAIError::Git(format!(
-                "git diff 命令执行失败: {}",
-                error_msg
+                "git diff 命令执行失败: {error_msg}"
             )));
         }
 
@@ -165,7 +172,7 @@ impl GitStateAnalyzer {
     ) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>> {
         // 读取当前文件内容
         let current_content = std::fs::read_to_string(file_path)
-            .map_err(|e| format!("无法读取文件 {}: {}", file_path, e))?;
+            .map_err(|e| format!("无法读取文件 {file_path}: {e}"))?;
 
         // 推断语言类型
         let language = infer_language_from_path(file_path)?;
@@ -194,7 +201,7 @@ impl GitStateAnalyzer {
                 continue;
             }
 
-            log::debug!("分析文件变更: {}", file_path);
+            log::debug!("分析文件变更: {file_path}");
 
             // 尝试分析变更前后的状态
             match (
@@ -203,21 +210,18 @@ impl GitStateAnalyzer {
             ) {
                 (Ok(before), Ok(after)) => {
                     results.insert(file_path.clone(), (before, after));
-                    log::info!("成功分析文件变更: {}", file_path);
+                    log::info!("成功分析文件变更: {file_path}");
                 }
                 (Err(before_err), Ok(_)) => {
-                    log::warn!("无法获取文件 {} 的变更前状态: {}", file_path, before_err);
+                    log::warn!("无法获取文件 {file_path} 的变更前状态: {before_err}");
                     // 可能是新文件，继续处理
                 }
                 (Ok(_), Err(after_err)) => {
-                    log::warn!("无法获取文件 {} 的变更后状态: {}", file_path, after_err);
+                    log::warn!("无法获取文件 {file_path} 的变更后状态: {after_err}");
                 }
                 (Err(before_err), Err(after_err)) => {
                     log::error!(
-                        "无法分析文件 {} 的变更: before={}, after={}",
-                        file_path,
-                        before_err,
-                        after_err
+                        "无法分析文件 {file_path} 的变更: before={before_err}, after={after_err}",
                     );
                 }
             }
@@ -242,9 +246,9 @@ impl GitStateAnalyzer {
     /// 获取当前提交 hash
     fn get_current_commit(&self) -> Result<String, GitAIError> {
         let output = Command::new("git")
-            .args(&["rev-parse", "HEAD"])
+            .args(["rev-parse", "HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {}", e)))?;
+            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
 
         if !output.status.success() {
             return Err(GitAIError::Git("无法获取当前提交hash".to_string()));
@@ -256,12 +260,12 @@ impl GitStateAnalyzer {
     /// 获取基准提交 hash
     fn get_base_commit(&self, commit_ref: &str) -> Result<String, GitAIError> {
         let output = Command::new("git")
-            .args(&["rev-parse", commit_ref])
+            .args(["rev-parse", commit_ref])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {}", e)))?;
+            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
 
         if !output.status.success() {
-            return Err(GitAIError::Git(format!("无法获取提交hash: {}", commit_ref)));
+            return Err(GitAIError::Git(format!("无法获取提交hash: {commit_ref}")));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -270,9 +274,9 @@ impl GitStateAnalyzer {
     /// 获取当前分支名
     fn get_current_branch(&self) -> Result<String, GitAIError> {
         let output = Command::new("git")
-            .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {}", e)))?;
+            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
 
         if !output.status.success() {
             return Err(GitAIError::Git("无法获取当前分支名".to_string()));
@@ -319,7 +323,7 @@ impl GitStateAnalyzer {
                             name: func_name.clone(),
                             change_type: ChangeType::Added,
                             file_path: current_file.clone(),
-                            description: format!("新增函数: {}", func_name),
+                            description: format!("新增函数: {func_name}"),
                         });
                     }
                 }
@@ -331,7 +335,7 @@ impl GitStateAnalyzer {
                             name: struct_name.clone(),
                             change_type: ChangeType::Added,
                             file_path: current_file.clone(),
-                            description: format!("新增结构体: {}", struct_name),
+                            description: format!("新增结构体: {struct_name}"),
                         });
                     }
                 }
@@ -343,11 +347,11 @@ impl GitStateAnalyzer {
                             name: interface_name.clone(),
                             change_type: ChangeType::Added,
                             file_path: current_file.clone(),
-                            description: format!("新增接口: {}", interface_name),
+                            description: format!("新增接口: {interface_name}"),
                         });
                         // 接口变更通常是破坏性的
                         breaking_changes
-                            .push(format!("接口变更: {} in {}", interface_name, current_file));
+                            .push(format!("接口变更: {interface_name} in {current_file}"));
                     }
                 }
             } else if line.starts_with("-") && !line.starts_with("---") {
@@ -364,11 +368,10 @@ impl GitStateAnalyzer {
                             name: func_name.clone(),
                             change_type: ChangeType::Removed,
                             file_path: current_file.clone(),
-                            description: format!("删除函数: {}", func_name),
+                            description: format!("删除函数: {func_name}"),
                         });
                         // 函数删除是破坏性变更
-                        breaking_changes
-                            .push(format!("函数删除: {} in {}", func_name, current_file));
+                        breaking_changes.push(format!("函数删除: {func_name} in {current_file}"));
                     }
                 }
             }
@@ -406,7 +409,7 @@ pub fn infer_language_from_path(
         .ok_or_else(|| "无法确定文件类型".to_string())?;
 
     SupportedLanguage::from_extension(extension)
-        .ok_or_else(|| format!("不支持的文件扩展名: {}", extension).into())
+        .ok_or_else(|| format!("不支持的文件扩展名: {extension}").into())
 }
 
 /// 检查是否为代码文件

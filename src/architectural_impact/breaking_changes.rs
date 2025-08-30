@@ -6,12 +6,10 @@ use crate::tree_sitter::{ClassInfo, FunctionInfo};
 
 /// 检测函数相关的破坏性变更
 pub fn detect_function_breaking_changes(
-    before_functions: &[FunctionInfo],
-    after_functions: &[FunctionInfo],
-    file_path: &str,
+    _before_functions: &[FunctionInfo],
+    _after_functions: &[FunctionInfo],
+    _file_path: &str,
 ) -> Vec<BreakingChange> {
-    let changes = Vec::new();
-
     // TODO: 实现函数破坏性变更检测逻辑
     // 1. 检测函数删除
     // 2. 检测函数签名变更
@@ -19,27 +17,25 @@ pub fn detect_function_breaking_changes(
     // 4. 检测返回类型变更
     // 5. 检测可见性变更
 
-    changes
+    Vec::new()
 }
 
 /// 检测类/结构体相关的破坏性变更
 pub fn detect_class_breaking_changes(
-    before_classes: &[ClassInfo],
-    after_classes: &[ClassInfo],
-    file_path: &str,
+    _before_classes: &[ClassInfo],
+    _after_classes: &[ClassInfo],
+    _file_path: &str,
 ) -> Vec<BreakingChange> {
-    let changes = Vec::new();
-
     // TODO: 实现类/结构体破坏性变更检测逻辑
     // 1. 检测类/结构体删除
     // 2. 检测字段变更
     // 3. 检测可见性变更
 
-    changes
+    Vec::new()
 }
 
 /// 评估破坏性变更的影响级别
-pub fn assess_change_impact(change_type: &BreakingChangeType, component: &str) -> ImpactLevel {
+pub fn assess_change_impact(change_type: &BreakingChangeType, _component: &str) -> ImpactLevel {
     match change_type {
         BreakingChangeType::FunctionRemoved | BreakingChangeType::InterfaceChanged => {
             ImpactLevel::Project

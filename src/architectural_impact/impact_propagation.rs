@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// 影响传播分析器
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ImpactPropagation {
     /// 依赖图
     graph: DependencyGraph,
@@ -105,6 +106,7 @@ pub enum PropagationType {
 
 /// 传播规则引擎
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PropagationRules {
     /// 规则列表
     rules: Vec<Rule>,
@@ -112,6 +114,7 @@ pub struct PropagationRules {
 
 /// 单条传播规则
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Rule {
     /// 规则条件
     condition: RuleCondition,
@@ -328,7 +331,7 @@ impl ImpactPropagation {
                 component_id: node_id.clone(),
                 component_type: self.get_component_type(node_id),
                 impact_score: *score,
-                impact_reason: self.generate_impact_reason(node_id, &prop_type),
+                impact_reason: self.generate_impact_reason(node_id, prop_type),
                 distance_from_change: *distance,
                 propagation_type: prop_type.clone(),
             };
@@ -434,7 +437,7 @@ impl ImpactPropagation {
             for target in &targets {
                 if let Some(path) = self.find_shortest_path(source, target, max_depth) {
                     let weight = self.calculate_path_weight(&path);
-                    let description = format!("从 {} 到 {} 的关键影响路径", source, target);
+                    let description = format!("从 {source} 到 {target} 的关键影响路径");
 
                     paths.push(ImpactPath {
                         nodes: path,
@@ -536,9 +539,8 @@ impl ImpactPropagation {
     }
 }
 
-impl PropagationRules {
-    /// 创建默认的传播规则
-    pub fn default() -> Self {
+impl Default for PropagationRules {
+    fn default() -> Self {
         let rules = vec![
             // 函数调用规则
             Rule {
@@ -565,7 +567,9 @@ impl PropagationRules {
 
         Self { rules }
     }
+}
 
+impl PropagationRules {
     /// 根据条件评估影响因子
     pub fn evaluate_impact_factor(
         &self,
@@ -592,11 +596,11 @@ mod tests {
 
         // 创建测试节点
         for i in 1..=5 {
-            let id = format!("func{}", i);
+            let id = format!("func{i}");
             let node = Node {
                 id: id.clone(),
                 node_type: NodeType::Function(FunctionNode {
-                    name: format!("function{}", i),
+                    name: format!("function{i}"),
                     visibility: Some(Visibility::Public),
                     parameters: vec![],
                     return_type: None,

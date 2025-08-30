@@ -13,6 +13,12 @@ pub struct ConfigInitializer {
     offline_mode: bool,
 }
 
+impl Default for ConfigInitializer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigInitializer {
     /// Create a new ConfigInitializer
     pub fn new() -> Self {
@@ -105,7 +111,7 @@ impl ConfigInitializer {
         let enhanced_config = include_str!("../assets/config.enhanced.toml");
 
         fs::write(target, enhanced_config)
-            .with_context(|| format!("Failed to write config to {:?}", target))?;
+            .with_context(|| format!("Failed to write config to {target:?}"))?;
 
         info!("Created default configuration at {:?}", target);
         Ok(())
@@ -123,7 +129,7 @@ impl ConfigInitializer {
             .get(url)
             .send()
             .await
-            .with_context(|| format!("Failed to download config from {}", url))?;
+            .with_context(|| format!("Failed to download config from {url}"))?;
 
         if !response.status().is_success() {
             anyhow::bail!("Failed to download config: HTTP {}", response.status());
@@ -155,7 +161,7 @@ impl ConfigInitializer {
         // Try to parse as TOML to check version
         if let Ok(mut config) = toml::from_str::<toml::Value>(&content) {
             // Check if version field exists
-            if !config.get("version").is_some() {
+            if config.get("version").is_none() {
                 info!("Migrating configuration to new format...");
 
                 // Add version field
@@ -238,11 +244,13 @@ impl ConfigInitializer {
             fs::create_dir_all(&prompts_dir)?;
 
             // Copy default prompts from assets
-            let commit_prompt = include_str!("../assets/prompts/commit-generator.md");
+            let commit_prompt = include_str!("../assets/prompts/commit.md");
             let review_prompt = include_str!("../assets/prompts/review.md");
+            let deviation_prompt = include_str!("../assets/prompts/deviation.md");
 
-            fs::write(prompts_dir.join("commit-generator.md"), commit_prompt)?;
+            fs::write(prompts_dir.join("commit.md"), commit_prompt)?;
             fs::write(prompts_dir.join("review.md"), review_prompt)?;
+            fs::write(prompts_dir.join("deviation.md"), deviation_prompt)?;
 
             info!("Initialized default prompt templates");
         }
@@ -341,9 +349,9 @@ mod tests {
 
         // Check that prompts were initialized
         assert!(initializer.config_dir.join("prompts").exists());
-        assert!(initializer
+            assert!(initializer
             .config_dir
-            .join("prompts/commit-generator.md")
+            .join("prompts/commit.md")
             .exists());
     }
 }

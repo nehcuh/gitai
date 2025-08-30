@@ -148,10 +148,8 @@ impl ResourceManager {
         let lang_dir = grammars_dir.join(language);
 
         // Check if we need to update
-        if self.should_update(&grammars_dir).await? {
-            if !self.offline_mode {
-                self.download_grammars(language).await?;
-            }
+        if self.should_update(&grammars_dir).await? && !self.offline_mode {
+            self.download_grammars(language).await?;
         }
 
         // Check if grammar exists

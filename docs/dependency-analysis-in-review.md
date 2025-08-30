@@ -1,143 +1,118 @@
-# GitAI Review Command - Dependency Analysis Feature
+# GitAI 评审命令中的依赖图与 PageRank 分析
 
-## Overview
-The `gitai review` command includes sophisticated dependency analysis and architectural impact analysis features that are automatically activated when using the `--tree-sitter` flag.
+## 概述
+`gitai review` 支持在评审中引入依赖图分析、PageRank 中心性与架构影响洞察。该能力主要通过 `--full` 开启；为兼容历史，`--deviation-analysis` 也可能触发图分析用于内部评分与发现，但只有在 `--full` 模式下才会将“依赖洞察”注入到 AI 提示词。
 
-## Current Status: Feature is Working
+- `--full`：构建全局依赖图，计算 PageRank，识别关键节点，评估影响范围，并将“依赖洞察”注入到 `review` 模板；若提供 `--issue-id`，也会拉取 DevOps Issue 上下文。
+- `--deviation-analysis`：聚焦 DevOps 需求偏离度分析，使用 `deviation` 模板；图分析仅用于内部发现/分数调整，不注入提示词文本。
 
-The dependency analysis graph functionality **is already implemented and working** in the review command. The analysis happens automatically when you use the `--tree-sitter` flag.
+## 当前状态
+- 依赖图、PageRank 与影响分析已集成到评审流程。
+- 命中“关键节点”的变更会新增高严重级别的发现项（Finding）。
+- 若存在关键节点命中，会对总体评分进行扣分调整。
 
-## How It Works
+## 工作机制
 
-### 1. **Dependency Graph Construction**
-When `--tree-sitter` is enabled, the review command:
-- Performs structural analysis using Tree-sitter
-- Builds a dependency graph from the structural summary
-- Analyzes architectural impact
+### 1) 全局依赖图构建
+当启用 `--full`（或兼容地启用 `--deviation-analysis`）时：
+- 以当前工作目录为范围构建依赖图
+- 计算 PageRank 分数
+- 收集统计（节点数、边数、平均度）
+- 基于中心性阈值识别关键节点
 
-```rust
-// From build_analysis_context in review.rs
-if let Some(summary) = structural_summary {
-    // Build dependency graph from structural summary
-    let graph = DependencyGraph::from_structural_summary(&summary, "DIFF_BUFFER");
-    context = context.with_dependency_graph(graph);
-}
+将架构影响（ArchitecturalImpact）中识别的“变更函数/类”映射到图中，用于：
+- 评估节点重要性/中心性
+- 通过 BFS 与加权传播估算影响范围
+
+### 2) 融合架构影响
+架构影响分析会提取“函数/类/接口”的变更点，并汇总受影响的模块与潜在破坏性变更，这些结果用于决定在依赖图中需要重点评估的节点。
+
+### 3) 提示词注入规则
+- `--full`：在 `review` 模板中注入精炼的“依赖洞察”片段（图规模、PageRank Top、影响度 Top 等）。
+- `--deviation-analysis`：使用 `deviation` 模板，强调需求符合/偏离；图分析仅用于内部评分与发现，不注入文本。
+
+### 4) DevOps Issue 上下文（可选）
+在 `--full` 且传入 `--issue-id` 时，会获取 DevOps Issue 详情并附加到提示词。可一次性传入多个 ID（如 `--issue-id "#123,#456"`）。
+
+## 评审流程图
+
+```mermaid
+flowchart TD
+  A[开始: gitai review] --> B{模式}
+  B -->|基础| C[收集 diff]
+  C --> D[可选：Tree-sitter]
+  D --> E[可选：安全扫描]
+  E --> F[review 模板]
+  F --> G[AI 或回退]
+  G --> H[控制台输出]
+
+  B -->|--full| I[构建全局依赖图]
+  I --> J[计算 PageRank/统计]
+  J --> K[映射架构影响变更节点]
+  K --> L[影响范围/BFS + 加权影响]
+  L --> M[新增发现/评分扣分]
+  M --> N[注入 Dependency Insights]
+  N --> G
+
+  B -->|--deviation-analysis| O[使用 deviation 模板]
+  O --> P[可选：图用于评分/惩罚]
+  P --> G
 ```
 
-### 2. **Impact Propagation Analysis**
-The system calculates:
-- Changed node IDs from the architectural impact
-- Impact propagation through dependencies (up to 4 levels deep)
-- Cascade effects from breaking changes
+## 用法
 
-```rust
-if let (Some(ref graph), Some(ref impact)) = (&context.dependency_graph, &context.architectural_impact) {
-    let changed_ids = derive_changed_node_ids(graph, impact);
-    if !changed_ids.is_empty() {
-        let mut prop = ImpactPropagation::new(graph.clone());
-        let scope = prop.calculate_impact(changed_ids, 4);
-        let detector = CascadeDetector::new(graph.clone());
-        let cascades = detector.detect_cascades(&breaking_changes);
-        context = context.with_impact_scope(scope).with_cascade_effects(cascades);
-    }
-}
-```
-
-### 3. **Console Output Enhancement**
-The enhanced console output now displays:
-- 🌐 **Dependency Analysis**: Shows cascade effects and affected modules
-- 🏗️ **Architecture Impact**: Shows breaking changes count
-- 📦 **Affected Modules**: Lists modules impacted by changes
-- 🎯 **Impact Level**: Shows maximum dependency distance (direct, 1st level, 2nd level, etc.)
-
-## Usage
-
-Run the review command with Tree-sitter enabled:
-
+- 全量架构评审（含依赖洞察与安全扫描）：
 ```bash
-./target/release/gitai review --tree-sitter --scan-tool opengrep
+./target/release/gitai review --full --tree-sitter --security-scan --scan-tool=opengrep
 ```
 
-## Output Example
-
-```
-🤖 AI 代码评审结果:
-================================================================================
-[AI review content here]
-
-🌐 依赖分析:
-----------------------------------------
-  🔗 检测到 5 条潜在级联效应
-  📦 受影响模块: module1, module2, module3
-  🎯 最大影响级别: 二级依赖
-
-🏗️ 架构影响:
-----------------------------------------
-  ⚠️  破坏性变更: 3 处
-
-🔒 安全问题:
-----------------------------------------
-  ⚠️  Security Issue (file.rs:42)
-     Code snippet here
-
-💡 改进建议:
-----------------------------------------
-  • 检测到 5 条潜在级联效应，请重点验证关键路径
-  • 代码质量有待提升，建议优化关键部分
-
-📊 综合评分: 7.5/10
-================================================================================
+- 带 DevOps 上下文的全量评审：
+```bash
+./target/release/gitai review --full --issue-id="#123,#456"
 ```
 
-## Data Flow
+- 仅偏离度分析（使用 `deviation` 模板）：
+```bash
+./target/release/gitai review --deviation-analysis --issue-id="#123"
+```
 
-1. **Structural Analysis** → Generates `StructuralSummary`
-2. **Dependency Graph Construction** → Creates `DependencyGraph` from summary
-3. **Architectural Impact Analysis** → Identifies function/struct/interface changes
-4. **Impact Propagation** → Calculates affected components and cascade effects
-5. **Result Aggregation** → Combines all analysis into `AnalysisResult`
-6. **Console Display** → Shows formatted output with dependency information
+## 全量模式下的输出要点
+- 图规模：节点/边与平均度
+- 关键节点数量；命中关键节点的变更作为高严重发现项
+- PageRank Top 与 影响度 Top（启发式排序）
+- 按关键节点命中次数对评分进行调整
 
-## Key Components
+## 数据流（全量模式）
+1. 结构分析 → 可选的 `StructuralSummary`（建议配合 `--tree-sitter`）
+2. 架构影响 → 变更的函数/类/接口
+3. 全局依赖图 → PageRank、中心性与统计
+4. 影响范围 → 从变更节点出发的 BFS 与加权传播
+5. 发现 + 评分调整 → 命中关键节点追加高严重发现项
+6. 提示词（review）→ 注入依赖洞察与可选 DevOps 上下文
 
-### ImpactScope Structure
-- `direct_impacts`: Components directly affected by changes
-- `indirect_impacts`: Components affected through dependencies
-- `statistics`: Overall impact statistics (total nodes, high impact count, etc.)
+## 提示词模板
+- `assets/prompts/review.md` – 标准/全量评审；依赖洞察仅在全量模式注入
+- `assets/prompts/commit.md` – `gitai commit` 使用
+- `assets/prompts/deviation.md` – `--deviation-analysis` 时使用
 
-### ArchitecturalImpact Structure
-- `function_changes`: Modified/added/removed functions
-- `struct_changes`: Modified structures
-- `interface_changes`: Interface modifications
-- `impact_summary`: Summary with affected modules and breaking changes
+模板初始化/更新：
+```bash
+gitai prompts init
+gitai prompts update
+```
 
-## Benefits
+## 限制
+- 全局依赖图会扫描当前目录；大型仓库耗时更久
+- 中心性/阈值为启发式，可在代码中调整
+- 动态/运行时依赖难以完全捕获
 
-1. **Comprehensive Analysis**: Goes beyond simple code review to analyze architectural impact
-2. **Cascade Detection**: Identifies potential ripple effects through the codebase
-3. **Risk Assessment**: Helps developers understand the scope of their changes
-4. **Visual Feedback**: Clear console output with emojis and structured sections
-5. **Cached Results**: Impact analysis results are cached for performance
+## 使用建议
+- 大型仓库可先导出 DOT 进行离线查看：
+```bash
+gitai graph --path=. --output=deps.dot --threshold=0.15
+```
 
-## Technical Details
-
-The dependency analysis uses:
-- **BFS Algorithm**: For impact propagation calculation
-- **Graph Theory**: To model code dependencies
-- **Tree-sitter**: For accurate code parsing
-- **Pattern Matching**: To identify breaking changes
-
-## Limitations
-
-- Only works with supported languages (Rust, Java, JavaScript, Python, Go, C, C++)
-- Requires `--tree-sitter` flag to be enabled
-- Dependency depth is limited to 4 levels by default
-- May not detect all dynamic dependencies
-
-## Future Improvements
-
-1. Add visualization of dependency graphs (DOT file export)
-2. Support for more programming languages
-3. Configurable propagation depth
-4. Integration with CI/CD pipelines for automatic impact assessment
-5. Machine learning-based risk prediction
+- 准备发布前建议结合安全扫描：
+```bash
+gitai review --full --security-scan --block-on-critical
+```

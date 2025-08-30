@@ -16,7 +16,7 @@ pub fn load_snapshots(
     let file_path = get_snapshot_file_path(storage_path, branch);
 
     if !file_path.exists() {
-        log::debug!("快照文件不存在: {:?}", file_path);
+        log::debug!("快照文件不存在: {file_path:?}");
         return Ok(Vec::new());
     }
 
@@ -33,7 +33,7 @@ pub fn load_snapshots(
         match serde_json::from_str::<QualitySnapshot>(&line) {
             Ok(snapshot) => snapshots.push(snapshot),
             Err(e) => {
-                log::warn!("无法解析快照行: {}", e);
+                log::warn!("无法解析快照行: {e}");
                 // 继续处理其他行，不中断
             }
         }
@@ -68,10 +68,10 @@ pub fn save_snapshot(
 
     // 写入 JSON Line
     let json_line = serde_json::to_string(snapshot)?;
-    writeln!(writer, "{}", json_line)?;
+    writeln!(writer, "{json_line}")?;
     writer.flush()?;
 
-    log::debug!("保存快照到: {:?}", file_path);
+    log::debug!("保存快照到: {file_path:?}");
 
     Ok(())
 }
@@ -94,7 +94,7 @@ pub fn save_all_snapshots(
 
     for snapshot in snapshots {
         let json_line = serde_json::to_string(snapshot)?;
-        writeln!(writer, "{}", json_line)?;
+        writeln!(writer, "{json_line}")?;
     }
 
     writer.flush()?;
@@ -144,7 +144,7 @@ pub fn export_to_csv(
     let mut writer = csv::Writer::from_path(output_path)?;
 
     // 写入标题行
-    writer.write_record(&[
+    writer.write_record([
         "timestamp",
         "commit_hash",
         "branch",
@@ -162,7 +162,7 @@ pub fn export_to_csv(
 
     // 写入数据行
     for snapshot in snapshots {
-        writer.write_record(&[
+        writer.write_record([
             snapshot.timestamp.to_rfc3339(),
             snapshot.commit_hash.clone(),
             snapshot.branch.clone(),
@@ -221,12 +221,9 @@ pub fn merge_branch_snapshots(
 /// 获取快照文件路径
 fn get_snapshot_file_path(storage_path: &Path, branch: &str) -> PathBuf {
     // 清理分支名称中的特殊字符
-    let safe_branch_name = branch
-        .replace('/', "_")
-        .replace('\\', "_")
-        .replace(':', "_");
+    let safe_branch_name = branch.replace(['/', '\\', ':'], "_");
 
-    storage_path.join(format!("snapshots_{}.jsonl", safe_branch_name))
+    storage_path.join(format!("snapshots_{safe_branch_name}.jsonl"))
 }
 
 /// 清理过期的快照文件
@@ -253,7 +250,7 @@ pub fn cleanup_expired_files(
                 if modified_time < cutoff_date {
                     std::fs::remove_file(&path)?;
                     removed_count += 1;
-                    log::info!("删除过期快照文件: {:?}", path);
+                    log::info!("删除过期快照文件: {path:?}");
                 }
             }
         }

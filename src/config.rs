@@ -170,8 +170,8 @@ impl McpServerConfig {
             "stdio" | "tcp" | "sse" => {}
             _ => {
                 return Err(format!(
-                    "不支持的传输协议: {}，支持的协议: stdio, tcp, sse",
-                    self.transport
+                    "不支持的传输协议: {transport}，支持的协议: stdio, tcp, sse",
+                    transport = self.transport
                 )
                 .into())
             }
@@ -179,7 +179,11 @@ impl McpServerConfig {
 
         // 验证监听地址（如果需要）
         if (self.transport == "tcp" || self.transport == "sse") && self.listen_addr.is_none() {
-            return Err(format!("传输协议为 {} 时必须指定监听地址", self.transport).into());
+            return Err(format!(
+                "传输协议为 {transport} 时必须指定监听地址",
+                transport = self.transport
+            )
+            .into());
         }
 
         // 验证服务名称
@@ -229,8 +233,7 @@ impl McpServicesConfig {
         for service in &self.enabled {
             if !valid_services.contains(&service.as_str()) {
                 return Err(format!(
-                    "不支持的 MCP 服务: {}，支持的服务: {:?}",
-                    service, valid_services
+                    "不支持的 MCP 服务: {service}，支持的服务: {valid_services:?}"
                 )
                 .into());
             }
@@ -279,8 +282,8 @@ impl McpReviewConfig {
         let valid_formats = ["text", "json", "markdown"];
         if !valid_formats.contains(&self.default_format.as_str()) {
             return Err(format!(
-                "不支持的输出格式: {}，支持的格式: {:?}",
-                self.default_format, valid_formats
+                "不支持的输出格式: {format}，支持的格式: {valid_formats:?}",
+                format = self.default_format
             )
             .into());
         }

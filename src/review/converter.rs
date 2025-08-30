@@ -22,9 +22,34 @@ pub fn convert_analysis_result_with_critical_check(
     result: &AnalysisResult,
     config: &ReviewConfig,
 ) -> ReviewResult {
-    let review_result = convert_analysis_result(result, config);
-
     // TODO: 实现严重问题检查逻辑
 
-    review_result
+    convert_analysis_result(result, config)
+}
+
+// ===============
+// 类型适配/转换
+// ===============
+
+#[cfg(feature = "security")]
+impl From<crate::scan::Finding> for super::types::Finding {
+    fn from(f: crate::scan::Finding) -> Self {
+        super::types::Finding {
+            title: f.title,
+            severity: f.severity.as_str().parse().unwrap_or(super::types::Severity::Info),
+            file_path: Some(f.file_path.to_string_lossy().to_string()),
+            line: Some(f.line),
+            column: Some(f.column),
+            code_snippet: f.code_snippet,
+            message: f.message,
+            rule_id: f.rule_id,
+            recommendation: f.remediation,
+        }
+    }
+}
+
+/// 批量转换扫描结果为评审发现
+#[cfg(feature = "security")]
+pub fn convert_scan_findings(findings: Vec<crate::scan::Finding>) -> Vec<super::types::Finding> {
+    findings.into_iter().map(Into::into).collect()
 }

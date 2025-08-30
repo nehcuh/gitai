@@ -50,12 +50,25 @@ cargo build --release --features full
 
 ## 📚 文档导航
 
-- **本README** - 完整的功能介绍和使用指南
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - 技术架构和设计理念
-- **[docs/REGRESSION.md](docs/REGRESSION.md)** - 回归测试手册
-- **[docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)** - 功能门控使用指南
+- 本README - 完整的功能介绍和使用指南
+- [docs/README.md](docs/README.md) - 中文文档索引
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 技术架构和设计理念
+- [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md) - 功能门控使用指南
+- [docs/dependency-analysis-in-review.md](docs/dependency-analysis-in-review.md) - 依赖分析与 PageRank 在评审中的应用
+- [docs/REVIEW_WORKFLOW.md](docs/REVIEW_WORKFLOW.md) - 基于场景的评审工作流与流程图
+- [docs/REGRESSION.md](docs/REGRESSION.md) - 回归测试手册
 
 快速开始请参考下方章节。
+
+## 🧰 开发工具
+
+- tools/build-variants.sh — 构建不同功能门控变体的便捷脚本
+- tools/test-features.sh — 批量测试不同 feature 组合的脚本
+- tools/migrate_types.sh — 类型迁移/批处理脚本（按需使用）
+
+使用建议：
+- 执行前请阅读脚本头部说明
+- 可在本地或 CI 中调用，配合功能门控进行快速验证
 
 ## ✨ 核心功能
 
@@ -390,12 +403,44 @@ gitai review --commit1=HEAD~1 --commit2=HEAD
 gitai review --commit1=abc123 --commit2=def456
 ```
 
-#### Tree-sitter 支持（开发中）
+#### Tree-sitter 支持
 ```bash
-# Tree-sitter 标志已添加（功能开发中）
+# 启用 Tree-sitter 进行结构分析（推荐与 --full 一起使用）
 gitai review --tree-sitter
 
-# 注意：当前版本 Tree-sitter 功能尚未完全实现
+# 与安全扫描结合
+gitai review --tree-sitter --security-scan --scan-tool=opengrep
+```
+
+#### 评审模式与典型场景
+- 基础评审（快速检查变更，默认模式）
+  ```bash
+  gitai review
+  ```
+- 全量架构评审（依赖图 + PageRank + 架构影响 + 可选安全扫描）
+  ```bash
+  gitai review --full --tree-sitter --security-scan --scan-tool=opengrep
+  ```
+- 带 DevOps 任务上下文的全量评审
+  ```bash
+  gitai review --full --issue-id="#123,#456"
+  ```
+- DevOps 偏离度分析（专注需求符合度，使用 deviation 模板）
+  ```bash
+  gitai review --deviation-analysis --issue-id="#123"
+  ```
+- CI 严格模式（发现高危问题时降低评分/阻止合并）
+  ```bash
+  gitai review --full --security-scan --block-on-critical
+  ```
+
+#### 评审流程图（简化）
+```mermaid
+flowchart LR
+  A[gitai review] --> B{模式}
+  B -->|基础| C[结构/安全(可选)] --> D[review 模板] --> E[AI/回退] --> F[输出]
+  B -->|--full| G[依赖图 + PageRank + 影响范围] --> H[注入 Dependency Insights] --> E
+  B -->|--deviation-analysis| I[deviation 模板] --> E
 ```
 
 #### Issue 关联（当前支持）
@@ -688,14 +733,14 @@ gitai prompts init
 gitai prompts list
 
 # 查看某个模板内容
-gitai prompts show --name commit-generator
+gitai prompts show --name commit
 
 # 从远程/预置源更新模板（非强制，按需使用）
 gitai prompts update
 
 # 模板目录结构（可手工编辑）
 ~/.config/gitai/prompts/
-├── commit-generator.md      # 提交信息生成模板
+├── commit.md                # 提交信息生成模板
 ├── review.md                # 代码评审模板
 ```
 
@@ -850,11 +895,11 @@ RUST_LOG=debug gitai review
 **Q: 提交信息生成质量不佳**
 ```bash
 # 自定义提示词模板
-cp ~/.config/gitai/prompts/commit-generator.md \
-   ~/.config/gitai/prompts/commit-generator.md.backup
+cp ~/.config/gitai/prompts/commit.md \
+   ~/.config/gitai/prompts/commit.md.backup
 
 # 编辑模板
-vim ~/.config/gitai/prompts/commit-generator.md
+vim ~/.config/gitai/prompts/commit.md
 
 # 测试新模板
 gitai commit --dry-run

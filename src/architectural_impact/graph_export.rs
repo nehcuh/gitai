@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -6,11 +6,21 @@ use crate::architectural_impact::dependency_graph::{DependencyGraph, DotOptions,
 use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 
 fn is_code_file(path: &Path) -> bool {
-    match path.extension().and_then(|s| s.to_str()).unwrap_or("") {
-        "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "cc" | "cxx" | "hpp" | "hxx"
-        | "h" => true,
-        _ => false,
-    }
+    matches!(
+        path.extension().and_then(|s| s.to_str()).unwrap_or(""),
+        "rs" | "java"
+            | "py"
+            | "js"
+            | "ts"
+            | "go"
+            | "c"
+            | "cpp"
+            | "cc"
+            | "cxx"
+            | "hpp"
+            | "hxx"
+            | "h"
+    )
 }
 
 fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -182,7 +192,7 @@ pub async fn query_call_chain(
 
     // 根据函数名定位起点/终点候选
     let mut start_ids: Vec<String> = Vec::new();
-    let mut end_name = end.map(|s| s.to_string());
+    let end_name = end.map(|s| s.to_string());
     for (id, node) in &graph.nodes {
         if let NodeType::Function(f) = &node.node_type {
             if f.name == start {
@@ -216,7 +226,7 @@ pub async fn query_call_chain(
                 }
             }
             // 深度限制
-            if path.len() - 1 >= max_depth {
+            if path.len() > max_depth {
                 continue;
             }
             // 获取下一步邻居
@@ -253,7 +263,7 @@ pub async fn query_call_chain(
                 if results.len() >= max_paths {
                     break;
                 }
-                if path.len() - 1 >= max_depth {
+                if path.len() > max_depth {
                     results.push(path);
                     continue;
                 }
