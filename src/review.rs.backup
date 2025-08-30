@@ -1,3 +1,17 @@
+// 原review.rs已重构为模块化结构
+// 向后兼容导出
+pub mod review;
+pub use review::*;
+
+/* 原实现已移到 src/review/ 子模块:
+   - types.rs: 类型定义
+   - executor.rs: 执行逻辑
+   - cache.rs: 缓存管理
+   - analyzer.rs: 分析功能
+   - converter.rs: 转换器
+*/
+
+// 临时保留编译兼容性
 use crate::config::Config;
 use crate::analysis::{Analyzer, OperationContext, OperationOptions};
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
@@ -6,7 +20,6 @@ use crate::architectural_impact::{GitStateAnalyzer, ArchitecturalImpact};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
-/// 评审结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewResult {
     /// 是否成功
