@@ -2,10 +2,25 @@
 // 统一所有操作的数据传递，消除重复配置和参数传递混乱
 
 use crate::config::Config;
-use crate::devops::Issue;
 use crate::tree_sitter::StructuralSummary;
 use crate::architectural_impact::ArchitecturalImpactAnalysis;
 use std::path::PathBuf;
+
+// Re-export Issue from devops when available, or define a stub
+#[cfg(feature = "devops")]
+pub use crate::devops::Issue;
+
+// Define a stub Issue type when devops feature is not enabled
+#[cfg(not(feature = "devops"))]
+#[derive(Debug, Clone)]
+pub struct Issue {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+    pub priority: Option<String>,
+    pub url: String,
+}
 
 /// 统一操作上下文 - Linus式数据结构优先设计
 /// 

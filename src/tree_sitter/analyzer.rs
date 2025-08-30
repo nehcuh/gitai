@@ -30,7 +30,8 @@ impl StructureAnalyzer {
 
     /// 设置查询
     fn setup_queries(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let lang = self.language.language();
+        let lang = self.language.language()
+            .ok_or_else(|| format!("Language {:?} is not enabled in this build", self.language))?;
         
         // 根据语言设置不同的查询
         match self.language {

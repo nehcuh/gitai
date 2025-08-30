@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::devops::Issue;
+use crate::context::Issue;
 use crate::tree_sitter::{TreeSitterManager, SupportedLanguage, StructuralSummary};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
@@ -166,13 +166,16 @@ async fn get_issue_context(config: &Config, issue_ids: &[String]) -> Result<Vec<
         return Ok(Vec::new());
     }
     
-    if let Some(ref devops_config) = config.devops {
-        let client = crate::devops::DevOpsClient::new(devops_config.clone());
-        client.get_issues(issue_ids).await.map_err(|e| e)
-    } else {
-        eprintln!("⚠️ 未配置DevOps平台，无法获取Issue信息");
-        Ok(Vec::new())
+    #[cfg(feature = "devops")]
+    {
+        if let Some(ref devops_config) = config.devops {
+            let client = crate::devops::DevOpsClient::new(devops_config.clone());
+            return client.get_issues(issue_ids).await.map_err(|e| e);
+        }
     }
+    
+    eprintln!("⚠️ DevOps功能未启用或未配置，无法获取Issue信息");
+    Ok(Vec::new())
 }
     
 /// 生成提交信息
@@ -197,6 +200,7 @@ async fn generate_commit_message(
     };
     
     // 尝试直接使用模板生成提交信息（传递 tree_sitter 信息）
+    #[cfg(feature = "ai")]
     let ai_message = match crate::ai::generate_commit_message_with_template(
         config, 
         diff,
@@ -210,6 +214,21 @@ async fn generate_commit_message(
             let prompt = build_commit_prompt_fallback(config, diff, issues, commit_config).await?;
             crate::ai::call_ai(config, &prompt).await?
         }
+    };
+
+    #[cfg(not(feature = "ai"))]
+    let ai_message = {
+        // 未启用 AI 时的简易提交信息
+        let changes = count_changes(diff).unwrap_or(0);
+        let mut msg = if changes > 0 {
+            format!("chore: update code ({} lines changed)", changes)
+        } else {
+            "chore: update code".to_string()
+        };
+        if tree_sitter_summary.is_some() {
+            msg.push_str(" [structure]");
+        }
+        msg
     };
     
     let final_message = format_commit_message(ai_message.trim(), &commit_config.issue_ids);

@@ -115,15 +115,23 @@ impl SecurityInsights {
             .render("architectural_analysis", &context)
             .map_err(|e| format!("架构分析提示词渲染失败: {}", e))?;
 
-        match crate::ai::call_ai(&self._config, &prompt).await {
-            Ok(response) => {
-                self.parse_architectural_response(&response, file_path)
-                    .await
+        #[cfg(feature = "ai")]
+        {
+            match crate::ai::call_ai(&self._config, &prompt).await {
+                Ok(response) => {
+                    self.parse_architectural_response(&response, file_path)
+                        .await
+                }
+                Err(e) => {
+                    log::warn!("架构一致性AI分析失败: {}", e);
+                    Ok(Vec::new())
+                }
             }
-            Err(e) => {
-                log::warn!("架构一致性AI分析失败: {}", e);
-                Ok(Vec::new())
-            }
+        }
+        #[cfg(not(feature = "ai"))]
+        {
+            log::debug!("AI feature disabled: skip architectural consistency analysis");
+            Ok(Vec::new())
         }
     }
 
@@ -185,12 +193,20 @@ impl SecurityInsights {
             .render("requirement_validation", &context)
             .map_err(|e| format!("需求验证提示词渲染失败: {}", e))?;
 
-        match crate::ai::call_ai(&self._config, &prompt).await {
-            Ok(response) => self.parse_requirement_response(&response, file_path).await,
-            Err(e) => {
-                log::warn!("需求偏离AI分析失败: {}", e);
-                Ok(Vec::new())
+        #[cfg(feature = "ai")]
+        {
+            match crate::ai::call_ai(&self._config, &prompt).await {
+                Ok(response) => self.parse_requirement_response(&response, file_path).await,
+                Err(e) => {
+                    log::warn!("需求偏离AI分析失败: {}", e);
+                    Ok(Vec::new())
+                }
             }
+        }
+        #[cfg(not(feature = "ai"))]
+        {
+            log::debug!("AI feature disabled: skip requirement deviation analysis");
+            Ok(Vec::new())
         }
     }
 

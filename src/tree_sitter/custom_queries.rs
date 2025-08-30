@@ -325,7 +325,8 @@ comment_query = """
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use tree_sitter::Query;
         
-        let lang = language.language();
+        let lang = language.language()
+            .ok_or_else(|| format!("Language {:?} is not enabled in this build", language))?;
         Query::new(lang, query)?;
         
         Ok(())

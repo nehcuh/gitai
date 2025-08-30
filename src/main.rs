@@ -1,24 +1,36 @@
-mod config;
-mod args;
-mod devops;
-mod git;
-mod ai;
-mod analysis;
-mod commit;
-mod update;
-mod tree_sitter;
-mod scan;
-mod prompts;
-mod review;
-mod mcp;
-mod project_insights;
-mod metrics;
-mod architectural_impact;
-mod error;
+// Use modules from the library crate
+use gitai::{
+    config::{self, Config},
+    args::{self, Args, Command, PromptAction, ConfigAction, MetricsAction},
+    git,
+    prompts,
+    error,
+};
+
+// Conditionally import feature-gated modules
+#[cfg(feature = "ai")]
+use gitai::ai;
+
+#[cfg(feature = "devops")]
+use gitai::devops;
+
+#[cfg(feature = "security")]
+use gitai::scan;
+
+#[cfg(feature = "update-notifier")]
+use gitai::update;
+
+#[cfg(feature = "mcp")]
+use gitai::mcp;
+
+#[cfg(feature = "metrics")]
+use gitai::metrics;
+
+// Always available modules
+use gitai::{analysis, commit, review, tree_sitter, project_insights, architectural_impact, features};
 
 use std::path::PathBuf;
 use std::fs;
-use args::{Args, Command, PromptAction, ConfigAction, MetricsAction};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 fn init_logger() {
@@ -106,6 +118,7 @@ async fn main() -> Result<()> {
             );
             review::execute_review(&config, review_config).await?;
         }
+        #[cfg(feature = "security")]
         Command::Scan {
             path,
             tool,
@@ -123,8 +136,21 @@ async fn main() -> Result<()> {
         } => {
             handle_scan(&config, &path, &tool, full, remote, update_rules, &format, output, translate, auto_install, lang.as_deref(), no_history, timeout, benchmark).await?;
         }
+        #[cfg(not(feature = "security"))]
+        Command::Scan { .. } => {
+            eprintln!("❌ 安全扫描功能未启用");
+            eprintln!("💡 请使用包含 'security' 功能的构建版本");
+            return Err("功能未启用".into());
+        }
+        #[cfg(feature = "security")]
         Command::ScanHistory { limit, format: _ } => {
             handle_scan_history(limit)?;
+        }
+        #[cfg(not(feature = "security"))]
+        Command::ScanHistory { .. } => {
+            eprintln!("❌ 安全扫描历史功能未启用");
+            eprintln!("💡 请使用包含 'security' 功能的构建版本");
+            return Err("功能未启用".into());
         }
         Command::Prompts { action } => {
             handle_prompts_action(&config, &action).await?;
@@ -140,6 +166,7 @@ async fn main() -> Result<()> {
             let commit_config = commit::CommitConfig::from_args(message, issue_id, all, review, tree_sitter, dry_run);
             commit::execute_commit(&config, commit_config).await?;
         }
+        #[cfg(feature = "update-notifier")]
         Command::Update { check, format } => {
             if check {
                 handle_update_check(&config, &format).await?;
@@ -147,18 +174,42 @@ async fn main() -> Result<()> {
                 handle_update(&config).await?;
             }
         }
+        #[cfg(not(feature = "update-notifier"))]
+        Command::Update { .. } => {
+            eprintln!("❌ 更新功能未启用");
+            eprintln!("💡 请使用包含 'update-notifier' 功能的构建版本");
+            return Err("功能未启用".into());
+        }
         Command::Git(git_args) => {
             // 默认不启用AI解释；--ai 显式开启；--noai 可显式关闭（当外部别名强制开启时）
             let use_ai = if args.ai { true } else if args.noai { false } else { false };
-            if use_ai {
-                handle_git_with_ai(&config, &git_args).await?;
-            } else {
+            
+            #[cfg(feature = "ai")]
+            {
+                if use_ai {
+                    handle_git_with_ai(&config, &git_args).await?;
+                } else {
+                    let output = git::run_git(&git_args)?;
+                    print!("{output}");
+                }
+            }
+            
+            #[cfg(not(feature = "ai"))]
+            {
+                // 未启用 AI 时，总是直接执行 git
                 let output = git::run_git(&git_args)?;
                 print!("{output}");
             }
         }
+        #[cfg(feature = "mcp")]
         Command::Mcp { transport, addr } => {
             handle_mcp(&config, &transport, &addr).await?;
+        }
+        #[cfg(not(feature = "mcp"))]
+        Command::Mcp { .. } => {
+            eprintln!("❌ MCP 服务器功能未启用");
+            eprintln!("💡 请使用包含 'mcp' 功能的构建版本");
+            return Err("功能未启用".into());
         }
         Command::Init { .. } => {
             // 已在上面处理
@@ -167,11 +218,21 @@ async fn main() -> Result<()> {
         Command::Config { action } => {
             handle_config(&config, &action, args.offline).await?;
         }
+        #[cfg(feature = "metrics")]
         Command::Metrics { action } => {
             handle_metrics(&config, &action).await?;
         }
+        #[cfg(not(feature = "metrics"))]
+        Command::Metrics { .. } => {
+            eprintln!("❌ 度量功能未启用");
+            eprintln!("💡 请使用包含 'metrics' 功能的构建版本");
+            return Err("功能未启用".into());
+        }
         Command::Graph { path, output, threshold } => {
             handle_graph_export(&path, output.as_ref(), threshold).await?;
+        }
+        Command::Features { format } => {
+            features::display_features(&format);
         }
     }
     
@@ -179,7 +240,7 @@ async fn main() -> Result<()> {
 }
 
 async fn handle_graph_export(path: &std::path::Path, output: Option<&std::path::PathBuf>, threshold: f32) -> Result<()> {
-    use crate::architectural_impact::graph_export::export_dot_string;
+    use gitai::architectural_impact::graph_export::export_dot_string;
     let dot = export_dot_string(path, threshold).await?;
     if let Some(out) = output {
         std::fs::write(out, dot)?;
@@ -191,6 +252,7 @@ async fn handle_graph_export(path: &std::path::Path, output: Option<&std::path::
 }
 
 // 扫描相关处理函数
+#[cfg(feature = "security")]
 async fn handle_scan(
     config: &config::Config,
     path: &std::path::Path,
@@ -232,9 +294,16 @@ async fn handle_scan(
         if show_progress {
             println!("🔄 正在更新扫描规则...");
         }
-        let updater = update::AutoUpdater::new(config.clone());
-        if let Err(e) = updater.update_scan_rules().await {
-            eprintln!("⚠️ 规则更新失败: {}", e);
+        #[cfg(feature = "update-notifier")]
+        {
+            let updater = update::AutoUpdater::new(config.clone());
+            if let Err(e) = updater.update_scan_rules().await {
+                eprintln!("⚠️ 规则更新失败: {}", e);
+            }
+        }
+        #[cfg(not(feature = "update-notifier"))]
+        {
+            eprintln!("ℹ️  update-notifier 功能未启用，跳过规则更新。");
         }
     }
     
@@ -290,43 +359,7 @@ async fn handle_scan(
     Ok(())
 }
 
-async fn handle_update_check(config: &config::Config, format: &str) -> Result<()> {
-    let updater = update::AutoUpdater::new(config.clone());
-    let status = updater.check_update_status();
-    
-    if format == "json" {
-        let json = serde_json::to_string_pretty(&status)?;
-        println!("{}", json);
-    } else {
-        println!("🔎 更新检查:");
-        println!();
-        
-        for item in &status {
-            println!("📦 {}: {}", item.name, item.message);
-        }
-        
-        println!();
-        if status.is_empty() {
-            println!("就绪状态: ✅ 已就绪");
-        } else {
-            println!("就绪状态: ❌ 需要更新");
-        }
-    }
-    
-    Ok(())
-}
-
-async fn handle_update(config: &config::Config) -> Result<()> {
-    println!("🔄 正在更新规则...");
-    let updater = update::AutoUpdater::new(config.clone());
-    let result = updater.update_scan_rules().await?;
-    
-    println!("✅ 更新完成");
-    println!("   更新状态: {}", result.message);
-    
-    Ok(())
-}
-
+#[cfg(feature = "security")]
 fn handle_scan_history(limit: usize) -> Result<()> {
     let cache_dir = get_cache_dir()?;
     let history_dir = cache_dir.join("scan_history");
@@ -384,6 +417,46 @@ fn handle_scan_history(limit: usize) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "update-notifier")]
+async fn handle_update_check(config: &config::Config, format: &str) -> Result<()> {
+    let updater = update::AutoUpdater::new(config.clone());
+    let status = updater.check_update_status();
+    
+    if format == "json" {
+        let json = serde_json::to_string_pretty(&status)?;
+        println!("{}", json);
+    } else {
+        println!("🔎 更新检查:");
+        println!();
+        
+        for item in &status {
+            println!("📦 {}: {}", item.name, item.message);
+        }
+        
+        println!();
+        if status.is_empty() {
+            println!("就绪状态: ✅ 已就绪");
+        } else {
+            println!("就绪状态: ❌ 需要更新");
+        }
+    }
+    
+    Ok(())
+}
+
+#[cfg(feature = "update-notifier")]
+async fn handle_update(config: &config::Config) -> Result<()> {
+    println!("🔄 正在更新规则...");
+    let updater = update::AutoUpdater::new(config.clone());
+    let result = updater.update_scan_rules().await?;
+    
+    println!("✅ 更新完成");
+    println!("   更新状态: {}", result.message);
+    
+    Ok(())
+}
+
+#[cfg(feature = "ai")]
 async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Result<()> {
     // 执行Git命令
     let output = git::run_git(git_args)?;
@@ -664,6 +737,7 @@ async fn handle_config(config: &config::Config, action: &ConfigAction, offline: 
     Ok(())
 }
 
+#[cfg(feature = "mcp")]
 async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Result<()> {
     // 检查 MCP 是否启用
     if !config.mcp.as_ref().map_or(false, |mcp| mcp.enabled) {
@@ -696,7 +770,8 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
     Ok(())
 }
 
-async fn handle_metrics(config: &config::Config, action: &MetricsAction) -> Result<()> {
+#[cfg(feature = "metrics")]
+async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Result<()> {
     use metrics::QualityTracker;
     use project_insights::InsightsGenerator;
     use tree_sitter::TreeSitterManager;

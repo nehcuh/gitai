@@ -194,6 +194,12 @@ pub enum Command {
         #[arg(long, default_value_t = 0.15)]
         threshold: f32,
     },
+    /// 显示本构建启用的功能
+    Features {
+        /// 输出格式 (text|table|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
 }
 
 /// 提示词操作

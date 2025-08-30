@@ -67,16 +67,47 @@ impl SupportedLanguage {
     }
 
     /// 获取Tree-sitter语言对象
-    pub fn language(&self) -> Language {
+    pub fn language(&self) -> Option<Language> {
         match self {
-            Self::Java => tree_sitter_java::language(),
-            Self::Rust => tree_sitter_rust::language(),
-            Self::C => tree_sitter_c::language(),
-            Self::Cpp => tree_sitter_cpp::language(),
-            Self::Python => tree_sitter_python::language(),
-            Self::Go => tree_sitter_go::language(),
-            Self::JavaScript => tree_sitter_javascript::language(),
-            Self::TypeScript => tree_sitter_typescript::language_typescript(),
+            #[cfg(feature = "tree-sitter-java")]
+            Self::Java => Some(tree_sitter_java::language()),
+            #[cfg(not(feature = "tree-sitter-java"))]
+            Self::Java => None,
+            
+            #[cfg(feature = "tree-sitter-rust")]
+            Self::Rust => Some(tree_sitter_rust::language()),
+            #[cfg(not(feature = "tree-sitter-rust"))]
+            Self::Rust => None,
+            
+            #[cfg(feature = "tree-sitter-c")]
+            Self::C => Some(tree_sitter_c::language()),
+            #[cfg(not(feature = "tree-sitter-c"))]
+            Self::C => None,
+            
+            #[cfg(feature = "tree-sitter-cpp")]
+            Self::Cpp => Some(tree_sitter_cpp::language()),
+            #[cfg(not(feature = "tree-sitter-cpp"))]
+            Self::Cpp => None,
+            
+            #[cfg(feature = "tree-sitter-python")]
+            Self::Python => Some(tree_sitter_python::language()),
+            #[cfg(not(feature = "tree-sitter-python"))]
+            Self::Python => None,
+            
+            #[cfg(feature = "tree-sitter-go")]
+            Self::Go => Some(tree_sitter_go::language()),
+            #[cfg(not(feature = "tree-sitter-go"))]
+            Self::Go => None,
+            
+            #[cfg(feature = "tree-sitter-javascript")]
+            Self::JavaScript => Some(tree_sitter_javascript::language()),
+            #[cfg(not(feature = "tree-sitter-javascript"))]
+            Self::JavaScript => None,
+            
+            #[cfg(feature = "tree-sitter-typescript")]
+            Self::TypeScript => Some(tree_sitter_typescript::language_typescript()),
+            #[cfg(not(feature = "tree-sitter-typescript"))]
+            Self::TypeScript => None,
         }
     }
 
@@ -108,11 +139,13 @@ impl TreeSitterManager {
         let mut parsers = HashMap::new();
         let queries_manager = queries::QueriesManager::new()?;
         
-        // 初始化所有语言的解析器
+        // 初始化所有语言的解析器（仅已启用的）
         for lang in SupportedLanguage::all() {
-            let mut parser = Parser::new();
-            parser.set_language(lang.language())?;
-            parsers.insert(lang, parser);
+            if let Some(language) = lang.language() {
+                let mut parser = Parser::new();
+                parser.set_language(language)?;
+                parsers.insert(lang, parser);
+            }
         }
         
         // 确保queries已下载

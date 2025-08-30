@@ -27,11 +27,33 @@ GitAI 是一组AI驱动的Git辅助工具，专注于在开发过程中提供即
 
 > **版本状态**：v1.0.0 稳定版已发布！所有核心功能完全可用，包括完整的 MCP 集成、代码评审、智能提交、安全扫描等。
 
+## 🎯 功能门控（新功能）
+
+GitAI 现在支持**功能门控**，允许您根据需求定制构建，优化二进制文件大小：
+
+- **最小构建** (10MB)：仅核心功能，适合轻量级使用
+- **默认构建** (12MB)：包含 AI + 常用语言支持
+- **完整构建** (22MB)：所有功能和语言支持
+
+```bash
+# 构建最小版本
+cargo build --release --no-default-features --features minimal
+
+# 构建特定语言支持
+cargo build --release --no-default-features --features tree-sitter-rust
+
+# 构建完整版本
+cargo build --release --features full
+```
+
+详细说明请参考 [功能门控指南](docs/FEATURE_FLAGS.md)。
+
 ## 📚 文档导航
 
 - **本README** - 完整的功能介绍和使用指南
-- **docs/ARCHITECTURE.md** - 技术架构和设计理念
-- **docs/REGRESSION.md** - 回归测试手册
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - 技术架构和设计理念
+- **[docs/REGRESSION.md](docs/REGRESSION.md)** - 回归测试手册
+- **[docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)** - 功能门控使用指南
 
 快速开始请参考下方章节。
 

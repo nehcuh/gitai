@@ -36,7 +36,8 @@ impl UnifiedAnalyzer {
         // 加载查询配置
         let queries = Self::load_queries(language)?;
         
-        let lang = language.language();
+        let lang = language.language()
+            .ok_or_else(|| format!("Language {:?} is not enabled in this build", language))?;
         
         // 编译查询
         let function_query = Query::new(lang, &queries.function_query).ok();

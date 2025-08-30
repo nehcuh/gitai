@@ -296,32 +296,41 @@ impl SecurityReviewer {
     async fn perform_security_scan(
         &self,
     ) -> Result<Vec<SecurityInsight>, Box<dyn std::error::Error + Send + Sync>> {
-        let current_dir = std::env::current_dir()?;
-        match crate::scan::run_opengrep_scan(&self._config, &current_dir, None, None, false) {
-            Ok(result) => {
-                let insights: Vec<SecurityInsight> = result
-                    .findings
-                    .into_iter()
-                    .map(|f| {
-                        let title = f.title.clone();
-                        SecurityInsight {
-                            category: InsightCategory::BoundaryProtection,
-                            severity: match f.severity {
-                                crate::scan::Severity::Error => Severity::Critical,
-                                crate::scan::Severity::Warning => Severity::High,
-                                crate::scan::Severity::Info => Severity::Medium,
-                            },
-                            title,
-                            description: format!("发现安全问题: {}", f.title),
-                            suggestion: "请修复此安全问题".to_string(),
-                            file_path: Some(f.file_path.display().to_string()),
-                            line_range: Some((f.line, f.line)),
-                        }
-                    })
-                    .collect();
-                Ok(insights)
+        #[cfg(feature = "security")]
+        {
+            let current_dir = std::env::current_dir()?;
+            match crate::scan::run_opengrep_scan(&self._config, &current_dir, None, None, false) {
+                Ok(result) => {
+                    let insights: Vec<SecurityInsight> = result
+                        .findings
+                        .into_iter()
+                        .map(|f| {
+                            let title = f.title.clone();
+                            SecurityInsight {
+                                category: InsightCategory::BoundaryProtection,
+                                severity: match f.severity {
+                                    crate::scan::Severity::Error => Severity::Critical,
+                                    crate::scan::Severity::Warning => Severity::High,
+                                    crate::scan::Severity::Info => Severity::Medium,
+                                },
+                                title,
+                                description: format!("发现安全问题: {}", f.title),
+                                suggestion: "请修复此安全问题".to_string(),
+                                file_path: Some(f.file_path.display().to_string()),
+                                line_range: Some((f.line, f.line)),
+                            }
+                        })
+                        .collect();
+                    Ok(insights)
+                }
+                Err(_) => Ok(Vec::new())
             }
-            Err(_) => Ok(Vec::new())
+        }
+        
+        #[cfg(not(feature = "security"))]
+        {
+            log::debug!("Security scan feature is not enabled");
+            Ok(Vec::new())
         }
     }
 

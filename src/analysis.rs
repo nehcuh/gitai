@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::devops::Issue;
+use crate::context::Issue;  // Always use from context module, which handles the conditional compilation
 use crate::tree_sitter::StructuralSummary;
 use crate::architectural_impact::ArchitecturalImpact;
 use crate::architectural_impact::{DependencyGraph, ImpactScope, CascadeEffect};
@@ -259,72 +259,100 @@ impl Analyzer {
         // 尝试使用模板，如果失败则降级为硬编码提示词
         log::debug!("准备使用模板进行AI评审");
         
-        match crate::ai::review_code_with_template(
-            &context.config, 
-            &context.diff, 
-            Some(&tree_sitter_info),
-            &security_scan_results,
-            &devops_issue_context
-        ).await {
-            Ok(result) => {
-                log::debug!("模板AI调用成功，结果长度: {}", result.len());
-                Ok(result)
-            },
-            Err(template_error) => {
-                log::warn!("使用模板失败，降级为硬编码提示词: {}", template_error);
-                
-                // 降级为原有的硬编码逻辑
-                let mut prompt = format!(
-                    "请评审以下代码变更，重点关注代码质量、安全性、性能等方面：\n\n代码变更：\n{}",
-                    context.diff
-                );
-                
-                // 添加结构分析信息
-                if context.structural_info.is_some() {
-                    prompt.push_str(&format!("\n\n{}", tree_sitter_info));
-                }
-                
-                if context.has_issues() {
-                    prompt.push_str(&format!("\n\n相关Issue信息：\n{}", context.issue_context()));
-                }
-                
-                if context.options.deviation_analysis && context.has_issues() {
-                    prompt.push_str("\n\n请特别分析以下方面：\n");
-                    prompt.push_str("1. 代码变更是否完全解决了Issue中描述的问题？\n");
-                    prompt.push_str("2. 是否存在偏离需求的情况？\n");
-                    prompt.push_str("3. 代码实现是否符合Issue的优先级和重要性？\n");
-                    prompt.push_str("4. 是否引入了与Issue无关的代码变更？\n");
-                    prompt.push_str("5. 代码质量是否满足生产环境要求？\n");
-                    prompt.push_str("\n请提供偏离度分析报告，包括符合度和改进建议。");
-                }
-                
-                match crate::ai::call_ai(&context.config, &prompt).await {
-                    Ok(result) => Ok(result),
-                    Err(e) => Err(format!("AI服务错误: {}", e).into()),
+        #[cfg(feature = "ai")]
+        {
+            match crate::ai::review_code_with_template(
+                &context.config, 
+                &context.diff, 
+                Some(&tree_sitter_info),
+                &security_scan_results,
+                &devops_issue_context
+            ).await {
+                Ok(result) => {
+                    log::debug!("模板AI调用成功，结果长度: {}", result.len());
+                    Ok(result)
+                },
+                Err(template_error) => {
+                    log::warn!("使用模板失败，降级为硬编码提示词: {}", template_error);
+                    
+                    // 降级为原有的硬编码逻辑
+                    let mut prompt = format!(
+                        "请评审以下代码变更，重点关注代码质量、安全性、性能等方面：\n\n代码变更：\n{}",
+                        context.diff
+                    );
+                    
+                    // 添加结构分析信息
+                    if context.structural_info.is_some() {
+                        prompt.push_str(&format!("\n\n{}", tree_sitter_info));
+                    }
+                    
+                    if context.has_issues() {
+                        prompt.push_str(&format!("\n\n相关Issue信息：\n{}", context.issue_context()));
+                    }
+                    
+                    if context.options.deviation_analysis && context.has_issues() {
+                        prompt.push_str("\n\n请特别分析以下方面：\n");
+                        prompt.push_str("1. 代码变更是否完全解决了Issue中描述的问题？\n");
+                        prompt.push_str("2. 是否存在偏离需求的情况？\n");
+                        prompt.push_str("3. 代码实现是否符合Issue的优先级和重要性？\n");
+                        prompt.push_str("4. 是否引入了与Issue无关的代码变更？\n");
+                        prompt.push_str("5. 代码质量是否满足生产环境要求？\n");
+                        prompt.push_str("\n请提供偏离度分析报告，包括符合度和改进建议。");
+                    }
+                    
+                    match crate::ai::call_ai(&context.config, &prompt).await {
+                        Ok(result) => Ok(result),
+                        Err(e) => Err(format!("AI服务错误: {}", e).into()),
+                    }
                 }
             }
+        }
+        
+        #[cfg(not(feature = "ai"))]
+        {
+            // 在未启用 AI 时返回基于静态信息的评审摘要
+            let mut summary = String::new();
+            summary.push_str("[AI未启用] 基于静态信息的代码评审摘要\n\n");
+            summary.push_str("结构分析信息:\n");
+            summary.push_str(&tree_sitter_info);
+            summary.push_str("\n\n安全扫描结果:\n");
+            summary.push_str(&security_scan_results);
+            if !devops_issue_context.is_empty() {
+                summary.push_str("\n\n相关Issue信息:\n");
+                summary.push_str(&devops_issue_context);
+            }
+            Ok(summary)
         }
     }
     
     /// 分析安全问题
     async fn analyze_security(context: &OperationContext) -> Result<Vec<SecurityFinding>, Box<dyn std::error::Error + Send + Sync>> {
-        let current_dir = std::env::current_dir()?;
-        match crate::scan::run_opengrep_scan(&context.config, &current_dir, None, None, false) {
-            Ok(result) => {
-                let findings: Vec<SecurityFinding> = result.findings.into_iter().map(|f| SecurityFinding {
-                    title: f.title,
-                    file_path: f.file_path.display().to_string(),
-                    line: f.line,
-                    severity: format!("{:?}", f.severity),
-                    rule_id: f.rule_id,
-                    code_snippet: f.code_snippet,
-                }).collect();
-                Ok(findings)
+        #[cfg(feature = "security")]
+        {
+            let current_dir = std::env::current_dir()?;
+            match crate::scan::run_opengrep_scan(&context.config, &current_dir, None, None, false) {
+                Ok(result) => {
+                    let findings: Vec<SecurityFinding> = result.findings.into_iter().map(|f| SecurityFinding {
+                        title: f.title,
+                        file_path: f.file_path.display().to_string(),
+                        line: f.line,
+                        severity: format!("{:?}", f.severity),
+                        rule_id: f.rule_id,
+                        code_snippet: f.code_snippet,
+                    }).collect();
+                    Ok(findings)
+                }
+                Err(e) => {
+                    eprintln!("⚠️ 安全扫描失败: {}", e);
+                    Ok(Vec::new())
+                }
             }
-            Err(e) => {
-                eprintln!("⚠️ 安全扫描失败: {}", e);
-                Ok(Vec::new())
-            }
+        }
+        
+        #[cfg(not(feature = "security"))]
+        {
+            log::debug!("Security scan feature is not enabled");
+            Ok(Vec::new())
         }
     }
     
@@ -336,20 +364,36 @@ impl Analyzer {
             context.diff
         );
         
-        match crate::ai::call_ai(&context.config, &prompt).await {
-            Ok(ai_response) => {
-                // 简化的解析逻辑 - 实际应该更robust
-                let requirement_coverage = extract_score(&ai_response, "需求覆盖率").unwrap_or(0.8);
-                let quality_score = extract_score(&ai_response, "质量评分").unwrap_or(0.7);
-                
-                Ok(DeviationAnalysis {
-                    requirement_coverage,
-                    quality_score,
-                    deviations: vec![],
-                    suggestions: vec![ai_response.to_string()],
-                })
-            },
-            Err(e) => Err(format!("AI服务错误: {}", e).into()),
+        #[cfg(feature = "ai")]
+        {
+            match crate::ai::call_ai(&context.config, &prompt).await {
+                Ok(ai_response) => {
+                    // 简化的解析逻辑 - 实际应该更robust
+                    let requirement_coverage = extract_score(&ai_response, "需求覆盖率").unwrap_or(0.8);
+                    let quality_score = extract_score(&ai_response, "质量评分").unwrap_or(0.7);
+                    
+                    Ok(DeviationAnalysis {
+                        requirement_coverage,
+                        quality_score,
+                        deviations: vec![],
+                        suggestions: vec![ai_response.to_string()],
+                    })
+                },
+                Err(e) => Err(format!("AI服务错误: {}", e).into()),
+            }
+        }
+        
+        #[cfg(not(feature = "ai"))]
+        {
+            // 在未启用 AI 时返回一个保守的默认偏离度分析
+            Ok(DeviationAnalysis {
+                requirement_coverage: 0.7,
+                quality_score: 0.7,
+                deviations: vec![],
+                suggestions: vec![
+                    "AI未启用：返回默认偏离度分析。请启用 ai 功能以获得更准确结果。".to_string(),
+                ],
+            })
         }
     }
 }
