@@ -159,6 +159,9 @@ pub async fn export_summary_string(
     comm_alg: &str,
     max_communities: usize,
     max_nodes_per_community: usize,
+    with_paths: bool,
+    path_samples: usize,
+    path_max_hops: usize,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut graph = build_global_dependency_graph(scan_dir).await?;
 
@@ -326,6 +329,43 @@ pub async fn export_summary_string(
         }
     }
 
+    // 可选：路径采样（v2）
+    let mut path_examples_out: Vec<Vec<String>> = Vec::new();
+    if with_paths && path_samples > 0 {
+        // 构建 Calls-only 邻接（限制在 kept 子图内）
+        let mut forward: HashMap<String, Vec<String>> = HashMap::new();
+        for e in &graph.edges {
+            if let crate::architectural_impact::dependency_graph::EdgeType::Calls = e.edge_type {
+                if kept.contains(&e.from) && kept.contains(&e.to) {
+                    forward.entry(e.from.clone()).or_default().push(e.to.clone());
+                }
+            }
+        }
+        // 从函数类型的种子出发采样
+        let mut total = 0usize;
+        for sid in &seed_ids {
+            if total >= path_samples { break; }
+            if let Some(node) = graph.nodes.get(sid) {
+                if let NodeType::Function(_) = node.node_type {
+                    let samples = sample_paths_from(&graph, &forward, sid, path_max_hops, path_samples - total);
+                    for path_ids in samples {
+                        let labels: Vec<String> = path_ids.iter().filter_map(|nid| graph.nodes.get(nid).map(|n| match &n.node_type {
+                            NodeType::Function(f) => format!("fn {}()", f.name),
+                            NodeType::Class(c) => format!("class {}", c.name),
+                            NodeType::Module(m) => format!("mod {}", m.name),
+                            NodeType::File(f) => format!("file {}", f.path),
+                        })).collect();
+                        if !labels.is_empty() {
+                            path_examples_out.push(labels);
+                            total += 1;
+                            if total >= path_samples { break; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if format == "json" {
         #[derive(serde::Serialize)]
         struct Summary<'a> {
@@ -339,6 +379,8 @@ pub async fn export_summary_string(
             communities: Option<Vec<CommunitySummaryOut>>,
             #[serde(skip_serializing_if = "Option::is_none")]
             community_edges: Option<Vec<CommunityEdgeOut>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            path_examples: Option<Vec<Vec<String>>>,
         }
         #[derive(serde::Serialize)]
         struct CommunitySummaryOut {
@@ -395,6 +437,7 @@ pub async fn export_summary_string(
             truncated: false,
             communities: comm_json,
             community_edges: edges_json,
+            path_examples: if with_paths { Some(path_examples_out.clone()) } else { None },
         };
         return Ok(serde_json::to_string_pretty(&s)?);
     }
@@ -438,7 +481,54 @@ pub async fn export_summary_string(
         }
     }
 
+    if with_paths && !path_examples_out.is_empty() {
+        out.push_str("\n🛤️  path examples (Calls, sampled):\n");
+        for (i, path) in path_examples_out.iter().enumerate().take(10) {
+            out.push_str(&format!("  P{:02}: {}\n", i + 1, path.join(" -> ")));
+        }
+    }
+
     Ok(out)
+}
+
+fn sample_paths_from(
+    _graph: &DependencyGraph,
+    forward: &HashMap<String, Vec<String>>,
+    start: &str,
+    max_hops: usize,
+    limit: usize,
+) -> Vec<Vec<String>> {
+    let mut results: Vec<Vec<String>> = Vec::new();
+    let mut stack: Vec<(String, Vec<String>)> = vec![(start.to_string(), vec![start.to_string()])];
+    while let Some((node_id, path)) = stack.pop() {
+        if results.len() >= limit { break; }
+        if path.len() - 1 >= max_hops {
+            results.push(path.clone());
+            continue;
+        }
+        if let Some(neigh) = forward.get(&node_id) {
+            let mut extended = false;
+            for nxt in neigh.iter() {
+                if !path.contains(nxt) {
+                    let mut np = path.clone();
+                    np.push(nxt.clone());
+                    stack.push((nxt.clone(), np));
+                    extended = true;
+                }
+            }
+            if !extended {
+                results.push(path.clone());
+            }
+        } else {
+            results.push(path.clone());
+        }
+    }
+    // 去重（按路径字符串）
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    results.retain(|p| seen.insert(p.join("->")));
+    results.truncate(limit);
+    results
 }
 
 /// Label Propagation 社区检测（无权重简化版）

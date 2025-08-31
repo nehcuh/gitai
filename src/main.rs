@@ -284,6 +284,9 @@ async fn main() -> Result<()> {
             comm_alg,
             max_communities,
             max_nodes_per_community,
+            with_paths,
+            path_samples,
+            path_max_hops,
         } => {
             if summary {
                 handle_graph_summary(
@@ -297,6 +300,9 @@ async fn main() -> Result<()> {
                     &comm_alg,
                     max_communities,
                     max_nodes_per_community,
+                    with_paths,
+                    path_samples,
+                    path_max_hops,
                     output.as_ref(),
                 )
                 .await?;
@@ -339,6 +345,9 @@ async fn handle_graph_summary(
     comm_alg: &str,
     max_communities: usize,
     max_nodes_per_community: usize,
+    with_paths: bool,
+    path_samples: usize,
+    path_max_hops: usize,
     output: Option<&std::path::PathBuf>,
 ) -> Result<()> {
     use gitai::architectural_impact::graph_export::export_summary_string;
@@ -353,6 +362,9 @@ async fn handle_graph_summary(
         comm_alg,
         max_communities,
         max_nodes_per_community,
+        with_paths,
+        path_samples,
+        path_max_hops,
     )
     .await?;
     if let Some(out) = output {

@@ -226,6 +226,15 @@ pub enum Command {
         /// 每个社区展示的节点上限
         #[arg(long, default_value_t = 10)]
         max_nodes_per_community: usize,
+        /// 启用路径采样（v2）
+        #[arg(long)]
+        with_paths: bool,
+        /// 路径样本数量（总数）
+        #[arg(long, default_value_t = 5)]
+        path_samples: usize,
+        /// 单条路径最大跳数（调用链长度上限）
+        #[arg(long, default_value_t = 5)]
+        path_max_hops: usize,
     },
     /// 显示本构建启用的功能
     Features {
