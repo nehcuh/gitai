@@ -154,7 +154,7 @@ pub async fn export_summary_string(
     top_k: usize,
     seeds_from_diff: bool,
     format: &str,
-    _budget_tokens: usize,
+    budget_tokens: usize,
     with_communities: bool,
     comm_alg: &str,
     max_communities: usize,
@@ -366,6 +366,95 @@ pub async fn export_summary_string(
         }
     }
 
+    // v3: 预算自适应裁剪（粗粒度估算与降级）
+    let mut truncated = false;
+    if budget_tokens > 0 {
+        // 估算字符预算（粗略按 1 token ≈ 4 chars，最低 2000 字）
+        let char_budget: usize = budget_tokens.saturating_mul(4).max(2000);
+        let mut reduced_radius = false;
+
+        // 当前可变视图
+        let mut radius_eff = radius;
+        let mut kept_set = kept;
+        let mut top_vec = top;
+        let mut comm_out = communities_out;
+        let mut comm_edges = comm_edges_out;
+        let mut path_out = path_examples_out;
+        let mut seeds_prev = seeds_preview;
+
+        for _ in 0..8 {
+            // 估算开销（非常粗略）
+            let path_items: usize = path_out.iter().map(|p| p.len()).sum();
+            let estimated: usize = 400
+                + seeds_prev.len() * 40
+                + top_vec.len() * 60
+                + kept_set.len() * 8
+                + comm_out.len() * 80
+                + comm_edges.len() * 50
+                + path_items * 30;
+
+            if estimated <= char_budget { break; }
+            // 依次降级：radius→top_k→communities→paths→seeds
+            if !reduced_radius && radius_eff > 1 {
+                radius_eff = 1;
+                // 重新计算 kept 与 top（受半径影响）
+                let mut new_kept: std::collections::HashSet<String> = std::collections::HashSet::new();
+                let mut q: std::collections::VecDeque<(String, usize)> = std::collections::VecDeque::new();
+                for sid in &seed_ids {
+                    new_kept.insert(sid.clone());
+                    q.push_back((sid.clone(), 0));
+                }
+                while let Some((nid, d)) = q.pop_front() {
+                    if d >= radius_eff { continue; }
+                    for dep in graph.get_dependencies(&nid) {
+                        if new_kept.insert((*dep).clone()) { q.push_back(((*dep).clone(), d + 1)); }
+                    }
+                    for dep in graph.get_dependents(&nid) {
+                        if new_kept.insert((*dep).clone()) { q.push_back(((*dep).clone(), d + 1)); }
+                    }
+                }
+                kept_set = new_kept;
+                // 重新计算 top
+                let mut t: Vec<(String, f32)> = kept_set
+                    .iter()
+                    .filter_map(|id| graph.nodes.get(id).map(|n| (id.clone(), n.importance_score)))
+                    .collect();
+                t.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                if t.len() > top_vec.len() { /* 保持不扩增 */ }
+                top_vec = t;
+                reduced_radius = true;
+                truncated = true;
+                continue;
+            } else if top_vec.len() > 150 {
+                top_vec.truncate(150);
+                truncated = true;
+                continue;
+            } else if comm_out.len() > 5 {
+                comm_out.truncate(5);
+                truncated = true;
+                continue;
+            } else if path_out.len() > 3 {
+                path_out.truncate(3);
+                truncated = true;
+                continue;
+            } else if seeds_prev.len() > 10 {
+                seeds_prev.truncate(10);
+                truncated = true;
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        // 用降级后的数据覆盖原数据
+        kept = kept_set;
+        top = top_vec;
+        communities_out = comm_out;
+        comm_edges_out = comm_edges;
+        path_examples_out = path_out;
+        seeds_preview = seeds_prev;
+    }
+
     if format == "json" {
         #[derive(serde::Serialize)]
         struct Summary<'a> {
@@ -434,7 +523,7 @@ pub async fn export_summary_string(
             top_nodes: top_out,
             kept_nodes: kept.len(),
             radius,
-            truncated: false,
+            truncated,
             communities: comm_json,
             community_edges: edges_json,
             path_examples: if with_paths { Some(path_examples_out.clone()) } else { None },
