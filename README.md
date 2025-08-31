@@ -113,6 +113,13 @@ cargo build --release --features full
     - `gitai graph --summary --community --with-paths \
         --seeds-from-diff --path-samples=5 --path-max-hops=5 \
         --summary-format=json > graph_summary_paths.json`
+- **预算自适应（v3）**：在给定 token 预算下自动裁剪摘要（radius→top_k→communities→paths→seeds）
+  - 选项：`--budget-tokens=3000`（默认 3000；粗略按 1 token ≈ 4 字符）
+  - 示例（强制收缩以满足预算）：
+    - `gitai graph --summary --community --with-paths \
+        --radius=2 --top-k=300 --budget-tokens=1500 \
+        --summary-format=json > graph_summary_budget.json`
+  - JSON 输出将包含 `truncated: true` 表示发生了自动降级
 
 ### 🛡️ 代码安全扫描 (`gitai scan`)
 - **高性能扫描**：集成OpenGrep引擎，支持30+种编程语言的安全规则

@@ -64,11 +64,13 @@
 
 ## 预算自适应
 服务端在响应前估算字符串/token 大小，若超预算则按序降级：
-1) r: 2 → 1
-2) top_k: 300 → 200 → 150
-3) communities: Top-10 → Top-5
-4) path_samples & path_max_hops 缩减
+1) r: 2 → 1（重新计算 kept/top）
+2) top_k: 300 → 200 → 150（截断）
+3) communities: Top-10 → Top-5（截断）
+4) path_samples（截断；当前实现不缩减 path_max_hops）
 5) seeds 输出截断（保留计数）
+
+说明：当发生任何一次降级时，响应中的 `truncated` 字段为 true。
 
 ## 错误与诊断
 - invalid_filter / budget_too_small / radius_too_large / no_seeds

@@ -59,14 +59,15 @@
 - v2（路径样例版）✅ 已完成
   - 加入路径样例（N<=10, L<=5）的代表性输出（Calls-only），字段 path_examples
   - 验收：路径样例对定位影响范围的帮助显著（通过人工评估/用例）
-- v3（预算自适应）
-  - 动态裁剪策略，自动满足给定预算
+- v3（预算自适应）✅ 已完成（初版）
+  - 动态裁剪策略，自动满足给定预算（radius→top_k→communities→paths→seeds）
   - 验收：在 1k/2k/3k 三档预算下均不超限且信息质量可接受
 
-## 7. 实现要点（v1/v2 摘要）
+## 7. 实现要点（v1/v2/v3 摘要）
 - v1 社区压缩：Label Propagation（确定性打散顺序），输出社区规模与样本，跨社区边聚合（有向，计数与权重和）
 - v2 路径采样：在 kept 子图上构建 Calls-only 邻接，函数种子出发 DFS 采样，限制样本数与最大跳数
-- JSON 字段：communities、community_edges、path_examples（详见 docs/api/MCP_GRAPH_SUMMARY.md）
+- v3 预算自适应：基于粗粒度大小估算，按序降级（radius→top_k→communities→paths→seeds），设置 truncated=true
+- JSON 字段：communities、community_edges、path_examples、truncated（详见 docs/api/MCP_GRAPH_SUMMARY.md）
 
 ## 8. 测试与评估
 - 规模数据集（小/中/大）覆盖测试
