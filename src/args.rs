@@ -196,6 +196,36 @@ pub enum Command {
         /// 关键节点高亮阈值（0-1）
         #[arg(long, default_value_t = 0.15)]
         threshold: f32,
+        /// 生成摘要（LLM 友好）而不是完整 DOT 图
+        #[arg(long)]
+        summary: bool,
+        /// 摘要半径（基于变更种子）
+        #[arg(long, default_value_t = 1)]
+        radius: usize,
+        /// Top-K 重要节点上限
+        #[arg(long, default_value_t = 200)]
+        top_k: usize,
+        /// 从 git diff 推导变更种子
+        #[arg(long)]
+        seeds_from_diff: bool,
+        /// 摘要输出格式（text|json）
+        #[arg(long, default_value = "text")]
+        summary_format: String,
+        /// 预算 token（用于自适应裁剪，v0 仅提示，不强制）
+        #[arg(long, default_value_t = 3000)]
+        budget_tokens: usize,
+        /// 启用社区压缩（v1）
+        #[arg(long)]
+        community: bool,
+        /// 社区检测算法（labelprop|auto）（暂仅支持 labelprop）
+        #[arg(long, default_value = "labelprop")]
+        comm_alg: String,
+        /// 社区数量上限（输出展示）
+        #[arg(long, default_value_t = 50)]
+        max_communities: usize,
+        /// 每个社区展示的节点上限
+        #[arg(long, default_value_t = 10)]
+        max_nodes_per_community: usize,
     },
     /// 显示本构建启用的功能
     Features {

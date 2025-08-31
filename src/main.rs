@@ -274,8 +274,35 @@ async fn main() -> Result<()> {
             path,
             output,
             threshold,
+            summary,
+            radius,
+            top_k,
+            seeds_from_diff,
+            summary_format,
+            budget_tokens,
+            community,
+            comm_alg,
+            max_communities,
+            max_nodes_per_community,
         } => {
-            handle_graph_export(&path, output.as_ref(), threshold).await?;
+            if summary {
+                handle_graph_summary(
+                    &path,
+                    radius,
+                    top_k,
+                    seeds_from_diff,
+                    &summary_format,
+                    budget_tokens,
+                    community,
+                    &comm_alg,
+                    max_communities,
+                    max_nodes_per_community,
+                    output.as_ref(),
+                )
+                .await?;
+            } else {
+                handle_graph_export(&path, output.as_ref(), threshold).await?;
+            }
         }
         Command::Features { format } => {
             features::display_features(&format);
@@ -297,6 +324,42 @@ async fn handle_graph_export(
         println!("📁 依赖图已导出: {}", out.display());
     } else {
         println!("{dot}");
+    }
+    Ok(())
+}
+
+async fn handle_graph_summary(
+    path: &std::path::Path,
+    radius: usize,
+    top_k: usize,
+    seeds_from_diff: bool,
+    format: &str,
+    budget_tokens: usize,
+    community: bool,
+    comm_alg: &str,
+    max_communities: usize,
+    max_nodes_per_community: usize,
+    output: Option<&std::path::PathBuf>,
+) -> Result<()> {
+    use gitai::architectural_impact::graph_export::export_summary_string;
+    let summary = export_summary_string(
+        path,
+        radius,
+        top_k,
+        seeds_from_diff,
+        format,
+        budget_tokens,
+        community,
+        comm_alg,
+        max_communities,
+        max_nodes_per_community,
+    )
+    .await?;
+    if let Some(out) = output {
+        std::fs::write(out, &summary)?;
+        println!("📁 图摘要已导出: {}", out.display());
+    } else {
+        println!("{summary}");
     }
     Ok(())
 }

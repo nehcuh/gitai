@@ -817,6 +817,7 @@ dependencies = [
  "lru",
  "md5",
  "parking_lot",
+ "rand",
  "reqwest",
  "rmcp",
  "serde",
