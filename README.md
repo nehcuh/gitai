@@ -107,6 +107,12 @@ cargo build --release --features full
 - **社区压缩（v1）**：启用社区检测与模块级压缩，便于在有限token内表达结构
   - 选项：`--community [--comm-alg=labelprop] [--max-communities=50] [--max-nodes-per-community=10]`
   - 示例：`gitai graph --summary --community --summary-format=json > graph_summary.json`
+- **路径采样（v2）**：输出少量代表性的调用链路径样例（Calls-only），帮助理解影响范围
+  - 选项：`--with-paths [--path-samples=5] [--path-max-hops=5]`
+  - 示例（变更驱动 + 社区压缩 + 路径样例）：
+    - `gitai graph --summary --community --with-paths \
+        --seeds-from-diff --path-samples=5 --path-max-hops=5 \
+        --summary-format=json > graph_summary_paths.json`
 
 ### 🛡️ 代码安全扫描 (`gitai scan`)
 - **高性能扫描**：集成OpenGrep引擎，支持30+种编程语言的安全规则

@@ -49,21 +49,26 @@
 - 边/弱连接阈值：忽略权重与频次较低的连接
 
 ## 6. 里程碑与验收
-- v0（基础版）
+- v0（基础版）✅ 已完成
   - 半径+TopK 诱导子图；graph_stats/top_nodes/seeds_preview
   - CLI: gitai graph --seeds-from-diff --radius 1 --top-k 200 --budget-tokens 3000
   - 验收：在 3k tokens 预算下输出不超限，且能覆盖主要变更上下文
-- v1（社区版）
-  - 加入社区压缩与跨社区边计数；communities/cross_edges_summary
+- v1（社区版）✅ 已完成
+  - 加入社区压缩与跨社区边计数；communities/community_edges（cross_edges_summary 合并为 community_edges）
   - 验收：大型仓库社区级摘要不超 3k tokens
-- v2（路径样例版）
-  - 加入路径样例（N<=10, L<=5）的代表性输出
+- v2（路径样例版）✅ 已完成
+  - 加入路径样例（N<=10, L<=5）的代表性输出（Calls-only），字段 path_examples
   - 验收：路径样例对定位影响范围的帮助显著（通过人工评估/用例）
 - v3（预算自适应）
   - 动态裁剪策略，自动满足给定预算
   - 验收：在 1k/2k/3k 三档预算下均不超限且信息质量可接受
 
-## 7. 测试与评估
+## 7. 实现要点（v1/v2 摘要）
+- v1 社区压缩：Label Propagation（确定性打散顺序），输出社区规模与样本，跨社区边聚合（有向，计数与权重和）
+- v2 路径采样：在 kept 子图上构建 Calls-only 邻接，函数种子出发 DFS 采样，限制样本数与最大跳数
+- JSON 字段：communities、community_edges、path_examples（详见 docs/api/MCP_GRAPH_SUMMARY.md）
+
+## 8. 测试与评估
 - 规模数据集（小/中/大）覆盖测试
 - 质量评估：覆盖率（seeds 邻域）、代表性（TopNodes/Communities）、可读性（长度/结构）
 - 性能评估：构建时间、裁剪时间、缓存命中率

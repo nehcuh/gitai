@@ -18,17 +18,42 @@
 - language_filters: [string]（可选）
 - format: enum { summary, json, dot }（default: summary）
 
-响应（summary 格式，示例字段）：
-- graph_stats: { nodes, edges, avg_degree, components }
-- seeds_preview: [{ id, label, module }...]（限量）
-- top_nodes: [{ id, label, module, pr_score }...]（Top-10）
-- communities: [{ id, name, size, cross_edges, samples: [node_label...] }...]（Top-10）
-- cross_edges_summary: [{ src_comm, dst_comm, types: { import: n, call: m, write: k } }...]
-- impacted_summary: [{ module/community, size, ratio } ...]
-- path_examples: [[node_label; <= L] ...]（N 条示例）
-- truncated: bool（是否因预算裁剪）
+响应（与当前实现对齐的字段说明）：
+- graph_stats: { node_count, edge_count, avg_degree, cycles_count, critical_nodes_count }
+- seeds_preview: [string...]（节点label，限量）
+- top_nodes: [[node_id, pr_score] ...]（Top-K 子集）
+- kept_nodes: number（摘要诱导子图保留的节点数）
+- radius: number（摘要半径）
+- truncated: bool（是否因预算裁剪；当前实现总是 false）
+- communities?: [{ id: string, size: number, samples: [string...] } ...]（v1）
+- community_edges?: [{ src: string, dst: string, edges: number, weight_sum: number } ...]（v1）
+- path_examples?: [[string...] ...]（v2；每条为节点label序列，Calls-only）
 
-说明：若 format=json，返回上述结构的 JSON；若 format=dot，返回裁剪后的诱导子图 DOT 文本（严格限量）。
+说明：
+- 若 format=json，返回上述结构的 JSON；若 format=dot，返回裁剪后的诱导子图 DOT 文本（严格限量）。
+- 节点 label 取决于类型：fn name() / class Name / mod name / file path。
+
+示例（JSON）：
+```json
+{
+  "graph_stats": {"node_count": 1107, "edge_count": 2813, "avg_degree": 5.08, "cycles_count": 26, "critical_nodes_count": 0},
+  "seeds_preview": ["fn dfs_paths()", "class ProjectInsights"],
+  "top_nodes": [["func:src/..::dfs_paths", 0.0103], ["func:src/..::validate", 0.0089]],
+  "kept_nodes": 116,
+  "radius": 1,
+  "truncated": false,
+  "communities": [
+    {"id": "file:./src/architectural_impact/dependency_graph.rs", "size": 64, "samples": ["fn dfs_cycle_detection()", "fn add_edge()"]}
+  ],
+  "community_edges": [
+    {"src": "file:./src/a.rs", "dst": "file:./src/b.rs", "edges": 12, "weight_sum": 9.5}
+  ],
+  "path_examples": [
+    ["fn start()", "fn parse()", "fn validate()"],
+    ["fn run()", "fn handle()"]
+  ]
+}
+```
 
 ## 子命令（按需下钻）
 - get_node_details(node_id) → 基本信息、度、所在社区、样例引用
