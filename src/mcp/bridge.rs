@@ -190,7 +190,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                             },
                                             {
                                                 "name": "export_dependency_graph",
-                                                "description": "Export global/subtree dependency graph in JSON, DOT, SVG or Mermaid format",
+                                                "description": "Export global/subtree dependency graph in JSON, DOT, SVG or Mermaid format. Warning: output may be very large; prefer summarize_graph (budget-adaptive) and only use full export when necessary.",
                                                 "inputSchema": {
                                                     "type": "object",
                                                     "properties": {
@@ -214,6 +214,29 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                         "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Max number of paths to return, default 20"}
                                                     },
                                                     "required": ["path", "start"]
+                                                }
+                                            },
+                                            {
+                                                "name": "summarize_graph",
+                                                "description": "Summarize dependency graph with optional community compression and budget-adaptive pruning",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "radius": {"type": "integer", "minimum": 1, "description": "Neighborhood radius from seeds (default 1)"},
+                                                        "top_k": {"type": "integer", "minimum": 1, "description": "Max top nodes to include (default 200)"},
+                                                        "seeds_from_diff": {"type": "boolean", "description": "Derive seeds from git diff (default false)"},
+                                                        "format": {"type": "string", "enum": ["json", "text"], "description": "Output format (default json)"},
+                                                        "budget_tokens": {"type": "integer", "minimum": 0, "description": "Token budget for adaptive pruning (default 3000)"},
+                                                        "community": {"type": "boolean", "description": "Enable community compression (v1)"},
+                                                        "comm_alg": {"type": "string", "enum": ["labelprop"], "description": "Community detection algorithm (default labelprop)"},
+                                                        "max_communities": {"type": "integer", "minimum": 1, "description": "Max number of communities (default 50)"},
+                                                        "max_nodes_per_community": {"type": "integer", "minimum": 1, "description": "Max nodes per community to sample (default 10)"},
+                                                        "with_paths": {"type": "boolean", "description": "Include path samples (v2)"},
+                                                        "path_samples": {"type": "integer", "minimum": 0, "description": "Total number of path samples (default 5)"},
+                                                        "path_max_hops": {"type": "integer", "minimum": 1, "description": "Max hops per path (default 5)"}
+                                                    },
+                                                    "required": ["path"]
                                                 }
                                             }
                                         ]

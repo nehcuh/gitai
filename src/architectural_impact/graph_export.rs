@@ -369,8 +369,12 @@ pub async fn export_summary_string(
     // v3: 预算自适应裁剪（粗粒度估算与降级）
     let mut truncated = false;
     if budget_tokens > 0 {
-        // 估算字符预算（粗略按 1 token ≈ 4 chars，最低 2000 字）
-        let char_budget: usize = budget_tokens.saturating_mul(4).max(2000);
+        // 估算字符预算（粗略按 1 token ≈ 4 chars，最低 2000 字；可用环境变量覆盖以便测试）
+        let min_char_budget: usize = std::env::var("GITAI_GRAPH_SUMMARY_MIN_CHAR_BUDGET")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(2000);
+        let char_budget: usize = budget_tokens.saturating_mul(4).max(min_char_budget);
         let mut reduced_radius = false;
 
         // 当前可变视图
@@ -378,7 +382,7 @@ pub async fn export_summary_string(
         let mut kept_set = kept;
         let mut top_vec = top;
         let mut comm_out = communities_out;
-        let mut comm_edges = comm_edges_out;
+        let comm_edges = comm_edges_out;
         let mut path_out = path_examples_out;
         let mut seeds_prev = seeds_preview;
 
