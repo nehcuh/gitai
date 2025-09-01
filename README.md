@@ -27,13 +27,48 @@ GitAI 是一组AI驱动的Git辅助工具，专注于在开发过程中提供即
 
 > **版本状态**：v1.0.0 稳定版已发布！所有核心功能完全可用，包括完整的 MCP 集成、代码评审、智能提交、安全扫描等。
 
+## 🎯 功能门控（新功能）
+
+GitAI 现在支持**功能门控**，允许您根据需求定制构建，优化二进制文件大小：
+
+- **最小构建** (10MB)：仅核心功能，适合轻量级使用
+- **默认构建** (12MB)：包含 AI + 常用语言支持
+- **完整构建** (22MB)：所有功能和语言支持
+
+```bash
+# 构建最小版本
+cargo build --release --no-default-features --features minimal
+
+# 构建特定语言支持
+cargo build --release --no-default-features --features tree-sitter-rust
+
+# 构建完整版本
+cargo build --release --features full
+```
+
+详细说明请参考 [功能门控指南](docs/FEATURE_FLAGS.md)。
+
 ## 📚 文档导航
 
-- **本README** - 完整的功能介绍和使用指南
-- **docs/ARCHITECTURE.md** - 技术架构和设计理念
-- **docs/REGRESSION.md** - 回归测试手册
+- 本README - 完整的功能介绍和使用指南
+- [docs/README.md](docs/README.md) - 中文文档索引
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - 技术架构和设计理念
+- [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md) - 功能门控使用指南
+- [docs/dependency-analysis-in-review.md](docs/dependency-analysis-in-review.md) - 依赖分析与 PageRank 在评审中的应用
+- [docs/REVIEW_WORKFLOW.md](docs/REVIEW_WORKFLOW.md) - 基于场景的评审工作流与流程图
+- [docs/REGRESSION.md](docs/REGRESSION.md) - 回归测试手册
 
 快速开始请参考下方章节。
+
+## 🧰 开发工具
+
+- tools/build-variants.sh — 构建不同功能门控变体的便捷脚本
+- tools/test-features.sh — 批量测试不同 feature 组合的脚本
+- tools/migrate_types.sh — 类型迁移/批处理脚本（按需使用）
+
+使用建议：
+- 执行前请阅读脚本头部说明
+- 可在本地或 CI 中调用，配合功能门控进行快速验证
 
 ## ✨ 核心功能
 
@@ -62,6 +97,29 @@ GitAI 是一组AI驱动的Git辅助工具，专注于在开发过程中提供即
 - **偏离度分析**：评估代码实现是否解决了指定Issue，提供覆盖率分析
 - **平台支持**：支持Coding.net、GitHub等DevOps平台的Issue集成
 - **规范化提交**：自动生成符合团队规范的提交信息格式
+
+### 📈 依赖图导出与图摘要 (`gitai graph`)
+- **导出DOT**：生成可视化用的 Graphviz DOT 文件
+  - 示例：`gitai graph --path=. --output=dependency_graph.dot --threshold=0.15`
+- **图摘要（LLM友好）**：按变更种子与半径裁剪、输出 Top-K 重要节点
+  - 示例：`gitai graph --summary --radius=1 --top-k=200 --seeds-from-diff`
+  - 输出格式：`--summary-format text|json`
+- **社区压缩（v1）**：启用社区检测与模块级压缩，便于在有限token内表达结构
+  - 选项：`--community [--comm-alg=labelprop] [--max-communities=50] [--max-nodes-per-community=10]`
+  - 示例：`gitai graph --summary --community --summary-format=json > graph_summary.json`
+- **路径采样（v2）**：输出少量代表性的调用链路径样例（Calls-only），帮助理解影响范围
+  - 选项：`--with-paths [--path-samples=5] [--path-max-hops=5]`
+  - 示例（变更驱动 + 社区压缩 + 路径样例）：
+    - `gitai graph --summary --community --with-paths \
+        --seeds-from-diff --path-samples=5 --path-max-hops=5 \
+        --summary-format=json > graph_summary_paths.json`
+- **预算自适应（v3）**：在给定 token 预算下自动裁剪摘要（radius→top_k→communities→paths→seeds）
+  - 选项：`--budget-tokens=3000`（默认 3000；粗略按 1 token ≈ 4 字符）
+  - 示例（强制收缩以满足预算）：
+    - `gitai graph --summary --community --with-paths \
+        --radius=2 --top-k=300 --budget-tokens=1500 \
+        --summary-format=json > graph_summary_budget.json`
+  - JSON 输出将包含 `truncated: true` 表示发生了自动降级
 
 ### 🛡️ 代码安全扫描 (`gitai scan`)
 - **高性能扫描**：集成OpenGrep引擎，支持30+种编程语言的安全规则
@@ -95,6 +153,159 @@ gitai-mcp serve
 > - `execute_commit` - 智能提交  
 > - `execute_scan` - 安全扫描
 > - `execute_analysis` - 代码分析
+
+### 📊 架构质量趋势追踪 (`gitai metrics`)
+- **持续监控**：自动记录每次代码分析的质量指标快照
+- **多维度指标**：追踪技术债务、代码复杂度、API稳定性、架构耦合度等关键指标
+- **趋势分析**：识别质量改善或恶化趋势，及时发现异常
+- **智能预测**：基于历史数据预测未来趋势，提前预警潜在问题
+- **可视化报告**：生成直观的Markdown/HTML报告，包含图表和详细分析
+- **数据导出**：支持CSV/JSON格式导出，便于进一步分析或集成
+
+#### 详细使用指南
+
+##### 1. 记录质量快照 (`metrics record`)
+```bash
+# 记录当前代码库的质量指标快照
+gitai metrics record
+
+# 记录特定路径的质量快照
+gitai metrics record --path=./src
+
+# 添加标签和备注
+gitai metrics record --tag=v1.0.0 --note="发布前的质量基线"
+
+# 强制记录（即使最近已有快照）
+gitai metrics record --force
+```
+
+##### 2. 趋势分析 (`metrics analyze`)
+```bash
+# 分析最近30天的质量趋势
+gitai metrics analyze --days=30
+
+# 分析特定日期范围
+gitai metrics analyze --from=2024-01-01 --to=2024-03-31
+
+# 分析特定指标的趋势
+gitai metrics analyze --metrics=complexity,debt --days=7
+
+# 包含异常检测和预测
+gitai metrics analyze --detect-anomalies --predict-trend
+```
+
+##### 3. 生成报告 (`metrics report`)
+```bash
+# 生成Markdown格式的趋势报告
+gitai metrics report --output=quality-report.md
+
+# 生成HTML格式的可视化报告
+gitai metrics report --format=html --output=report.html
+
+# 生成最近季度的报告
+gitai metrics report --period=quarter --output=q1-report.md
+
+# 包含图表和详细分析
+gitai metrics report --with-charts --verbose --output=detailed-report.md
+```
+
+##### 4. 查看快照列表 (`metrics list`)
+```bash
+# 列出所有质量快照
+gitai metrics list
+
+# 列出最近10个快照
+gitai metrics list --limit=10
+
+# 按日期范围过滤
+gitai metrics list --from=2024-01-01 --to=2024-12-31
+
+# 按标签过滤
+gitai metrics list --tag=release
+
+# 详细模式（显示所有指标）
+gitai metrics list --verbose
+```
+
+##### 5. 比较快照 (`metrics compare`)
+```bash
+# 比较两个快照的差异
+gitai metrics compare --snapshot1=2024-01-01 --snapshot2=2024-02-01
+
+# 比较当前与基线
+gitai metrics compare --baseline=v1.0.0 --current
+
+# 比较并生成差异报告
+gitai metrics compare --id1=abc123 --id2=def456 --output=diff.md
+
+# 只比较特定指标
+gitai metrics compare --metrics=complexity,coverage --id1=latest --id2=previous
+```
+
+##### 6. 清理历史数据 (`metrics clean`)
+```bash
+# 清理30天前的快照
+gitai metrics clean --older-than=30d
+
+# 保留最近100个快照，删除其余
+gitai metrics clean --keep-recent=100
+
+# 清理特定标签的快照
+gitai metrics clean --tag=test --confirm
+
+# 预览将要删除的数据（不实际删除）
+gitai metrics clean --older-than=90d --dry-run
+```
+
+##### 7. 数据导出 (`metrics export`)
+```bash
+# 导出为CSV格式
+gitai metrics export --format=csv --output=metrics.csv
+
+# 导出为JSON格式
+gitai metrics export --format=json --output=metrics.json
+
+# 导出特定时间范围的数据
+gitai metrics export --from=2024-01-01 --to=2024-12-31 --output=yearly.csv
+
+# 导出用于其他工具的格式
+gitai metrics export --format=prometheus --output=metrics.txt
+```
+
+#### 实际应用场景
+
+##### 持续集成中的质量门控
+```yaml
+# GitHub Actions 示例
+- name: Record Quality Metrics
+  run: |
+    gitai metrics record --tag="PR-${{ github.event.number }}"
+    gitai metrics analyze --days=7 --detect-anomalies
+    
+    # 如果质量下降超过阈值，则失败
+    gitai metrics compare --baseline=main --current \
+      --fail-on-regression --threshold=5
+```
+
+##### 定期质量报告
+```bash
+# 每周质量报告（可加入cron）
+#!/bin/bash
+gitai metrics record --tag=weekly
+gitai metrics analyze --days=7 --predict-trend
+gitai metrics report --period=week --output="reports/week-$(date +%Y%W).md"
+gitai metrics export --format=csv --output="data/week-$(date +%Y%W).csv"
+```
+
+##### 版本发布质量基线
+```bash
+# 发布前记录基线
+gitai metrics record --tag="release-v2.0.0" --note="Release candidate baseline"
+
+# 发布后对比
+gitai metrics compare --baseline="release-v1.0.0" --current="release-v2.0.0" \
+  --output=release-comparison.md
+```
 
 ## ⚡ 即时辅助工具的使用方式
 
@@ -190,6 +401,11 @@ gitai --ai status
 # 启动MCP服务器
 gitai mcp --transport stdio
 
+# 质量趋势追踪
+gitai metrics record                 # 记录当前质量快照
+gitai metrics analyze --days=30      # 分析最近30天趋势
+gitai metrics report --output=report.md  # 生成趋势报告
+
 # 获取帮助
 gitai help
 ```
@@ -210,12 +426,44 @@ gitai review --commit1=HEAD~1 --commit2=HEAD
 gitai review --commit1=abc123 --commit2=def456
 ```
 
-#### Tree-sitter 支持（开发中）
+#### Tree-sitter 支持
 ```bash
-# Tree-sitter 标志已添加（功能开发中）
+# 启用 Tree-sitter 进行结构分析（推荐与 --full 一起使用）
 gitai review --tree-sitter
 
-# 注意：当前版本 Tree-sitter 功能尚未完全实现
+# 与安全扫描结合
+gitai review --tree-sitter --security-scan --scan-tool=opengrep
+```
+
+#### 评审模式与典型场景
+- 基础评审（快速检查变更，默认模式）
+  ```bash
+  gitai review
+  ```
+- 全量架构评审（依赖图 + PageRank + 架构影响 + 可选安全扫描）
+  ```bash
+  gitai review --full --tree-sitter --security-scan --scan-tool=opengrep
+  ```
+- 带 DevOps 任务上下文的全量评审
+  ```bash
+  gitai review --full --issue-id="#123,#456"
+  ```
+- DevOps 偏离度分析（专注需求符合度，使用 deviation 模板）
+  ```bash
+  gitai review --deviation-analysis --issue-id="#123"
+  ```
+- CI 严格模式（发现高危问题时降低评分/阻止合并）
+  ```bash
+  gitai review --full --security-scan --block-on-critical
+  ```
+
+#### 评审流程图（简化）
+```mermaid
+flowchart LR
+  A[gitai review] --> B{模式}
+  B -->|基础| C[结构/安全(可选)] --> D[review 模板] --> E[AI/回退] --> F[输出]
+  B -->|--full| G[依赖图 + PageRank + 影响范围] --> H[注入 Dependency Insights] --> E
+  B -->|--deviation-analysis| I[deviation 模板] --> E
 ```
 
 #### Issue 关联（当前支持）
@@ -508,14 +756,14 @@ gitai prompts init
 gitai prompts list
 
 # 查看某个模板内容
-gitai prompts show --name commit-generator
+gitai prompts show --name commit
 
 # 从远程/预置源更新模板（非强制，按需使用）
 gitai prompts update
 
 # 模板目录结构（可手工编辑）
 ~/.config/gitai/prompts/
-├── commit-generator.md      # 提交信息生成模板
+├── commit.md                # 提交信息生成模板
 ├── review.md                # 代码评审模板
 ```
 
@@ -670,11 +918,11 @@ RUST_LOG=debug gitai review
 **Q: 提交信息生成质量不佳**
 ```bash
 # 自定义提示词模板
-cp ~/.config/gitai/prompts/commit-generator.md \
-   ~/.config/gitai/prompts/commit-generator.md.backup
+cp ~/.config/gitai/prompts/commit.md \
+   ~/.config/gitai/prompts/commit.md.backup
 
 # 编辑模板
-vim ~/.config/gitai/prompts/commit-generator.md
+vim ~/.config/gitai/prompts/commit.md
 
 # 测试新模板
 gitai commit --dry-run

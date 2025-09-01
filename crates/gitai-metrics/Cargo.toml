@@ -1,0 +1,41 @@
+[package]
+name = "gitai-metrics"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Quality metrics and reporting for GitAI"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+
+# Core dependencies
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+# Date/time
+chrono = { workspace = true }
+
+# CSV for data export
+csv = { workspace = true }
+
+# File system
+dirs = { workspace = true }
+walkdir = { workspace = true }
+
+# Statistics
+petgraph = { workspace = true }
+
+[features]
+default = ["reporting"]
+reporting = []
+export = []
+visualization = []
+full = ["reporting", "export", "visualization"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

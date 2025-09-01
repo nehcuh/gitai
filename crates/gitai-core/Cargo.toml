@@ -1,0 +1,54 @@
+[package]
+name = "gitai-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core functionality for GitAI"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+
+# Core dependencies
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Logging
+log = { workspace = true }
+tracing = { workspace = true }
+
+# File system
+dirs = { workspace = true }
+walkdir = { workspace = true }
+tempfile = { workspace = true }
+
+# HTTP client (optional for AI features)
+reqwest = { workspace = true, optional = true }
+
+# Caching (optional)
+lru = { workspace = true, optional = true }
+md5 = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+
+# Date/time
+chrono = { workspace = true }
+
+[features]
+default = ["ai", "cache"]
+ai = ["dep:reqwest"]
+cache = ["dep:lru", "dep:md5", "dep:parking_lot"]
+full = ["ai", "cache"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

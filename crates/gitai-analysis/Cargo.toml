@@ -1,0 +1,59 @@
+[package]
+name = "gitai-analysis"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Code analysis engine for GitAI"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+
+# Tree-sitter for code parsing
+tree-sitter = { workspace = true }
+
+# Language-specific parsers (optional)
+tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-java = { workspace = true, optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-javascript = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
+tree-sitter-go = { workspace = true, optional = true }
+tree-sitter-c = { workspace = true, optional = true }
+tree-sitter-cpp = { workspace = true, optional = true }
+
+# Graph algorithms
+petgraph = { workspace = true }
+rayon = { workspace = true }
+
+# Core dependencies
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+parking_lot = { workspace = true }
+
+[features]
+default = ["rust", "python", "javascript"]
+all-languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"]
+
+# Individual language support
+rust = ["tree-sitter-rust"]
+java = ["tree-sitter-java"]
+python = ["tree-sitter-python"]
+javascript = ["tree-sitter-javascript"]
+typescript = ["tree-sitter-typescript"]
+go = ["tree-sitter-go"]
+c = ["tree-sitter-c"]
+cpp = ["tree-sitter-cpp"]
+
+# Analysis features
+dependency-graph = []
+architectural-impact = []
+full = ["all-languages", "dependency-graph", "architectural-impact"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+criterion = { workspace = true }

@@ -1,8 +1,8 @@
-use tree_sitter::{Query, QueryCursor, Tree, Node};
 use crate::tree_sitter::{
-    SupportedLanguage, StructuralSummary, FunctionInfo, ClassInfo, CommentInfo,
-    queries::QueriesManager
+    queries::QueriesManager, ClassInfo, CommentInfo, FunctionInfo, StructuralSummary,
+    SupportedLanguage,
 };
+use tree_sitter::{Node, Query, QueryCursor, Tree};
 
 /// 结构分析器
 pub struct StructureAnalyzer {
@@ -14,7 +14,10 @@ pub struct StructureAnalyzer {
 
 impl StructureAnalyzer {
     /// 创建新的结构分析器
-    pub fn new(language: SupportedLanguage, _queries_manager: &QueriesManager) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(
+        language: SupportedLanguage,
+        _queries_manager: &QueriesManager,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut analyzer = Self {
             language,
             function_query: None,
@@ -24,14 +27,17 @@ impl StructureAnalyzer {
 
         // 尝试创建自定义查询
         analyzer.setup_queries()?;
-        
+
         Ok(analyzer)
     }
 
     /// 设置查询
     fn setup_queries(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let lang = self.language.language();
-        
+        let lang = self
+            .language
+            .language()
+            .ok_or_else(|| format!("Language {:?} is not enabled in this build", self.language))?;
+
         // 根据语言设置不同的查询
         match self.language {
             SupportedLanguage::Java => {
@@ -384,19 +390,23 @@ impl StructureAnalyzer {
                     log::warn!("Failed to load Go comment query");
                 }
             }
-            _ => {
-                // 对于其他语言，使用基本的通用查询
-                log::debug!("Using generic queries for {:?}", self.language);
-            }
         }
 
         Ok(())
     }
 
     /// 分析代码结构
-    pub fn analyze(&self, tree: &Tree, source: &[u8]) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>> {
-        log::debug!("开始分析 {:?} 语言的代码结构，源代码长度: {} 字节", self.language, source.len());
-        
+    pub fn analyze(
+        &self,
+        tree: &Tree,
+        source: &[u8],
+    ) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>> {
+        log::debug!(
+            "开始分析 {:?} 语言的代码结构，源代码长度: {} 字节",
+            self.language,
+            source.len()
+        );
+
         let mut summary = StructuralSummary {
             language: self.language.name().to_string(),
             functions: Vec::new(),
@@ -405,17 +415,23 @@ impl StructureAnalyzer {
             exports: Vec::new(),
             comments: Vec::new(),
             complexity_hints: Vec::new(),
+            calls: Vec::new(),
         };
 
         let root_node = tree.root_node();
-        log::debug!("根节点类型: {}, 子节点数: {}", root_node.kind(), root_node.child_count());
+        log::debug!(
+            "根节点类型: {}, 子节点数: {}",
+            root_node.kind(),
+            root_node.child_count()
+        );
 
         // 分析函数
         if let Some(ref query) = self.function_query {
             log::debug!("开始函数分析");
-            summary.functions = self.extract_functions(query, root_node, source)
+            summary.functions = self
+                .extract_functions(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract functions: {}", e);
+                    log::error!("Failed to extract functions: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个函数", summary.functions.len());
@@ -426,9 +442,10 @@ impl StructureAnalyzer {
         // 分析类
         if let Some(ref query) = self.class_query {
             log::debug!("开始类分析");
-            summary.classes = self.extract_classes(query, root_node, source)
+            summary.classes = self
+                .extract_classes(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract classes: {}", e);
+                    log::error!("Failed to extract classes: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个类/结构体", summary.classes.len());
@@ -439,9 +456,10 @@ impl StructureAnalyzer {
         // 分析注释
         if let Some(ref query) = self.comment_query {
             log::debug!("开始注释分析");
-            summary.comments = self.extract_comments(query, root_node, source)
+            summary.comments = self
+                .extract_comments(query, root_node, source)
                 .map_err(|e| {
-                    log::error!("Failed to extract comments: {}", e);
+                    log::error!("Failed to extract comments: {e}");
                     e
                 })?;
             log::debug!("找到 {} 个注释", summary.comments.len());
@@ -454,20 +472,30 @@ impl StructureAnalyzer {
         summary.complexity_hints = self.calculate_complexity_hints(&summary);
         log::debug!("生成 {} 个复杂度提示", summary.complexity_hints.len());
 
-        log::info!("结构分析完成：{:?} 语言，函数: {}, 类: {}, 注释: {}, 提示: {}", 
-                  self.language, summary.functions.len(), summary.classes.len(), 
-                  summary.comments.len(), summary.complexity_hints.len());
-                  
+        log::info!(
+            "结构分析完成：{:?} 语言，函数: {}, 类: {}, 注释: {}, 提示: {}",
+            self.language,
+            summary.functions.len(),
+            summary.classes.len(),
+            summary.comments.len(),
+            summary.complexity_hints.len()
+        );
+
         Ok(summary)
     }
 
     /// 提取函数信息
-    fn extract_functions(&self, query: &Query, node: Node, source: &[u8]) -> Result<Vec<FunctionInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_functions(
+        &self,
+        query: &Query,
+        node: Node,
+        source: &[u8],
+    ) -> Result<Vec<FunctionInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let mut functions = Vec::new();
         let mut cursor = QueryCursor::new();
-        
+
         let matches = cursor.matches(query, node, source);
-        
+
         for m in matches {
             let mut function = FunctionInfo {
                 name: String::new(),
@@ -482,7 +510,7 @@ impl StructureAnalyzer {
             for capture in m.captures {
                 let captured_node = capture.node;
                 let text = captured_node.utf8_text(source).unwrap_or("").to_string();
-                
+
                 if let Some(capture_name) = query.capture_names().get(capture.index as usize) {
                     match capture_name.as_str() {
                         "function.name" => {
@@ -512,12 +540,17 @@ impl StructureAnalyzer {
     }
 
     /// 提取类信息
-    fn extract_classes(&self, query: &Query, node: Node, source: &[u8]) -> Result<Vec<ClassInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_classes(
+        &self,
+        query: &Query,
+        node: Node,
+        source: &[u8],
+    ) -> Result<Vec<ClassInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let mut classes = Vec::new();
         let mut cursor = QueryCursor::new();
-        
+
         let matches = cursor.matches(query, node, source);
-        
+
         for m in matches {
             let mut class = ClassInfo {
                 name: String::new(),
@@ -533,7 +566,7 @@ impl StructureAnalyzer {
             for capture in m.captures {
                 let captured_node = capture.node;
                 let text = captured_node.utf8_text(source).unwrap_or("").to_string();
-                
+
                 if let Some(capture_name) = query.capture_names().get(capture.index as usize) {
                     match capture_name.as_str() {
                         "class.name" => {
@@ -563,12 +596,17 @@ impl StructureAnalyzer {
     }
 
     /// 提取注释信息
-    fn extract_comments(&self, query: &Query, node: Node, source: &[u8]) -> Result<Vec<CommentInfo>, Box<dyn std::error::Error + Send + Sync>> {
+    fn extract_comments(
+        &self,
+        query: &Query,
+        node: Node,
+        source: &[u8],
+    ) -> Result<Vec<CommentInfo>, Box<dyn std::error::Error + Send + Sync>> {
         let mut comments = Vec::new();
         let mut cursor = QueryCursor::new();
-        
+
         let matches = cursor.matches(query, node, source);
-        
+
         for m in matches {
             for capture in m.captures {
                 let captured_node = capture.node;
@@ -576,7 +614,7 @@ impl StructureAnalyzer {
                     let comment = CommentInfo {
                         text: text.to_string(),
                         line: captured_node.start_position().row + 1,
-                        is_doc_comment: self.is_doc_comment(&text),
+                        is_doc_comment: self.is_doc_comment(text),
                     };
                     comments.push(comment);
                 }
@@ -603,7 +641,9 @@ impl StructureAnalyzer {
             SupportedLanguage::Java => text.starts_with("/**"),
             SupportedLanguage::Rust => text.starts_with("///") || text.starts_with("//!"),
             SupportedLanguage::Python => text.contains("\"\"\"") || text.contains("'''"),
-            SupportedLanguage::JavaScript | SupportedLanguage::TypeScript => text.starts_with("/**"),
+            SupportedLanguage::JavaScript | SupportedLanguage::TypeScript => {
+                text.starts_with("/**")
+            }
             _ => false,
         }
     }
@@ -615,13 +655,13 @@ impl StructureAnalyzer {
         // 函数数量分析
         let func_count = summary.functions.len();
         if func_count > 50 {
-            hints.push(format!("文件包含{}个函数，建议考虑拆分", func_count));
+            hints.push(format!("文件包含{func_count}个函数，建议考虑拆分"));
         }
 
         // 类数量分析
         let class_count = summary.classes.len();
         if class_count > 10 {
-            hints.push(format!("文件包含{}个类，建议考虑模块化", class_count));
+            hints.push(format!("文件包含{class_count}个类，建议考虑模块化"));
         }
 
         // 长函数检测
@@ -635,7 +675,11 @@ impl StructureAnalyzer {
         // 参数过多检测
         for func in &summary.functions {
             if func.parameters.len() > 5 {
-                hints.push(format!("函数{}参数过多({}个)，建议使用对象封装", func.name, func.parameters.len()));
+                hints.push(format!(
+                    "函数{}参数过多({}个)，建议使用对象封装",
+                    func.name,
+                    func.parameters.len()
+                ));
             }
         }
 
@@ -653,19 +697,19 @@ mod tests {
     fn test_parse_parameters() {
         let queries_manager = QueriesManager::new().unwrap();
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
-        
+
         // 测试空参数
         let params = analyzer.parse_parameters("");
         assert_eq!(params, Vec::<String>::new());
-        
+
         // 测试空括号
         let params = analyzer.parse_parameters("()");
         assert_eq!(params, Vec::<String>::new());
-        
+
         // 测试单个参数
         let params = analyzer.parse_parameters("(String name)");
         assert_eq!(params, vec!["String name"]);
-        
+
         // 测试多个参数
         let params = analyzer.parse_parameters("(String name, int age, boolean active)");
         assert_eq!(params, vec!["String name", "int age", "boolean active"]);
@@ -674,31 +718,31 @@ mod tests {
     #[test]
     fn test_is_doc_comment() {
         let queries_manager = QueriesManager::new().unwrap();
-        
+
         // Java
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("/**"), true);
-        assert_eq!(analyzer.is_doc_comment("/*"), false);
-        assert_eq!(analyzer.is_doc_comment("//"), false);
-        
+        assert!(analyzer.is_doc_comment("/**"));
+        assert!(!analyzer.is_doc_comment("/*"));
+        assert!(!analyzer.is_doc_comment("//"));
+
         // Rust
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("///"), true);
-        assert_eq!(analyzer.is_doc_comment("//!"), true);
-        assert_eq!(analyzer.is_doc_comment("//"), false);
-        
+        assert!(analyzer.is_doc_comment("///"));
+        assert!(analyzer.is_doc_comment("//!"));
+        assert!(!analyzer.is_doc_comment("//"));
+
         // Python
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
-        assert_eq!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""), true);
-        assert_eq!(analyzer.is_doc_comment("'''docstring'''"), true);
-        assert_eq!(analyzer.is_doc_comment("# comment"), false);
+        assert!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""));
+        assert!(analyzer.is_doc_comment("'''docstring'''"));
+        assert!(!analyzer.is_doc_comment("# comment"));
     }
 
     #[test]
     fn test_calculate_complexity_hints() {
         let queries_manager = QueriesManager::new().unwrap();
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
-        
+
         // 创建测试用的summary
         let mut summary = StructuralSummary {
             language: "java".to_string(),
@@ -715,8 +759,12 @@ mod tests {
                 FunctionInfo {
                     name: "longFunction".to_string(),
                     parameters: vec![
-                        "param1".to_string(), "param2".to_string(), "param3".to_string(),
-                        "param4".to_string(), "param5".to_string(), "param6".to_string(),
+                        "param1".to_string(),
+                        "param2".to_string(),
+                        "param3".to_string(),
+                        "param4".to_string(),
+                        "param5".to_string(),
+                        "param6".to_string(),
                     ],
                     return_type: Some("void".to_string()),
                     line_start: 20,
@@ -730,12 +778,13 @@ mod tests {
             exports: Vec::new(),
             comments: Vec::new(),
             complexity_hints: Vec::new(),
+            calls: Vec::new(),
         };
-        
+
         // 添加更多的函数以达到数量限制
         for i in 0..60 {
             summary.functions.push(FunctionInfo {
-                name: format!("function{}", i),
+                name: format!("function{i}"),
                 parameters: vec!["param".to_string()],
                 return_type: None,
                 line_start: i * 10,
@@ -744,22 +793,31 @@ mod tests {
                 visibility: None,
             });
         }
-        
+
         let hints = analyzer.calculate_complexity_hints(&summary);
-        
+
         // 验证提示内容
-        assert!(hints.iter().any(|h| h.contains("文件包含") && h.contains("个函数")));
-        assert!(hints.iter().any(|h| h.contains("longFunction") && h.contains("过长")));
-        assert!(hints.iter().any(|h| h.contains("longFunction") && h.contains("参数过多")));
+        assert!(hints
+            .iter()
+            .any(|h| h.contains("文件包含") && h.contains("个函数")));
+        assert!(hints
+            .iter()
+            .any(|h| h.contains("longFunction") && h.contains("过长")));
+        assert!(hints
+            .iter()
+            .any(|h| h.contains("longFunction") && h.contains("参数过多")));
     }
 
     #[tokio::test]
     async fn test_analyzer_creation_all_languages() {
         let queries_manager = QueriesManager::new().unwrap();
-        
+
         for lang in SupportedLanguage::all() {
             let result = StructureAnalyzer::new(lang, &queries_manager);
-            assert!(result.is_ok(), "Should be able to create analyzer for {:?}", lang);
+            assert!(
+                result.is_ok(),
+                "Should be able to create analyzer for {lang:?}"
+            );
         }
     }
 
@@ -767,7 +825,7 @@ mod tests {
     async fn test_analyze_with_real_parser() {
         let queries_manager = QueriesManager::new().unwrap();
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
-        
+
         let java_code = r#"
         public class TestClass {
             private String field;
@@ -781,29 +839,34 @@ mod tests {
             }
         }
         "#;
-        
+
         // 创建解析器并解析代码
         let mut parser = Parser::new();
-        parser.set_language(SupportedLanguage::Java.language()).unwrap();
-        let tree = parser.parse(java_code, None).unwrap();
-        
+        parser
+            .set_language(
+                SupportedLanguage::Java
+                    .language()
+                    .expect("Java language not enabled in this build"),
+            )
+            .expect("Failed to set Java language for parser");
+        let tree = parser
+            .parse(java_code, None)
+            .expect("Failed to parse Java code with tree-sitter");
+
         let result = analyzer.analyze(&tree, java_code.as_bytes());
         assert!(result.is_ok(), "Should successfully analyze Java code");
-        
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "java");
-        
+
         // 基本验证结构摘要不为空
-        assert!(summary.functions.len() >= 0);
-        assert!(summary.classes.len() >= 0);
-        assert!(summary.complexity_hints.len() >= 0);
     }
 
     #[tokio::test]
     async fn test_analyze_c_code() {
         let queries_manager = QueriesManager::new().unwrap();
         let analyzer = StructureAnalyzer::new(SupportedLanguage::C, &queries_manager).unwrap();
-        
+
         let c_code = r#"
         #include <stdio.h>
         
@@ -841,42 +904,61 @@ mod tests {
             return 0;
         }
         "#;
-        
+
         let mut parser = Parser::new();
-        parser.set_language(SupportedLanguage::C.language()).unwrap();
-        let tree = parser.parse(c_code, None).unwrap();
-        
+        parser
+            .set_language(
+                SupportedLanguage::C
+                    .language()
+                    .expect("C language not enabled in this build"),
+            )
+            .expect("Failed to set C language for parser");
+        let tree = parser
+            .parse(c_code, None)
+            .expect("Failed to parse C code with tree-sitter");
+
         let result = analyzer.analyze(&tree, c_code.as_bytes());
-        assert!(result.is_ok(), "Should successfully analyze C code: {:?}", result.err());
-        
+        assert!(
+            result.is_ok(),
+            "Should successfully analyze C code: {:?}",
+            result.err()
+        );
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "c");
-        
+
         println!("C Analysis Results:");
         println!("Functions found: {}", summary.functions.len());
         for func in &summary.functions {
             println!("  - {}: {} params", func.name, func.parameters.len());
         }
-        
+
         println!("Structures found: {}", summary.classes.len());
         for class in &summary.classes {
-            println!("  - {} (lines {}-{})", class.name, class.line_start, class.line_end);
+            println!(
+                "  - {} (lines {}-{})",
+                class.name, class.line_start, class.line_end
+            );
         }
-        
+
         println!("Comments found: {}", summary.comments.len());
-        
+
         // Basic validation - adjusted expectations for Tree-sitter parsing capabilities
         // Note: The actual parsing might find more or fewer structures depending on Tree-sitter grammar
-        assert!(summary.functions.len() >= 1, "Should find at least some functions");
+        assert!(
+            !summary.functions.is_empty(),
+            "Should find at least some functions"
+        );
         // Some parsing issues may prevent finding all structures, so we just ensure it runs
         println!("Test completed successfully - C code was parsed without errors");
     }
 
     #[tokio::test]
     async fn test_analyze_cpp_code() {
-        let queries_manager = QueriesManager::new().unwrap();
-        let analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager).unwrap();
-        
+        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager)
+            .expect("Failed to create StructureAnalyzer for C++");
+
         let cpp_code = r#"
         #include <iostream>
         #include <string>
@@ -941,30 +1023,45 @@ mod tests {
             return 0;
         }
         "#;
-        
+
         let mut parser = Parser::new();
-        parser.set_language(SupportedLanguage::Cpp.language()).unwrap();
-        let tree = parser.parse(cpp_code, None).unwrap();
-        
+        parser
+            .set_language(
+                SupportedLanguage::Cpp
+                    .language()
+                    .expect("C++ language not enabled in this build"),
+            )
+            .expect("Failed to set C++ language for parser");
+        let tree = parser
+            .parse(cpp_code, None)
+            .expect("Failed to parse C++ code with tree-sitter");
+
         let result = analyzer.analyze(&tree, cpp_code.as_bytes());
-        assert!(result.is_ok(), "Should successfully analyze C++ code: {:?}", result.err());
-        
+        assert!(
+            result.is_ok(),
+            "Should successfully analyze C++ code: {:?}",
+            result.err()
+        );
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "cpp");
-        
+
         println!("C++ Analysis Results:");
         println!("Functions found: {}", summary.functions.len());
         for func in &summary.functions {
             println!("  - {}: {} params", func.name, func.parameters.len());
         }
-        
+
         println!("Classes found: {}", summary.classes.len());
         for class in &summary.classes {
-            println!("  - {} (lines {}-{})", class.name, class.line_start, class.line_end);
+            println!(
+                "  - {} (lines {}-{})",
+                class.name, class.line_start, class.line_end
+            );
         }
-        
+
         println!("Comments found: {}", summary.comments.len());
-        
+
         // Basic validation - adjusted expectations
         println!("Test completed successfully - C++ code was parsed without errors");
         // Tree-sitter parsing results may vary, focus on ensuring no errors occurred
@@ -972,9 +1069,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_go_code() {
-        let queries_manager = QueriesManager::new().unwrap();
-        let analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager).unwrap();
-        
+        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager)
+            .expect("Failed to create StructureAnalyzer for Go");
+
         let go_code = r#"
         package main
         
@@ -1072,30 +1170,45 @@ mod tests {
             }
         }
         "#;
-        
+
         let mut parser = Parser::new();
-        parser.set_language(SupportedLanguage::Go.language()).unwrap();
-        let tree = parser.parse(go_code, None).unwrap();
-        
+        parser
+            .set_language(
+                SupportedLanguage::Go
+                    .language()
+                    .expect("Go language not enabled in this build"),
+            )
+            .expect("Failed to set Go language for parser");
+        let tree = parser
+            .parse(go_code, None)
+            .expect("Failed to parse Go code with tree-sitter");
+
         let result = analyzer.analyze(&tree, go_code.as_bytes());
-        assert!(result.is_ok(), "Should successfully analyze Go code: {:?}", result.err());
-        
+        assert!(
+            result.is_ok(),
+            "Should successfully analyze Go code: {:?}",
+            result.err()
+        );
+
         let summary = result.unwrap();
         assert_eq!(summary.language, "go");
-        
+
         println!("Go Analysis Results:");
         println!("Functions found: {}", summary.functions.len());
         for func in &summary.functions {
             println!("  - {}: {} params", func.name, func.parameters.len());
         }
-        
+
         println!("Types found: {}", summary.classes.len());
         for class in &summary.classes {
-            println!("  - {} (lines {}-{})", class.name, class.line_start, class.line_end);
+            println!(
+                "  - {} (lines {}-{})",
+                class.name, class.line_start, class.line_end
+            );
         }
-        
+
         println!("Comments found: {}", summary.comments.len());
-        
+
         // Basic validation - adjusted expectations
         println!("Test completed successfully - Go code was parsed without errors");
         // Tree-sitter parsing results may vary, focus on ensuring no errors occurred

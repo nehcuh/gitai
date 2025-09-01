@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 
 /// GitAI MCP 服务器处理器
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct GitAiMcpServer {
     /// MCP 服务管理器
     manager: Arc<RwLock<crate::mcp::GitAiMcpManager>>,
@@ -16,6 +17,7 @@ pub struct GitAiMcpServer {
 
 impl GitAiMcpServer {
     /// 创建新的 MCP 服务器
+    #[allow(dead_code)]
     pub fn new(config: Config) -> Self {
         let manager = Arc::new(RwLock::new(crate::mcp::GitAiMcpManager::new(config)));
         Self { manager }
@@ -28,7 +30,7 @@ impl GitAiMcpServer {
 //     async fn initialize(&self, params: InitializeRequestParam, _ctx: RequestContext<RoleServer>) -> McpResult<InitializeResult> {
 //         let manager = self.manager.read().await;
 //         let server_info = manager.get_server_info();
-//         
+//
 //         Ok(InitializeResult {
 //             protocol_version: params.protocol_version,
 //             capabilities: ServerCapabilities {
@@ -45,13 +47,13 @@ impl GitAiMcpServer {
 //     async fn list_tools(&self, _params: Option<PaginatedRequestParamInner>, _ctx: RequestContext<RoleServer>) -> McpResult<ListToolsResult> {
 //         let manager = self.manager.read().await;
 //         let tools = manager.get_all_tools();
-//         
+//
 //         Ok(ListToolsResult { tools, next_cursor: None })
 //     }
 //
 //     async fn call_tool(&self, params: CallToolRequestParam, _ctx: RequestContext<RoleServer>) -> McpResult<CallToolResult> {
 //         let manager = self.manager.read().await;
-//         
+//
 //         match manager.handle_tool_call(&params.name, serde_json::Value::Object(params.arguments.unwrap_or_default())).await {
 //             Ok(result) => {
 //                 // 将结果转换为 CallToolResult
@@ -75,9 +77,20 @@ impl GitAiMcpServer {
 
 /// 启动 MCP 服务器
 pub async fn start_mcp_server(config: Config) -> McpResult<()> {
+    use serde_json::{json, Value};
     use std::io::{self, Write};
-    use serde_json::{Value, json};
-    
+
+    // Helper function to safely write JSON response to stdout
+    fn write_response(stdout: &mut impl Write, response: &Value) -> McpResult<()> {
+        writeln!(stdout, "{}", response).map_err(|e| {
+            crate::mcp::execution_failed_error(format!("Failed to write response: {}", e))
+        })?;
+        stdout.flush().map_err(|e| {
+            crate::mcp::execution_failed_error(format!("Failed to flush stdout: {}", e))
+        })?;
+        Ok(())
+    }
+
     eprintln!("🚀 GitAI MCP Server starting...");
     eprintln!("📡 Available services:");
     eprintln!("   - review: Code review with tree-sitter and security scan");
@@ -85,13 +98,15 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     eprintln!("   - scan: Security scanning with OpenGrep");
     eprintln!("   - analysis: Code structure analysis");
     eprintln!("🔌 Listening on stdio...");
-    
+
     // 创建并初始化服务管理器
-    let manager = std::sync::Arc::new(tokio::sync::RwLock::new(crate::mcp::GitAiMcpManager::new(config.clone())));
-    
+    let manager = std::sync::Arc::new(tokio::sync::RwLock::new(crate::mcp::GitAiMcpManager::new(
+        config.clone(),
+    )));
+
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-    
+
     // 简单的 MCP 协议处理循环
     loop {
         let mut buffer = String::new();
@@ -119,8 +134,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         }
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/list" => {
                                 let response = json!({
@@ -173,17 +187,91 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                     },
                                                     "required": ["path"]
                                                 }
+                                            },
+                                            {
+                                                "name": "export_dependency_graph",
+                                                "description": "Export dependency graph (default ASCII). You can also use execute_dependency_graph with format=json|dot|svg|mermaid|ascii.",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
+                                                        "output": {"type": "string", "description": "Output file path (optional)"},
+                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
+                                                    },
+                                                    "required": ["path"]
+                                                }
+                                            },
+                                            {
+                                                "name": "execute_dependency_graph",
+                                                "description": "Generate dependency graph (default ASCII) with format=json|dot|svg|mermaid|ascii.",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
+                                                        "output": {"type": "string", "description": "Output file path (optional)"},
+                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
+                                                    },
+                                                    "required": ["path"]
+                                                }
+                                            },
+                                            {
+                                                "name": "query_call_chain",
+                                                "description": "Query function call chains (downstream/upstream)",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "start": {"type": "string", "description": "Start function name"},
+                                                        "end": {"type": "string", "description": "Optional end function name"},
+                                                        "direction": {"type": "string", "enum": ["downstream", "upstream"], "description": "Direction: downstream(callees)/upstream(callers), default downstream"},
+                                                        "max_depth": {"type": "integer", "minimum": 1, "maximum": 32, "description": "Max depth, default 8"},
+                                                        "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Max number of paths to return, default 20"}
+                                                    },
+                                                    "required": ["path", "start"]
+                                                }
+                                            },
+                                            {
+                                                "name": "summarize_graph",
+                                                "description": "Summarize dependency graph with optional community compression and budget-adaptive pruning",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "radius": {"type": "integer", "minimum": 1, "description": "Neighborhood radius from seeds (default 1)"},
+                                                        "top_k": {"type": "integer", "minimum": 1, "description": "Max top nodes to include (default 200)"},
+                                                        "seeds_from_diff": {"type": "boolean", "description": "Derive seeds from git diff (default false)"},
+                                                        "format": {"type": "string", "enum": ["json", "text"], "description": "Output format (default json)"},
+                                                        "budget_tokens": {"type": "integer", "minimum": 0, "description": "Token budget for adaptive pruning (default 3000)"},
+                                                        "community": {"type": "boolean", "description": "Enable community compression (v1)"},
+                                                        "comm_alg": {"type": "string", "enum": ["labelprop"], "description": "Community detection algorithm (default labelprop)"},
+                                                        "max_communities": {"type": "integer", "minimum": 1, "description": "Max number of communities (default 50)"},
+                                                        "max_nodes_per_community": {"type": "integer", "minimum": 1, "description": "Max nodes per community to sample (default 10)"},
+                                                        "with_paths": {"type": "boolean", "description": "Include path samples (v2)"},
+                                                        "path_samples": {"type": "integer", "minimum": 0, "description": "Total number of path samples (default 5)"},
+                                                        "path_max_hops": {"type": "integer", "minimum": 1, "description": "Max hops per path (default 5)"}
+                                                    },
+                                                    "required": ["path"]
+                                                }
                                             }
                                         ]
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                             "tools/call" => {
-                                let tool_name = msg.get("params").and_then(|p| p.get("name")).and_then(|n| n.as_str()).unwrap_or("");
-                                let arguments = msg.get("params").and_then(|p| p.get("arguments")).cloned().unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
-                                
+                                let tool_name = msg
+                                    .get("params")
+                                    .and_then(|p| p.get("name"))
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or("");
+                                let arguments = msg
+                                    .get("params")
+                                    .and_then(|p| p.get("arguments"))
+                                    .cloned()
+                                    .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
                                 // 使用共享的服务管理器处理工具调用
                                 let manager_read = manager.read().await;
                                 match manager_read.handle_tool_call(tool_name, arguments).await {
@@ -200,34 +288,61 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 ]
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                     Err(e) => {
                                         let error_type = match e {
-                                            crate::mcp::McpError::InvalidParameters(_) => "InvalidParameters",
-                                            crate::mcp::McpError::ExecutionFailed(_) => "ExecutionFailed",
-                                            crate::mcp::McpError::ConfigurationError(_) => "ConfigurationError",
-                                            crate::mcp::McpError::FileOperationError(_) => "FileOperationError",
+                                            crate::mcp::McpError::InvalidParameters(_) => {
+                                                "InvalidParameters"
+                                            }
+                                            crate::mcp::McpError::ExecutionFailed(_) => {
+                                                "ExecutionFailed"
+                                            }
+                                            crate::mcp::McpError::ConfigurationError(_) => {
+                                                "ConfigurationError"
+                                            }
+                                            crate::mcp::McpError::FileOperationError(_) => {
+                                                "FileOperationError"
+                                            }
                                             crate::mcp::McpError::NetworkError(_) => "NetworkError",
-                                            crate::mcp::McpError::ExternalToolError(_) => "ExternalToolError",
-                                            crate::mcp::McpError::PermissionError(_) => "PermissionError",
+                                            crate::mcp::McpError::ExternalToolError(_) => {
+                                                "ExternalToolError"
+                                            }
+                                            crate::mcp::McpError::PermissionError(_) => {
+                                                "PermissionError"
+                                            }
                                             crate::mcp::McpError::TimeoutError(_) => "TimeoutError",
                                             crate::mcp::McpError::Unknown(_) => "Unknown",
                                         };
-                                        
+
                                         let (error_code, error_message) = match e {
-                                            crate::mcp::McpError::InvalidParameters(msg) => (-32602, msg),
-                                            crate::mcp::McpError::ExecutionFailed(msg) => (-32000, msg),
-                                            crate::mcp::McpError::ConfigurationError(msg) => (-32603, msg),
-                                            crate::mcp::McpError::FileOperationError(msg) => (-32001, msg),
-                                            crate::mcp::McpError::NetworkError(msg) => (-32002, msg),
-                                            crate::mcp::McpError::ExternalToolError(msg) => (-32003, msg),
-                                            crate::mcp::McpError::PermissionError(msg) => (-32004, msg),
-                                            crate::mcp::McpError::TimeoutError(msg) => (-32005, msg),
+                                            crate::mcp::McpError::InvalidParameters(msg) => {
+                                                (-32602, msg)
+                                            }
+                                            crate::mcp::McpError::ExecutionFailed(msg) => {
+                                                (-32000, msg)
+                                            }
+                                            crate::mcp::McpError::ConfigurationError(msg) => {
+                                                (-32603, msg)
+                                            }
+                                            crate::mcp::McpError::FileOperationError(msg) => {
+                                                (-32001, msg)
+                                            }
+                                            crate::mcp::McpError::NetworkError(msg) => {
+                                                (-32002, msg)
+                                            }
+                                            crate::mcp::McpError::ExternalToolError(msg) => {
+                                                (-32003, msg)
+                                            }
+                                            crate::mcp::McpError::PermissionError(msg) => {
+                                                (-32004, msg)
+                                            }
+                                            crate::mcp::McpError::TimeoutError(msg) => {
+                                                (-32005, msg)
+                                            }
                                             crate::mcp::McpError::Unknown(msg) => (-32603, msg),
                                         };
-                                        
+
                                         let response = json!({
                                             "jsonrpc": "2.0",
                                             "id": msg.get("id"),
@@ -239,8 +354,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 }
                                             }
                                         });
-                                        writeln!(stdout, "{}", response).unwrap();
-                                        stdout.flush().unwrap();
+                                        write_response(&mut stdout, &response)?;
                                     }
                                 }
                             }
@@ -253,8 +367,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                         "message": format!("Method not found: {}", method)
                                     }
                                 });
-                                writeln!(stdout, "{}", response).unwrap();
-                                stdout.flush().unwrap();
+                                write_response(&mut stdout, &response)?;
                             }
                         }
                     }
@@ -266,12 +379,13 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
             }
         }
     }
-    
+
     eprintln!("👋 GitAI MCP Server shutting down");
     Ok(())
 }
 
 /// 启动 TCP MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()> {
     // TCP 传输需要额外的实现，目前 rmcp 主要支持 stdio
     eprintln!("⚠️  TCP transport not fully implemented in current rmcp version");
@@ -280,6 +394,7 @@ pub async fn start_mcp_tcp_server(_config: Config, _addr: &str) -> McpResult<()>
 }
 
 /// 启动 SSE MCP 服务器
+#[allow(dead_code)]
 pub async fn start_mcp_websocket_server(_config: Config, _addr: &str) -> McpResult<()> {
     eprintln!("⚠️  SSE transport not fully implemented in current rmcp version");
     eprintln!("   Please use stdio transport instead");

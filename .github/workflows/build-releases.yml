@@ -1,0 +1,260 @@
+name: Build Feature Variants
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - stable
+          - nightly
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-matrix:
+    name: Build ${{ matrix.variant }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        variant:
+          - name: minimal
+            features: minimal
+            desc: "Minimal build with core features only"
+          - name: default
+            features: default
+            desc: "Default build with AI and common languages"
+          - name: full
+            features: full
+            desc: "Full build with all features"
+          - name: rust-only
+            features: tree-sitter-rust
+            desc: "Rust language support only"
+          - name: web
+            features: tree-sitter-javascript,tree-sitter-typescript
+            desc: "Web development build (JS/TS)"
+          - name: security
+            features: security,tree-sitter-rust,tree-sitter-python
+            desc: "Security scanning build"
+          
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.variant.name }}-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Build variant
+        run: |
+          if [ "${{ matrix.variant.features }}" = "default" ]; then
+            cargo build --release --locked
+          else
+            cargo build --release --locked --no-default-features --features "${{ matrix.variant.features }}"
+          fi
+        shell: bash
+        
+      - name: Rename binary
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv target/release/gitai.exe target/release/gitai-${{ matrix.variant.name }}.exe
+          else
+            mv target/release/gitai target/release/gitai-${{ matrix.variant.name }}
+          fi
+        shell: bash
+        
+      - name: Compress binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/release
+          tar czf gitai-${{ matrix.variant.name }}-${{ runner.os }}-${{ runner.arch }}.tar.gz gitai-${{ matrix.variant.name }}
+          
+      - name: Compress binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/release
+          7z a gitai-${{ matrix.variant.name }}-${{ runner.os }}-${{ runner.arch }}.zip gitai-${{ matrix.variant.name }}.exe
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: gitai-${{ matrix.variant.name }}-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/release/*.tar.gz
+            target/release/*.zip
+          retention-days: 30
+          
+  create-release:
+    name: Create Release
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+          
+      - name: Generate release notes
+        run: |
+          cat > RELEASE_NOTES.md << 'EOF'
+          # GitAI Release ${{ github.ref_name }}
+          
+          ## Available Variants
+          
+          This release includes multiple build variants optimized for different use cases:
+          
+          ### Minimal (`gitai-minimal`)
+          - **Size**: ~10MB
+          - **Features**: Core functionality only
+          - **Use case**: Lightweight deployments, CI/CD environments
+          
+          ### Default (`gitai-default`)
+          - **Size**: ~12MB
+          - **Features**: AI + Rust/Python/JavaScript support
+          - **Use case**: General development (Recommended)
+          
+          ### Full (`gitai-full`)
+          - **Size**: ~22MB
+          - **Features**: All features and languages
+          - **Use case**: Enterprise environments, full feature set
+          
+          ### Specialized Builds
+          - **`gitai-rust-only`**: Rust development only (~11MB)
+          - **`gitai-web`**: Web development (JS/TS) (~11MB)
+          - **`gitai-security`**: Security scanning focus (~13MB)
+          
+          ## Installation
+          
+          1. Download the appropriate variant for your platform
+          2. Extract the archive
+          3. Move the binary to your PATH
+          4. Run `gitai --help` to verify installation
+          
+          ## Checksums
+          
+          EOF
+          
+          # Generate checksums
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; >> RELEASE_NOTES.md
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  build-docker:
+    name: Build Docker Images
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: gitai-minimal-Linux-X64
+          path: artifacts/minimal
+          
+      - name: Download default Linux artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: gitai-default-Linux-X64
+          path: artifacts/default
+          
+      - name: Download full Linux artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: gitai-full-Linux-X64
+          path: artifacts/full
+          
+      - name: Extract binaries
+        run: |
+          mkdir -p docker-build/minimal docker-build/default docker-build/full
+          tar xzf artifacts/minimal/*.tar.gz -C docker-build/minimal
+          tar xzf artifacts/default/*.tar.gz -C docker-build/default
+          tar xzf artifacts/full/*.tar.gz -C docker-build/full
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+          
+      - name: Build and push minimal
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.minimal
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/gitai:minimal
+            ${{ secrets.DOCKER_USERNAME }}/gitai:minimal-${{ github.ref_name }}
+          build-args: |
+            BINARY_PATH=docker-build/minimal/gitai-minimal
+            
+      - name: Build and push default
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/gitai:latest
+            ${{ secrets.DOCKER_USERNAME }}/gitai:${{ github.ref_name }}
+          build-args: |
+            BINARY_PATH=docker-build/default/gitai-default
+            
+      - name: Build and push full
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.full
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/gitai:full
+            ${{ secrets.DOCKER_USERNAME }}/gitai:full-${{ github.ref_name }}
+          build-args: |
+            BINARY_PATH=docker-build/full/gitai-full

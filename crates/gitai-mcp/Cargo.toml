@@ -1,0 +1,51 @@
+[package]
+name = "gitai-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Model Context Protocol server for GitAI"
+
+[[bin]]
+name = "gitai-mcp"
+path = "src/main.rs"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+gitai-analysis = { path = "../gitai-analysis" }
+gitai-security = { path = "../gitai-security" }
+
+# MCP support
+rmcp = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+futures-util = { workspace = true }
+
+# Web framework for HTTP transport
+warp = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+log = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+
+[features]
+default = ["stdio", "websocket"]
+stdio = []
+websocket = []
+http = []
+full = ["stdio", "websocket", "http"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

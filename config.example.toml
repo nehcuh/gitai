@@ -3,13 +3,13 @@
 
 [ai]
 # AI 服务 API 地址
-api_url = "http://localhost:11434/v1/chat/completions"
+api_url = "http://localhost:1234/v1/chat/completions"
 
 # 使用的模型名称
 model = "qwen2.5:32b"
 
 # 温度参数 (0.0-1.0)
-temperature = 0.3
+temperature = 0.7
 
 # API 密钥 (可选，某些服务需要)
 api_key = "your_api_key"

@@ -1,0 +1,57 @@
+[package]
+name = "gitai-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for GitAI"
+
+[[bin]]
+name = "gitai"
+path = "src/main.rs"
+
+[dependencies]
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+gitai-analysis = { path = "../gitai-analysis" }
+gitai-security = { path = "../gitai-security" }
+gitai-metrics = { path = "../gitai-metrics" }
+
+# CLI framework
+clap = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Logging
+log = { workspace = true }
+env_logger = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# File system
+dirs = { workspace = true }
+
+# Terminal colors
+colored = "2.0"
+
+[features]
+default = ["full-analysis", "security", "metrics"]
+full-analysis = ["gitai-analysis/full"]
+security = ["gitai-security/full"]
+metrics = ["gitai-metrics/full"]
+minimal = []
+
+[dev-dependencies]
+tempfile = { workspace = true }
+assert_cmd = "2.0"
+predicates = "3.0"
