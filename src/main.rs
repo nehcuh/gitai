@@ -293,9 +293,9 @@ async fn main() -> Result<()> {
                     &path,
                     radius,
                     top_k,
+                    budget_tokens,
                     seeds_from_diff,
                     &summary_format,
-                    budget_tokens,
                     community,
                     &comm_alg,
                     max_communities,
@@ -334,14 +334,15 @@ async fn handle_graph_export(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_graph_summary(
     path: &std::path::Path,
     radius: usize,
     top_k: usize,
+    budget_tokens: usize,
     seeds_from_diff: bool,
     format: &str,
-    budget_tokens: usize,
-    community: bool,
+    with_communities: bool,
     comm_alg: &str,
     max_communities: usize,
     max_nodes_per_community: usize,
@@ -358,7 +359,7 @@ async fn handle_graph_summary(
         seeds_from_diff,
         format,
         budget_tokens,
-        community,
+        with_communities,
         comm_alg,
         max_communities,
         max_nodes_per_community,

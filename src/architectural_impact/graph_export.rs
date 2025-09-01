@@ -148,6 +148,7 @@ pub async fn export_dot_string(
 }
 
 /// 导出 LLM 友好的图摘要（v1：在 v0 基础上可选社区压缩，文本/JSON）
+#[allow(clippy::too_many_arguments)]
 pub async fn export_summary_string(
     scan_dir: &Path,
     radius: usize,
@@ -631,8 +632,7 @@ pub async fn export_summary_string(
             out.push_str("  cross-community edges (top):\n");
             for (src, dst, cnt, wsum) in comm_edges_out.iter().take(20) {
                 out.push_str(&format!(
-                    "    {} -> {}: edges={} w_sum={:.2}\n",
-                    src, dst, cnt, wsum
+                    "    {src} -> {dst}: edges={cnt} w_sum={wsum:.2}\n"
                 ));
             }
         }
@@ -661,7 +661,7 @@ fn sample_paths_from(
         if results.len() >= limit {
             break;
         }
-        if path.len() - 1 >= max_hops {
+        if path.len() > max_hops {
             results.push(path.clone());
             continue;
         }

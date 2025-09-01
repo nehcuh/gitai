@@ -86,28 +86,22 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
             if let Some(m) = &e.metadata {
                 if let Some(ref notes) = m.notes {
                     if !notes.is_empty() {
-                        meta.push_str(&format!(" notes={}", notes));
+                        meta.push_str(&format!(" notes={notes}"));
                     }
                 }
                 if let Some(cc) = m.call_count {
-                    meta.push_str(&format!(" calls={}", cc));
+                    meta.push_str(&format!(" calls={cc}"));
                 }
                 if m.is_strong_dependency {
                     meta.push_str(" strong");
                 }
             }
             out.push_str(&format!(
-                "  {from} -[{etype} w={:.2}]{meta}-> {to}\n",
-                e.weight,
-                from = from_s,
-                to = to_s
+                "  {from_s} -[{etype} w={:.2}]{meta}-> {to_s}\n",
+                e.weight
             ));
         } else {
-            out.push_str(&format!(
-                "  {from} -[{etype}]-> {to}\n",
-                from = from_s,
-                to = to_s
-            ));
+            out.push_str(&format!("  {from_s} -[{etype}]-> {to_s}\n"));
         }
     }
 
@@ -116,7 +110,7 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut args = env::args().skip(1).collect::<Vec<String>>();
+    let args = env::args().skip(1).collect::<Vec<String>>();
     // Defaults
     let mut path = ".".to_string();
     let mut verbosity: u32 = 1;
@@ -146,6 +140,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let graph = build_global_dependency_graph(Path::new(&path)).await?;
     let ascii = convert_to_ascii(&graph, verbosity);
-    println!("{}", ascii);
+    println!("{ascii}");
     Ok(())
 }
