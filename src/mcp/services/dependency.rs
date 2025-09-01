@@ -608,7 +608,8 @@ impl DependencyService {
         out.push_str("# Dependency Graph (ASCII)\n");
         out.push_str(&format!(
             "nodes: {}, edges: {}\n",
-            graph.nodes.len(), graph.edges.len()
+            graph.nodes.len(),
+            graph.edges.len()
         ));
         let stats = graph.get_statistics();
         out.push_str(&format!(
@@ -618,8 +619,10 @@ impl DependencyService {
 
         // 打印节点映射
         out.push_str("[Nodes]\n");
-        let mut nodes_sorted: Vec<(&String, &crate::architectural_impact::dependency_graph::Node)> =
-            graph.nodes.iter().collect();
+        let mut nodes_sorted: Vec<(
+            &String,
+            &crate::architectural_impact::dependency_graph::Node,
+        )> = graph.nodes.iter().collect();
         nodes_sorted.sort_by(|a, b| a.0.cmp(b.0));
         for (id, node) in nodes_sorted {
             let short = id_map.get(id).cloned().unwrap_or_else(|| id.clone());
@@ -646,10 +649,17 @@ impl DependencyService {
         let mut edges_sorted = graph.edges.clone();
         edges_sorted.sort_by(|a, b| {
             let c = a.from.cmp(&b.from);
-            if c == std::cmp::Ordering::Equal { a.to.cmp(&b.to) } else { c }
+            if c == std::cmp::Ordering::Equal {
+                a.to.cmp(&b.to)
+            } else {
+                c
+            }
         });
         for e in edges_sorted {
-            let from_s = id_map.get(&e.from).cloned().unwrap_or_else(|| e.from.clone());
+            let from_s = id_map
+                .get(&e.from)
+                .cloned()
+                .unwrap_or_else(|| e.from.clone());
             let to_s = id_map.get(&e.to).cloned().unwrap_or_else(|| e.to.clone());
             let etype = match e.edge_type {
                 EdgeType::Calls => "CALLS",
@@ -665,9 +675,17 @@ impl DependencyService {
             if verbosity >= 2 {
                 let mut meta = String::new();
                 if let Some(m) = &e.metadata {
-                    if let Some(ref notes) = m.notes { if !notes.is_empty() { meta.push_str(&format!(" notes={}", notes)); } }
-                    if let Some(cc) = m.call_count { meta.push_str(&format!(" calls={}", cc)); }
-                    if m.is_strong_dependency { meta.push_str(" strong"); }
+                    if let Some(ref notes) = m.notes {
+                        if !notes.is_empty() {
+                            meta.push_str(&format!(" notes={}", notes));
+                        }
+                    }
+                    if let Some(cc) = m.call_count {
+                        meta.push_str(&format!(" calls={}", cc));
+                    }
+                    if m.is_strong_dependency {
+                        meta.push_str(" strong");
+                    }
                 }
                 out.push_str(&format!(
                     "  {from} -[{etype} w={:.2}]{meta}-> {to}\n",
@@ -676,7 +694,11 @@ impl DependencyService {
                     to = to_s
                 ));
             } else {
-                out.push_str(&format!("  {from} -[{etype}]-> {to}\n", from = from_s, to = to_s));
+                out.push_str(&format!(
+                    "  {from} -[{etype}]-> {to}\n",
+                    from = from_s,
+                    to = to_s
+                ));
             }
         }
 
@@ -758,19 +780,20 @@ impl DependencyService {
 
         // 创建临时 DOT 文件
         let temp_dir = std::env::temp_dir();
-        let temp_dot_file = temp_dir.join(format!("gitai_graph_{}.dot", 
+        let temp_dot_file = temp_dir.join(format!(
+            "gitai_graph_{}.dot",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs()
         ));
-        
+
         std::fs::write(&temp_dot_file, &dot_content)
             .map_err(|e| format!("无法写入临时 DOT 文件: {}", e))?;
 
         // 使用 Graphviz 转换
         let engine = params.engine.unwrap_or_else(|| "dot".to_string());
-        
+
         // 构建 Graphviz 命令
         let output = std::process::Command::new(&engine)
             .arg("-T")
@@ -945,8 +968,8 @@ impl GitAiMcpService for DependencyService {
                 serde_json::to_value(&result).map_err(|e| serialize_error("dependency", e))
             }
             "convert_graph_to_image" => {
-                let params: ConvertGraphParams =
-                    serde_json::from_value(arguments).map_err(|e| parse_error("convert_graph", e))?;
+                let params: ConvertGraphParams = serde_json::from_value(arguments)
+                    .map_err(|e| parse_error("convert_graph", e))?;
 
                 let result = self
                     .convert_graph_to_image(params)

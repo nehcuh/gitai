@@ -36,7 +36,11 @@ impl From<crate::scan::Finding> for super::types::Finding {
     fn from(f: crate::scan::Finding) -> Self {
         super::types::Finding {
             title: f.title,
-            severity: f.severity.as_str().parse().unwrap_or(super::types::Severity::Info),
+            severity: f
+                .severity
+                .as_str()
+                .parse()
+                .unwrap_or(super::types::Severity::Info),
             file_path: Some(f.file_path.to_string_lossy().to_string()),
             line: Some(f.line),
             column: Some(f.column),

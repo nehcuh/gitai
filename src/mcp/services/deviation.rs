@@ -1,7 +1,7 @@
 // MCP Deviation 服务
 // 提供基于 DevOps Issue 的偏离度分析能力
 
-use crate::{config::Config, mcp::*, devops};
+use crate::{config::Config, devops, mcp::*};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -15,7 +15,10 @@ impl DeviationService {
         Ok(Self { config })
     }
 
-    async fn analyze_deviation(&self, params: DeviationParams) -> Result<DeviationResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn analyze_deviation(
+        &self,
+        params: DeviationParams,
+    ) -> Result<DeviationResult, Box<dyn std::error::Error + Send + Sync>> {
         // 校验依赖
         let devops_cfg = self
             .config
@@ -67,9 +70,13 @@ impl DeviationService {
 
 #[async_trait::async_trait]
 impl crate::mcp::GitAiMcpService for DeviationService {
-    fn name(&self) -> &str { "deviation" }
+    fn name(&self) -> &str {
+        "deviation"
+    }
 
-    fn description(&self) -> &str { "基于 DevOps Issue 的偏离度分析服务" }
+    fn description(&self) -> &str {
+        "基于 DevOps Issue 的偏离度分析服务"
+    }
 
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
@@ -91,7 +98,11 @@ impl crate::mcp::GitAiMcpService for DeviationService {
         }]
     }
 
-    async fn handle_tool_call(&self, name: &str, arguments: serde_json::Value) -> crate::mcp::McpResult<serde_json::Value> {
+    async fn handle_tool_call(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> crate::mcp::McpResult<serde_json::Value> {
         match name {
             "analyze_deviation" => {
                 let params: DeviationParams = serde_json::from_value(arguments)
@@ -122,4 +133,3 @@ pub struct DeviationResult {
     pub matched_keywords: Vec<String>,
     pub unmatched_targets: Vec<String>,
 }
-

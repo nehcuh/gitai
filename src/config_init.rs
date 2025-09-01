@@ -349,9 +349,6 @@ mod tests {
 
         // Check that prompts were initialized
         assert!(initializer.config_dir.join("prompts").exists());
-            assert!(initializer
-            .config_dir
-            .join("prompts/commit.md")
-            .exists());
+        assert!(initializer.config_dir.join("prompts/commit.md").exists());
     }
 }

@@ -63,7 +63,7 @@ pub fn save_cache(
 
     let content = serde_json::to_string_pretty(&cache)?;
     std::fs::write(&cache_file, content)?;
-    
+
     // 清理旧缓存（保留最近 100 个）
     cleanup_old_caches(&cache_dir, 100)?;
 
@@ -71,34 +71,37 @@ pub fn save_cache(
 }
 
 /// 清理旧缓存
-fn cleanup_old_caches(cache_dir: &std::path::PathBuf, max_count: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn cleanup_old_caches(
+    cache_dir: &std::path::PathBuf,
+    max_count: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut entries: Vec<_> = std::fs::read_dir(cache_dir)?
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry.path().extension().and_then(|s| s.to_str()) == Some("json")
-        })
+        .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("json"))
         .collect();
-    
+
     if entries.len() <= max_count {
         return Ok(());
     }
-    
+
     // 按修改时间排序（最旧的在前）
     entries.sort_by(|a, b| {
-        let a_time = a.metadata()
+        let a_time = a
+            .metadata()
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        let b_time = b.metadata()
+        let b_time = b
+            .metadata()
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
         a_time.cmp(&b_time)
     });
-    
+
     // 删除最旧的缓存
     let to_remove = entries.len() - max_count;
     for entry in entries.iter().take(to_remove) {
         let _ = std::fs::remove_file(entry.path());
     }
-    
+
     Ok(())
 }

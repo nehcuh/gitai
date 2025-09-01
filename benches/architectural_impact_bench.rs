@@ -50,9 +50,7 @@ fn create_large_diff(file_count: usize, changes_per_file: usize) -> String {
     let mut diff = String::new();
 
     for f in 0..file_count {
-        diff.push_str(&format!(
-            "diff --git a/src/file_{f}.rs b/src/file_{f}.rs\n"
-        ));
+        diff.push_str(&format!("diff --git a/src/file_{f}.rs b/src/file_{f}.rs\n"));
         diff.push_str(&format!("index abc{f}..def{f} 100644\n"));
         diff.push_str(&format!("--- a/src/file_{f}.rs\n"));
         diff.push_str(&format!("+++ b/src/file_{f}.rs\n"));

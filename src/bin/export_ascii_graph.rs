@@ -1,8 +1,8 @@
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
-use std::collections::HashMap;
 
-use gitai::architectural_impact::dependency_graph::{DependencyGraph, NodeType, EdgeType};
+use gitai::architectural_impact::dependency_graph::{DependencyGraph, EdgeType, NodeType};
 use gitai::architectural_impact::graph_export::build_global_dependency_graph;
 
 fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
@@ -10,11 +10,17 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
     let mut node_ids: Vec<&String> = graph.nodes.keys().collect();
     node_ids.sort();
     let mut id_map: HashMap<String, String> = HashMap::new();
-    for (i, id) in node_ids.iter().enumerate() { id_map.insert((**id).clone(), format!("N{}", i + 1)); }
+    for (i, id) in node_ids.iter().enumerate() {
+        id_map.insert((**id).clone(), format!("N{}", i + 1));
+    }
 
     let mut out = String::new();
     out.push_str("# Dependency Graph (ASCII)\n");
-    out.push_str(&format!("nodes: {}, edges: {}\n", graph.nodes.len(), graph.edges.len()));
+    out.push_str(&format!(
+        "nodes: {}, edges: {}\n",
+        graph.nodes.len(),
+        graph.edges.len()
+    ));
     let stats = graph.get_statistics();
     out.push_str(&format!(
         "avg_degree: {:.2}, cycles: {}, critical: {}\n\n",
@@ -22,7 +28,10 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
     ));
 
     out.push_str("[Nodes]\n");
-    let mut nodes_sorted: Vec<(&String, &gitai::architectural_impact::dependency_graph::Node)> = graph.nodes.iter().collect();
+    let mut nodes_sorted: Vec<(
+        &String,
+        &gitai::architectural_impact::dependency_graph::Node,
+    )> = graph.nodes.iter().collect();
     nodes_sorted.sort_by(|a, b| a.0.cmp(b.0));
     for (id, node) in nodes_sorted {
         let short = id_map.get(id).cloned().unwrap_or_else(|| id.clone());
@@ -47,9 +56,19 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
 
     out.push_str("\n[Edges]\n");
     let mut edges_sorted = graph.edges.clone();
-    edges_sorted.sort_by(|a, b| { let c = a.from.cmp(&b.from); if c == std::cmp::Ordering::Equal { a.to.cmp(&b.to) } else { c } });
+    edges_sorted.sort_by(|a, b| {
+        let c = a.from.cmp(&b.from);
+        if c == std::cmp::Ordering::Equal {
+            a.to.cmp(&b.to)
+        } else {
+            c
+        }
+    });
     for e in edges_sorted {
-        let from_s = id_map.get(&e.from).cloned().unwrap_or_else(|| e.from.clone());
+        let from_s = id_map
+            .get(&e.from)
+            .cloned()
+            .unwrap_or_else(|| e.from.clone());
         let to_s = id_map.get(&e.to).cloned().unwrap_or_else(|| e.to.clone());
         let etype = match e.edge_type {
             EdgeType::Calls => "CALLS",
@@ -65,13 +84,30 @@ fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
         if verbosity >= 2 {
             let mut meta = String::new();
             if let Some(m) = &e.metadata {
-                if let Some(ref notes) = m.notes { if !notes.is_empty() { meta.push_str(&format!(" notes={}", notes)); } }
-                if let Some(cc) = m.call_count { meta.push_str(&format!(" calls={}", cc)); }
-                if m.is_strong_dependency { meta.push_str(" strong"); }
+                if let Some(ref notes) = m.notes {
+                    if !notes.is_empty() {
+                        meta.push_str(&format!(" notes={}", notes));
+                    }
+                }
+                if let Some(cc) = m.call_count {
+                    meta.push_str(&format!(" calls={}", cc));
+                }
+                if m.is_strong_dependency {
+                    meta.push_str(" strong");
+                }
             }
-            out.push_str(&format!("  {from} -[{etype} w={:.2}]{meta}-> {to}\n", e.weight, from = from_s, to = to_s));
+            out.push_str(&format!(
+                "  {from} -[{etype} w={:.2}]{meta}-> {to}\n",
+                e.weight,
+                from = from_s,
+                to = to_s
+            ));
         } else {
-            out.push_str(&format!("  {from} -[{etype}]-> {to}\n", from = from_s, to = to_s));
+            out.push_str(&format!(
+                "  {from} -[{etype}]-> {to}\n",
+                from = from_s,
+                to = to_s
+            ));
         }
     }
 
@@ -90,10 +126,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     while i < args.len() {
         match args[i].as_str() {
             "--verbosity" | "-v" => {
-                if i + 1 < args.len() { if let Ok(v) = args[i+1].parse::<u32>() { verbosity = v; } i += 2; } else { i += 1; }
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse::<u32>() {
+                        verbosity = v;
+                    }
+                    i += 2;
+                } else {
+                    i += 1;
+                }
             }
             s => {
-                if !s.starts_with('-') { path = s.to_string(); }
+                if !s.starts_with('-') {
+                    path = s.to_string();
+                }
                 i += 1;
             }
         }

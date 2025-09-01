@@ -635,12 +635,12 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
 
             // 创建默认模板
             let templates = [
-                (
-                    "commit.md",
-                    include_str!("../assets/prompts/commit.md"),
-                ),
+                ("commit.md", include_str!("../assets/prompts/commit.md")),
                 ("review.md", include_str!("../assets/prompts/review.md")),
-                ("deviation.md", include_str!("../assets/prompts/deviation.md")),
+                (
+                    "deviation.md",
+                    include_str!("../assets/prompts/deviation.md"),
+                ),
             ];
 
             for (filename, content) in &templates {
@@ -954,7 +954,9 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
             for file_path in &code_files {
                 if let Ok(content) = std::fs::read_to_string(file_path) {
                     if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
-                        if let Some(lang) = gitai::tree_sitter::SupportedLanguage::from_extension(ext) {
+                        if let Some(lang) =
+                            gitai::tree_sitter::SupportedLanguage::from_extension(ext)
+                        {
                             if let Ok(file_summary) = manager.analyze_structure(&content, lang) {
                                 // 合并结果
                                 summary.functions.extend(file_summary.functions);

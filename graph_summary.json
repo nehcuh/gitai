@@ -1,0 +1,1698 @@
+{
+  "graph_stats": {
+    "node_count": 1107,
+    "edge_count": 2813,
+    "avg_degree": 5.0822043,
+    "cycles_count": 26,
+    "critical_nodes_count": 0
+  },
+  "seeds_preview": [
+    "fn dfs_cycle_detection()",
+    "fn dfs_paths()",
+    "fn validate()",
+    "fn parse()",
+    "fn find_code_files()",
+    "fn analyze_structure()",
+    "fn run_git()",
+    "fn find_code_files()",
+    "fn get_snapshot_file_path()",
+    "fn create_test_summary()",
+    "fn clear()",
+    "fn get()",
+    "fn get_state_value()",
+    "fn get_dependents()",
+    "fn add_edge()",
+    "fn language()",
+    "fn add_node()",
+    "fn calculate_overall_risk()",
+    "fn cache_file_path()",
+    "fn set_state_value()"
+  ],
+  "top_nodes": [
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::dfs_cycle_detection",
+      0.012284379
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::dfs_paths",
+      0.010375478
+    ],
+    [
+      "func:./src/config.rs::validate",
+      0.008929452
+    ],
+    [
+      "func:./src/args.rs::parse",
+      0.007716146
+    ],
+    [
+      "func:./src/mcp/services/analysis.rs::find_code_files",
+      0.006055486
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::analyze_structure",
+      0.0057276986
+    ],
+    [
+      "func:./src/git.rs::run_git",
+      0.0056544296
+    ],
+    [
+      "func:./src/mcp/services/dependency.rs::find_code_files",
+      0.0049093594
+    ],
+    [
+      "func:./src/metrics/storage.rs::get_snapshot_file_path",
+      0.00469374
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::create_test_summary",
+      0.0046807737
+    ],
+    [
+      "func:./crates/gitai-core/src/cache.rs::get",
+      0.004646923
+    ],
+    [
+      "func:./crates/gitai-core/src/cache.rs::clear",
+      0.004646923
+    ],
+    [
+      "func:./src/update/auto_updater.rs::get_state_value",
+      0.0045482754
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::get_dependents",
+      0.004471406
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_edge",
+      0.004375374
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::language",
+      0.0040164175
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_node",
+      0.0039772443
+    ],
+    [
+      "func:./src/architectural_impact/mod.rs::calculate_overall_risk",
+      0.0038389089
+    ],
+    [
+      "func:./src/tree_sitter/cache.rs::cache_file_path",
+      0.0034496523
+    ],
+    [
+      "func:./src/update/auto_updater.rs::set_state_value",
+      0.0034176116
+    ],
+    [
+      "func:./src/architectural_impact/mod.rs::add_breaking_change",
+      0.0031926236
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::get_parser",
+      0.0031238291
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::calculate_centrality",
+      0.002690318
+    ],
+    [
+      "func:./src/metrics/storage.rs::load_snapshots",
+      0.0026832407
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::name",
+      0.0025903787
+    ],
+    [
+      "func:./src/architectural_impact/graph_export.rs::build_global_dependency_graph",
+      0.0025725781
+    ],
+    [
+      "func:./src/tree_sitter/cache.rs::save_to_disk",
+      0.0017246286
+    ],
+    [
+      "func:./src/architectural_impact/impact_propagation.rs::create_test_graph",
+      0.00168343
+    ],
+    [
+      "func:./src/update/auto_updater.rs::get_last_prompt_update",
+      0.0015347459
+    ],
+    [
+      "func:./src/update/auto_updater.rs::get_last_version_check",
+      0.0015347459
+    ],
+    [
+      "func:./src/update/auto_updater.rs::get_last_rule_update",
+      0.0015347459
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::detect_cycles",
+      0.0015120496
+    ],
+    [
+      "func:./src/metrics/storage.rs::save_snapshot",
+      0.0014231325
+    ],
+    [
+      "func:./src/architectural_impact/impact_propagation.rs::bfs_propagation",
+      0.0013545278
+    ],
+    [
+      "func:./src/architectural_impact/cascade_detector.rs::setup_graph",
+      0.0012525494
+    ],
+    [
+      "func:./src/architectural_impact/graph_export.rs::export_summary_string",
+      0.0012369424
+    ],
+    [
+      "func:./src/mcp/services/analysis.rs::analyze_single_file",
+      0.001228622
+    ],
+    [
+      "func:./src/tree_sitter/analyzer.rs::setup_queries",
+      0.0012021601
+    ],
+    [
+      "func:./src/update/auto_updater.rs::set_last_rule_update",
+      0.001191458
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::find_dependency_paths",
+      0.0011554818
+    ],
+    [
+      "func:./src/update/auto_updater.rs::set_last_prompt_update",
+      0.0010719489
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_resolved_call",
+      0.0010619909
+    ],
+    [
+      "func:./src/mcp/services/analysis.rs::analyze_directory",
+      0.0010328346
+    ],
+    [
+      "func:./src/update/auto_updater.rs::set_last_version_check",
+      0.0010111571
+    ],
+    [
+      "func:./src/architectural_impact/impact_propagation.rs::find_shortest_path",
+      0.0010017924
+    ],
+    [
+      "func:./src/mcp/services/dependency.rs::analyze_file_dependencies",
+      0.0009860018
+    ],
+    [
+      "func:./src/mcp/services/dependency.rs::analyze_directory_dependencies",
+      0.0009860018
+    ],
+    [
+      "func:./src/architectural_impact/git_state_analyzer.rs::analyze_after_state",
+      0.00096561597
+    ],
+    [
+      "func:./src/architectural_impact/git_state_analyzer.rs::analyze_before_state",
+      0.00096561597
+    ],
+    [
+      "func:./src/mcp/services/analysis.rs::execute_analysis",
+      0.00091658946
+    ],
+    [
+      "func:./src/architectural_impact/graph_export.rs::label_propagation_communities",
+      0.00091552414
+    ],
+    [
+      "func:./src/mcp/services/dependency.rs::analyze_single_file_for_merge",
+      0.0008774671
+    ],
+    [
+      "func:./src/git.rs::get_unpushed_diff",
+      0.0008468944
+    ],
+    [
+      "func:./src/git.rs::get_upstream_branch",
+      0.0008398948
+    ],
+    [
+      "func:./src/architectural_impact/cascade_detector.rs::enumerate_chains",
+      0.00083902397
+    ],
+    [
+      "func:./src/commit.rs::perform_structural_analysis",
+      0.0008338663
+    ],
+    [
+      "func:./src/architectural_impact/cascade_detector.rs::identify_critical_nodes",
+      0.0008232928
+    ],
+    [
+      "func:./src/review/converter.rs::from",
+      0.00082085
+    ],
+    [
+      "func:./src/tree_sitter/cache.rs::load_from_disk",
+      0.00079273793
+    ],
+    [
+      "func:./src/tree_sitter/cache.rs::remove_from_disk",
+      0.00079273793
+    ],
+    [
+      "func:./src/review/analyzer.rs::perform_structural_analysis",
+      0.00071669056
+    ],
+    [
+      "func:./benches/architectural_impact_bench.rs::benchmark_risk_assessment",
+      0.00069933047
+    ],
+    [
+      "func:./src/main.rs::handle_metrics",
+      0.00068727107
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_class_node",
+      0.0006727741
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_module_node",
+      0.0006727741
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_file_node",
+      0.0006727741
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::add_function_node",
+      0.0006727741
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_visibility_change_detection",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_class_change_detection",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_function_removal_detection",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::get_diff",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::has_staged_changes",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_no_changes",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::has_unstaged_changes",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::get_all_diff",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::get_status",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_function_addition_detection",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_function_signature_change_detection",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_ai_context_generation",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::git_add_all",
+      0.0006598762
+    ],
+    [
+      "func:./src/architectural_impact/tests.rs::test_risk_level_assessment",
+      0.0006598762
+    ],
+    [
+      "func:./src/git.rs::git_commit",
+      0.0006598762
+    ],
+    [
+      "func:./src/security_review.rs::review_changes",
+      0.0006511085
+    ],
+    [
+      "func:./src/metrics/storage.rs::save_all_snapshots",
+      0.0006497308
+    ],
+    [
+      "func:./src/tree_sitter/custom_queries.rs::validate_query_syntax",
+      0.00064409437
+    ],
+    [
+      "func:./src/tree_sitter/unified_analyzer.rs::new",
+      0.00064316596
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::new",
+      0.00064229063
+    ],
+    [
+      "func:./src/metrics/mod.rs::count_lines_of_code",
+      0.00063567737
+    ],
+    [
+      "func:./src/config.rs::load",
+      0.00063336274
+    ],
+    [
+      "func:./src/tree_sitter/analyzer.rs::test_analyze_with_real_parser",
+      0.00063113077
+    ],
+    [
+      "func:./src/tree_sitter/analyzer.rs::test_analyze_c_code",
+      0.00063113077
+    ],
+    [
+      "func:./src/tree_sitter/analyzer.rs::test_analyze_go_code",
+      0.00063113077
+    ],
+    [
+      "func:./src/tree_sitter/analyzer.rs::test_analyze_cpp_code",
+      0.00063113077
+    ],
+    [
+      "func:./src/tree_sitter/unified_analyzer.rs::test_analyze_rust_code",
+      0.0006278483
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::test_analyze_empty_code",
+      0.00062741066
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::test_analyze_simple_rust_code",
+      0.00062741066
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::test_analyze_simple_java_code",
+      0.00062741066
+    ],
+    [
+      "func:./src/tree_sitter/mod.rs::test_analyze_multiple_languages",
+      0.00062741066
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::from_structural_summary",
+      0.00062450307
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::test_impact_scope_calculation",
+      0.0006185168
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::test_cycle_detection",
+      0.0006185168
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::test_dot_export_basic",
+      0.0006185168
+    ],
+    [
+      "func:./src/architectural_impact/dependency_graph.rs::test_graph_construction",
+      0.0006185168
+    ],
+    [
+      "file:./crates/gitai-core/src/cache.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/architectural_impact/tests.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/metrics/storage.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/git.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/mcp/services/dependency.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/tree_sitter/mod.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/tree_sitter/cache.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/architectural_impact/mod.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/update/auto_updater.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/args.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/mcp/services/analysis.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/config.rs",
+      0.00061253045
+    ],
+    [
+      "file:./src/architectural_impact/dependency_graph.rs",
+      0.00061253045
+    ]
+  ],
+  "kept_nodes": 116,
+  "radius": 1,
+  "truncated": false,
+  "communities": [
+    {
+      "id": "file:./src/architectural_impact/dependency_graph.rs",
+      "size": 64,
+      "samples": [
+        "fn dfs_cycle_detection()",
+        "fn dfs_paths()",
+        "fn get_dependents()",
+        "fn add_edge()",
+        "fn add_node()",
+        "fn rebuild_adjacency_lists()",
+        "fn calculate_centrality()",
+        "fn to_dot()",
+        "fn get_dependencies()",
+        "fn execute_review_with_result()"
+      ]
+    },
+    {
+      "id": "file:./src/project_insights.rs",
+      "size": 47,
+      "samples": [
+        "fn calculate_impact_score()",
+        "fn analyze_architecture()",
+        "fn identify_quality_hotspots()",
+        "fn dfs_detect_cycle()",
+        "fn analyze_api_surface()",
+        "fn analyze_coupling()",
+        "fn detect_pattern_violations()",
+        "class InsightsGenerator",
+        "fn generate()",
+        "class ProjectInsights"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/mod.rs",
+      "size": 39,
+      "samples": [
+        "fn invalid_parameters_error()",
+        "fn execution_failed_error()",
+        "fn reset()",
+        "fn get_stats()",
+        "fn analyze_deviation()",
+        "fn execute_review()",
+        "fn configuration_error()",
+        "fn record_call_failure()",
+        "fn record_call_success()",
+        "fn record_call_start()"
+      ]
+    },
+    {
+      "id": "file:./crates/gitai-core/src/context.rs",
+      "size": 34,
+      "samples": [
+        "fn with_issues()",
+        "fn has_changes()",
+        "fn with_architectural_impact()",
+        "fn needs_issue_context()",
+        "fn new()",
+        "fn with_impact_scope()",
+        "fn has_high_risk()",
+        "fn for_scan()",
+        "class OperationContext",
+        "fn issue_context()"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/git_state_analyzer.rs",
+      "size": 34,
+      "samples": [
+        "fn analyze_git_diff()",
+        "fn infer_language_from_path()",
+        "fn extract_function_name()",
+        "fn get_changed_files()",
+        "fn get_or_init_tree_sitter()",
+        "fn extract_struct_name()",
+        "fn extract_interface_name()",
+        "fn get_base_commit()",
+        "fn analyze_before_state()",
+        "fn analyze_after_state()"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/impact_propagation.rs",
+      "size": 31,
+      "samples": [
+        "fn get_edge_impact_factor()",
+        "fn calculate_impact()",
+        "fn create_test_graph()",
+        "fn calculate_propagated_impact()",
+        "fn build_impact_scope()",
+        "fn bfs_propagation()",
+        "fn get_node_impact_factor()",
+        "fn get_component_type()",
+        "fn generate_impact_reason()",
+        "fn calculate_path_weight()"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/mod.rs",
+      "size": 30,
+      "samples": [
+        "fn calculate_overall_risk()",
+        "fn add_breaking_change()",
+        "fn assess_breaking_change_risk()",
+        "fn calculate_risk_score()",
+        "fn create_test_change()",
+        "fn generate_mitigation_recommendations()",
+        "fn generate_summary()",
+        "fn benchmark_risk_assessment()",
+        "fn generate_risk_summary()",
+        "fn test_mitigation_recommendations()"
+      ]
+    },
+    {
+      "id": "file:./src/metrics/mod.rs",
+      "size": 28,
+      "samples": [
+        "fn analyze_trends()",
+        "fn compare_snapshots()",
+        "fn create_test_snapshot()",
+        "fn generate_report()",
+        "fn calculate_architecture_metrics()",
+        "fn calculate_technical_debt()",
+        "class QualityTracker",
+        "fn new()",
+        "fn calculate_api_metrics()",
+        "fn get_current_commit()"
+      ]
+    },
+    {
+      "id": "file:./crates/gitai-types/src/lib.rs",
+      "size": 28,
+      "samples": [
+        "fn to_score()",
+        "fn score()",
+        "class Severity",
+        "fn from()",
+        "class ComplexityLevel",
+        "class RiskLevel",
+        "fn from_cyclomatic()",
+        "fn to_emoji()",
+        "fn to_color()",
+        "class ArchitecturalPattern"
+      ]
+    },
+    {
+      "id": "file:./src/analysis.rs",
+      "size": 27,
+      "samples": [
+        "fn has_issues()",
+        "fn extract_score()",
+        "fn issue_context()",
+        "class Analyzer",
+        "class OperationContext",
+        "fn has_changes()",
+        "fn needs_issue_context()",
+        "fn with_cascade_effects()",
+        "fn analyze_deviation()",
+        "fn analyze()"
+      ]
+    },
+    {
+      "id": "file:./src/update/auto_updater.rs",
+      "size": 26,
+      "samples": [
+        "fn get_state_value()",
+        "fn set_state_value()",
+        "fn retry_async()",
+        "fn get_last_version_check()",
+        "fn get_last_rule_update()",
+        "fn get_last_prompt_update()",
+        "fn update_scan_rules()",
+        "fn check_update_status()",
+        "fn set_last_rule_update()",
+        "fn set_last_prompt_update()"
+      ]
+    },
+    {
+      "id": "file:./src/tree_sitter/cache.rs",
+      "size": 25,
+      "samples": [
+        "fn cache_file_path()",
+        "fn save_to_disk()",
+        "fn reset()",
+        "fn is_expired()",
+        "fn clear()",
+        "fn set()",
+        "fn stats()",
+        "fn remove_from_disk()",
+        "fn load_from_disk()",
+        "fn touch()"
+      ]
+    },
+    {
+      "id": "file:./src/tree_sitter/analyzer.rs",
+      "size": 24,
+      "samples": [
+        "fn parse()",
+        "fn language()",
+        "fn parse_parameters()",
+        "fn calculate_complexity_hints()",
+        "fn is_doc_comment()",
+        "fn analyze()",
+        "fn setup_queries()",
+        "fn extract_functions()",
+        "fn extract_classes()",
+        "fn extract_comments()"
+      ]
+    },
+    {
+      "id": "file:./src/tree_sitter/mod.rs",
+      "size": 23,
+      "samples": [
+        "fn analyze_structure()",
+        "fn get_parser()",
+        "fn name()",
+        "fn all()",
+        "class SupportedLanguage",
+        "class TreeSitterManager",
+        "fn from_extension()",
+        "fn queries()",
+        "fn from_name()",
+        "fn test_analyze_simple_java_code()"
+      ]
+    },
+    {
+      "id": "file:./src/resource_manager.rs",
+      "size": 23,
+      "samples": [
+        "fn update_metadata()",
+        "fn download_from_git()",
+        "fn download_grammars()",
+        "fn download_rules()",
+        "fn download_archive()",
+        "fn git_clone()",
+        "fn download_from_url()",
+        "fn extract_tar_gz()",
+        "fn extract_zip()",
+        "fn should_update()"
+      ]
+    },
+    {
+      "id": "file:./src/commit.rs",
+      "size": 23,
+      "samples": [
+        "fn parse_issue_ids()",
+        "fn execute_commit_with_result()",
+        "fn count_changes()",
+        "fn format_commit_message()",
+        "fn format_structure_info()",
+        "fn build_issue_context()",
+        "fn extract_code_from_diff()",
+        "fn infer_language_from_diff()",
+        "fn perform_structural_analysis()",
+        "fn execute_git_operations_with_result()"
+      ]
+    },
+    {
+      "id": "file:./src/config_init.rs",
+      "size": 21,
+      "samples": [
+        "fn initialize()",
+        "fn download_config()",
+        "fn with_offline_mode()",
+        "fn with_config_url()",
+        "fn copy_default_config()",
+        "fn initialize_prompts()",
+        "fn create_version_file()",
+        "fn migrate_config_if_needed()",
+        "fn try_download_default_config()",
+        "fn ensure_directories()"
+      ]
+    },
+    {
+      "id": "file:./src/main.rs",
+      "size": 21,
+      "samples": [
+        "fn get_cache_dir()",
+        "fn load_resource_config()",
+        "fn get_snapshots()",
+        "fn clean_cache()",
+        "fn handle_metrics()",
+        "fn handle_graph_summary()",
+        "fn handle_scan_history()",
+        "fn handle_scan()",
+        "fn handle_graph_export()",
+        "fn handle_prompts_action()"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/services/analysis.rs",
+      "size": 21,
+      "samples": [
+        "fn find_code_files()",
+        "fn convert_analysis_result()",
+        "fn analyze_single_file()",
+        "fn analyze_directory()",
+        "fn execute_analysis()",
+        "class AnalysisService",
+        "fn handle_tool_call()",
+        "fn tools()",
+        "fn calculate_maintainability_index()",
+        "fn new()"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/services/dependency.rs",
+      "size": 21,
+      "samples": [
+        "fn find_code_files()",
+        "fn generate_dependency_output()",
+        "fn analyze_directory_dependencies()",
+        "fn analyze_file_dependencies()",
+        "fn analyze_single_file_for_merge()",
+        "fn merge_dependency_graph()",
+        "fn execute_dependency_graph()",
+        "class DependencyService",
+        "fn name()",
+        "fn infer_language_from_path()"
+      ]
+    },
+    {
+      "id": "file:./src/tree_sitter/custom_queries.rs",
+      "size": 20,
+      "samples": [
+        "fn validate_config()",
+        "fn merge_queries()",
+        "fn load_custom_query_file()",
+        "fn load_all_custom_queries()",
+        "fn get_queries_for_language()",
+        "fn list_custom_queries()",
+        "fn create_example_config()",
+        "fn add_custom_language()",
+        "fn reload()",
+        "fn set_enabled()"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/cascade_detector.rs",
+      "size": 19,
+      "samples": [
+        "fn edge_impact_factor()",
+        "fn node_contains()",
+        "fn setup_graph()",
+        "fn detect_cascades()",
+        "fn estimate_chain_probability()",
+        "fn find_nodes_for_component()",
+        "fn enumerate_chains()",
+        "fn estimate_severity()",
+        "class CascadeDetector",
+        "fn new()"
+      ]
+    },
+    {
+      "id": "file:./src/context.rs",
+      "size": 18,
+      "samples": [
+        "fn parse_issue_ids()",
+        "fn has_changes()",
+        "fn with_options()",
+        "fn for_analysis()",
+        "fn with_architectural_impact()",
+        "fn with_diff()",
+        "fn has_issues()",
+        "fn with_structural_info()",
+        "fn needs_issue_context()",
+        "fn issue_context()"
+      ]
+    },
+    {
+      "id": "class:./src/security_insights.rs::InsightCategory",
+      "size": 18,
+      "samples": [
+        "fn parse_severity()",
+        "fn analyze_pattern_compliance()",
+        "fn analyze_boundary_protection()",
+        "fn parse_architectural_response()",
+        "fn parse_issue_context()",
+        "fn parse_requirement_response()",
+        "fn analyze_requirement_deviation()",
+        "fn analyze_architectural_consistency()",
+        "fn analyze_code()",
+        "class SecurityInsights"
+      ]
+    },
+    {
+      "id": "file:./src/metrics/visualizer.rs",
+      "size": 18,
+      "samples": [
+        "fn generate_report()",
+        "fn create_test_analysis()",
+        "fn generate_html_report()",
+        "fn write_executive_summary()",
+        "fn write_time_range_info()",
+        "fn write_detailed_data_table()",
+        "fn write_overall_trend()",
+        "fn write_metric_trends()",
+        "fn write_predictions()",
+        "fn write_recommendations()"
+      ]
+    },
+    {
+      "id": "file:./src/tree_sitter/unified_analyzer.rs",
+      "size": 18,
+      "samples": [
+        "fn is_doc_comment()",
+        "fn parse_parameters()",
+        "fn extract_calls()",
+        "fn analyze()",
+        "fn extract_functions()",
+        "fn extract_classes()",
+        "fn calculate_complexity_hints()",
+        "fn extract_comments()",
+        "class UnifiedAnalyzer",
+        "fn load_from_config_file()"
+      ]
+    },
+    {
+      "id": "file:./src/prompts.rs",
+      "size": 17,
+      "samples": [
+        "fn with_variable()",
+        "fn get_template_path()",
+        "fn load_template()",
+        "fn get_assets_prompts_dir()",
+        "fn get_prompts_dir()",
+        "fn render_template()",
+        "fn load_and_render()",
+        "fn new()",
+        "class PromptContext",
+        "fn set_variable()"
+      ]
+    },
+    {
+      "id": "file:./src/security_review.rs",
+      "size": 17,
+      "samples": [
+        "fn parse_changed_files()",
+        "fn get_file_content()",
+        "fn analyze_structural_patterns()",
+        "fn perform_security_scan()",
+        "fn detect_language()",
+        "fn generate_recommendations()",
+        "fn get_issue_context()",
+        "fn generate_summary()",
+        "fn new()",
+        "class SecurityReviewer"
+      ]
+    },
+    {
+      "id": "file:./src/config.rs",
+      "size": 16,
+      "samples": [
+        "fn validate()",
+        "class Config",
+        "class McpServicesConfig",
+        "class McpScanConfig",
+        "class ScanConfig",
+        "fn load()",
+        "class McpServerConfig",
+        "class McpReviewConfig",
+        "class McpCommitConfig",
+        "class McpConfig"
+      ]
+    },
+    {
+      "id": "file:./src/metrics/trend_analyzer.rs",
+      "size": 16,
+      "samples": [
+        "fn calculate_metric_trend()",
+        "fn calculate_recent_growth_rate()",
+        "fn analyze()",
+        "fn detect_anomalies()",
+        "fn calculate_overall_trend()",
+        "fn generate_predictions()",
+        "fn analyze_metric_trends()",
+        "fn identify_key_findings()",
+        "fn filter_by_time_range()",
+        "fn generate_recommendations()"
+      ]
+    },
+    {
+      "id": "file:./src/metrics/storage.rs",
+      "size": 15,
+      "samples": [
+        "fn get_snapshot_file_path()",
+        "fn load_snapshots()",
+        "fn save_snapshot()",
+        "fn load_all_branches_snapshots()",
+        "fn create_test_snapshot()",
+        "fn get_storage_stats()",
+        "fn merge_branch_snapshots()",
+        "fn export_to_csv()",
+        "fn cleanup_expired_files()",
+        "fn test_multiple_branches()"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/services/scan.rs",
+      "size": 15,
+      "samples": [
+        "fn count_by_severity()",
+        "fn convert_scan_result()",
+        "fn execute_scan()",
+        "class ScanService",
+        "fn name()",
+        "fn handle_tool_call()",
+        "fn description()",
+        "fn tools()",
+        "fn new()",
+        "class ScanResult"
+      ]
+    },
+    {
+      "id": "class:./src/tree_sitter/queries.rs::LanguageQueries",
+      "size": 15,
+      "samples": [
+        "fn ensure_language_queries()",
+        "fn is_queries_complete()",
+        "fn download_query_file()",
+        "fn load_language_queries()",
+        "fn ensure_queries_downloaded()",
+        "fn clear_cache()",
+        "class QueriesManager",
+        "fn new()",
+        "fn get_query()",
+        "fn cache_dir()"
+      ]
+    },
+    {
+      "id": "file:./src/features.rs",
+      "size": 14,
+      "samples": [
+        "fn get_features()",
+        "fn get_feature_summary()",
+        "fn get_version_info()",
+        "fn display_json()",
+        "fn display_table()",
+        "fn display_default()",
+        "fn test_version_info()",
+        "class FeatureInfo",
+        "fn test_get_features()",
+        "fn truncate_string()"
+      ]
+    },
+    {
+      "id": "file:./src/scan.rs",
+      "size": 14,
+      "samples": [
+        "fn create_finding_from_result()",
+        "fn is_opengrep_installed()",
+        "fn get_opengrep_version()",
+        "fn read_rules_info()",
+        "fn pick_rules_path()",
+        "fn parse_opengrep_output()",
+        "fn select_language_rules()",
+        "class Finding",
+        "fn install_opengrep()",
+        "class RulesInfo"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/ast_comparison.rs",
+      "size": 14,
+      "samples": [
+        "fn compare_structural_summaries()",
+        "fn format_function_signature()",
+        "fn create_test_summary_with_function()",
+        "fn compare_imports()",
+        "fn compare_functions()",
+        "fn compare_classes()",
+        "fn compare_single_function()",
+        "fn test_function_parameter_change_detection()",
+        "fn test_import_changes_detection()",
+        "fn test_function_addition_detection()"
+      ]
+    },
+    {
+      "id": "file:./src/ai.rs",
+      "size": 13,
+      "samples": [
+        "fn call_ai()",
+        "fn get_language()",
+        "fn call_ai_with_template()",
+        "fn to_ai_context()",
+        "class AiChoice",
+        "class AiRequest",
+        "fn generate_commit_message()",
+        "class AiResponse",
+        "fn review_code()",
+        "class AiMessage"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/services/commit.rs",
+      "size": 12,
+      "samples": [
+        "fn execute_commit()",
+        "class CommitService",
+        "fn new()",
+        "fn handle_tool_call()",
+        "fn description()",
+        "fn name()",
+        "fn default_commit_config()",
+        "fn tools()",
+        "class ReviewResults",
+        "class CommitResult"
+      ]
+    },
+    {
+      "id": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "size": 12,
+      "samples": [
+        "fn build_global_dependency_graph()",
+        "fn collect_files()",
+        "fn is_code_file()",
+        "fn export_dot_string()",
+        "class CommunitySummaryOut",
+        "class PendingCall",
+        "class CallChain",
+        "class CallNodeInfo",
+        "fn query_call_chain()",
+        "class Summary"
+      ]
+    },
+    {
+      "id": "file:./src/prompt_engine.rs",
+      "size": 12,
+      "samples": [
+        "fn render()",
+        "fn load_user_templates()",
+        "fn get_config_path()",
+        "class PromptEngine",
+        "fn new()",
+        "fn get_default_templates()",
+        "fn has_template()",
+        "fn test_prompt_engine_creation()",
+        "class YamlConfig",
+        "fn test_template_rendering()"
+      ]
+    },
+    {
+      "id": "file:./src/review/types.rs",
+      "size": 12,
+      "samples": [
+        "class ReviewConfig",
+        "fn needs_issue_context()",
+        "fn from_str()",
+        "fn from_args()",
+        "fn is_expired()",
+        "class ReviewCache",
+        "fn new()",
+        "class Severity",
+        "fn deviation_analysis()",
+        "class ReviewResult"
+      ]
+    },
+    {
+      "id": "file:./src/git.rs",
+      "size": 12,
+      "samples": [
+        "fn run_git()",
+        "fn get_unpushed_diff()",
+        "fn get_upstream_branch()",
+        "fn has_staged_changes()",
+        "fn get_all_diff()",
+        "fn run_git_capture()",
+        "fn get_diff()",
+        "fn git_commit()",
+        "fn get_status()",
+        "fn git_add_all()"
+      ]
+    },
+    {
+      "id": "file:./src/mcp/services/review.rs",
+      "size": 11,
+      "samples": [
+        "class ReviewService",
+        "fn tools()",
+        "fn default_review_config()",
+        "fn new()",
+        "fn description()",
+        "fn name()",
+        "class ReviewResult",
+        "class Severity",
+        "class Finding",
+        "class ReviewParams"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/ai_context.rs",
+      "size": 10,
+      "samples": [
+        "fn format_for_ai_context()",
+        "fn get_changes_by_risk()",
+        "fn format_change_detail()",
+        "fn format_condensed_ai_context()",
+        "fn create_test_change()",
+        "fn format_no_impact_message()",
+        "fn test_format_no_impact()",
+        "fn test_condensed_format()",
+        "fn test_format_with_changes()",
+        "file ./src/architectural_impact/ai_context.rs"
+      ]
+    },
+    {
+      "id": "file:./benches/architectural_impact_bench.rs",
+      "size": 9,
+      "samples": [
+        "fn create_large_summary()",
+        "fn generate_ai_context()",
+        "fn create_large_diff()",
+        "fn get_ai_context()",
+        "fn benchmark_ai_context_generation()",
+        "fn benchmark_ast_comparison()",
+        "fn benchmark_diff_analysis()",
+        "fn test_ai_context_generation()",
+        "file ./benches/architectural_impact_bench.rs"
+      ]
+    },
+    {
+      "id": "file:./src/update/notifier.rs",
+      "size": 9,
+      "samples": [
+        "fn escape_osascript()",
+        "fn send_desktop_notification()",
+        "fn notify_new_version_available()",
+        "fn notify_update_start()",
+        "fn notify_update_success()",
+        "fn notify_update_failure()",
+        "class UpdateNotifier",
+        "fn new()",
+        "file ./src/update/notifier.rs"
+      ]
+    },
+    {
+      "id": "file:./src/experimental/graph_summarizer.rs",
+      "size": 9,
+      "samples": [
+        "class Scope",
+        "fn default()",
+        "class GraphSummaryParams",
+        "class CrossEdgeBucket",
+        "class GraphStats",
+        "class GraphSummary",
+        "class CommunitySummary",
+        "class NodeLabel",
+        "file ./src/experimental/graph_summarizer.rs"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/tests.rs",
+      "size": 9,
+      "samples": [
+        "fn create_test_summary()",
+        "fn test_class_change_detection()",
+        "fn test_risk_level_assessment()",
+        "fn test_function_signature_change_detection()",
+        "fn test_function_addition_detection()",
+        "fn test_function_removal_detection()",
+        "fn test_visibility_change_detection()",
+        "fn test_no_changes()",
+        "file ./src/architectural_impact/tests.rs"
+      ]
+    },
+    {
+      "id": "file:./src/error.rs",
+      "size": 8,
+      "samples": [
+        "fn log()",
+        "fn from()",
+        "class GitAIError",
+        "fn with_hint()",
+        "fn fmt()",
+        "fn user_message()",
+        "fn context()",
+        "file ./src/error.rs"
+      ]
+    },
+    {
+      "id": "file:./src/architectural_impact/breaking_changes.rs",
+      "size": 8,
+      "samples": [
+        "fn generate_suggestions()",
+        "fn assess_change_impact()",
+        "fn detect_function_breaking_changes()",
+        "fn test_impact_assessment()",
+        "fn test_suggestion_generation()",
+        "fn detect_class_breaking_changes()",
+        "fn test_impact_level_assessment()",
+        "file ./src/architectural_impact/breaking_changes.rs"
+      ]
+    }
+  ],
+  "community_edges": [
+    {
+      "src": "file:./src/architectural_impact/cascade_detector.rs",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 11,
+      "weight_sum": 11.0
+    },
+    {
+      "src": "file:./src/ai.rs",
+      "dst": "file:./src/prompts.rs",
+      "edges": 10,
+      "weight_sum": 10.0
+    },
+    {
+      "src": "file:./src/architectural_impact/impact_propagation.rs",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 8,
+      "weight_sum": 8.0
+    },
+    {
+      "src": "file:./src/metrics/mod.rs",
+      "dst": "file:./src/main.rs",
+      "edges": 6,
+      "weight_sum": 6.0
+    },
+    {
+      "src": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 6,
+      "weight_sum": 6.0
+    },
+    {
+      "src": "file:./src/mcp/services/deviation.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 4,
+      "weight_sum": 4.0
+    },
+    {
+      "src": "file:./src/architectural_impact/mod.rs",
+      "dst": "file:./benches/architectural_impact_bench.rs",
+      "edges": 4,
+      "weight_sum": 4.0
+    },
+    {
+      "src": "file:./src/mcp/services/dependency.rs",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 4,
+      "weight_sum": 4.0
+    },
+    {
+      "src": "file:./src/update/auto_updater.rs",
+      "dst": "file:./src/update/notifier.rs",
+      "edges": 4,
+      "weight_sum": 4.0
+    },
+    {
+      "src": "file:./src/mcp/services/review.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 4,
+      "weight_sum": 4.0
+    },
+    {
+      "src": "file:./src/architectural_impact/ast_comparison.rs",
+      "dst": "file:./src/architectural_impact/mod.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/bin/generate_deps_dot.rs",
+      "dst": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/update/auto_updater.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/config_init.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/metrics/mod.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/tree_sitter/unified_analyzer.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/tree_sitter/mod.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/resource_manager.rs",
+      "dst": "file:./src/main.rs",
+      "edges": 3,
+      "weight_sum": 3.0
+    },
+    {
+      "src": "file:./src/prompts.rs",
+      "dst": "file:./src/ai.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/services/dependency.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/mod.rs",
+      "dst": "file:./src/mcp/services/dependency.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./benches/architectural_impact_bench.rs",
+      "dst": "file:./src/architectural_impact/tests.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "class:./src/security_insights.rs::InsightCategory",
+      "dst": "file:./src/prompt_engine.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/services/dependency.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/architectural_impact/dependency_graph.rs",
+      "dst": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/tree_sitter/custom_queries.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/metrics/visualizer.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/project_insights.rs",
+      "dst": "file:./src/ai.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/tree_sitter/mod.rs",
+      "dst": "class:./src/tree_sitter/queries.rs::LanguageQueries",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/args.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/architectural_impact/ai_context.rs",
+      "dst": "file:./src/architectural_impact/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/tree_sitter/unified_analyzer.rs",
+      "dst": "file:./src/tree_sitter/custom_queries.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/services/analysis.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/architectural_impact/git_state_analyzer.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./benches/architectural_impact_bench.rs",
+      "dst": "file:./src/architectural_impact/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./benches/architectural_impact_bench.rs",
+      "dst": "file:./src/architectural_impact/git_state_analyzer.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/services/analysis.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "class:./src/tree_sitter/queries.rs::LanguageQueries",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 2,
+      "weight_sum": 2.0
+    },
+    {
+      "src": "file:./src/mcp/services/commit.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/review/converter.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/update/auto_updater.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/security_review.rs",
+      "dst": "class:./src/security_insights.rs::InsightCategory",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/update/auto_updater.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/mcp/services/scan.rs",
+      "dst": "file:./src/mcp/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/tests.rs",
+      "dst": "file:./src/architectural_impact/git_state_analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/metrics/mod.rs",
+      "dst": "file:./src/tree_sitter/analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/review/analyzer.rs",
+      "dst": "file:./src/architectural_impact/git_state_analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/bin/generate_deps_dot.rs",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/commit.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/tree_sitter/analyzer.rs",
+      "dst": "file:./src/tree_sitter/unified_analyzer.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "class:./src/architectural_impact/graph_export.rs::CallChain",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/resource_manager.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/tests.rs",
+      "dst": "file:./benches/architectural_impact_bench.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/security_review.rs",
+      "dst": "class:./src/devops.rs::DevOpsClient",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/tests.rs",
+      "dst": "file:./src/architectural_impact/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./crates/gitai-core/src/lib.rs",
+      "dst": "class:./src/bin/gitai-mcp.rs::Cli",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/tests.rs",
+      "dst": "file:./src/architectural_impact/breaking_changes.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/ast_comparison.rs",
+      "dst": "file:./benches/architectural_impact_bench.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "file:./src/architectural_impact/dependency_graph.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/architectural_impact/dependency_graph.rs",
+      "dst": "class:./src/devops.rs::DevOpsClient",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/mcp/mod.rs",
+      "dst": "class:./src/devops.rs::DevOpsClient",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/commit.rs",
+      "dst": "class:./src/devops.rs::DevOpsClient",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/main.rs",
+      "dst": "class:./src/bin/gitai-mcp.rs::Cli",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/review/analyzer.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    },
+    {
+      "src": "file:./src/security_review.rs",
+      "dst": "file:./src/tree_sitter/mod.rs",
+      "edges": 1,
+      "weight_sum": 1.0
+    }
+  ]
+}

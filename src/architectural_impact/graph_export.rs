@@ -3,8 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::architectural_impact::dependency_graph::{DependencyGraph, DotOptions, NodeType};
-use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 use crate::git;
+use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 
 fn is_code_file(path: &Path) -> bool {
     matches!(
@@ -229,7 +229,9 @@ pub async fn export_summary_string(
         queue.push_back((sid.clone(), 0));
     }
     while let Some((nid, d)) = queue.pop_front() {
-        if d >= radius { continue; }
+        if d >= radius {
+            continue;
+        }
         // 正向依赖
         for dep in graph.get_dependencies(&nid) {
             if kept.insert((*dep).clone()) {
@@ -247,10 +249,17 @@ pub async fn export_summary_string(
     // Top-K 重要节点（限制在 kept 子图内）
     let mut top: Vec<(String, f32)> = kept
         .iter()
-        .filter_map(|id| graph.nodes.get(id).map(|n| (id.clone(), n.importance_score)))
+        .filter_map(|id| {
+            graph
+                .nodes
+                .get(id)
+                .map(|n| (id.clone(), n.importance_score))
+        })
         .collect();
     top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    if top.len() > top_k { top.truncate(top_k); }
+    if top.len() > top_k {
+        top.truncate(top_k);
+    }
 
     // 统计
     let stats = graph.get_statistics();
@@ -291,15 +300,17 @@ pub async fn export_summary_string(
             // 选择前 N 个代表节点（按 importance_score）
             let mut samples: Vec<(String, f32, String)> = nodes
                 .iter()
-                .filter_map(|id| graph.nodes.get(id).map(|n| {
-                    let label = match &n.node_type {
-                        NodeType::Function(f) => format!("fn {}()", f.name),
-                        NodeType::Class(c) => format!("class {}", c.name),
-                        NodeType::Module(m) => format!("mod {}", m.name),
-                        NodeType::File(f) => format!("file {}", f.path),
-                    };
-                    (id.clone(), n.importance_score, label)
-                }))
+                .filter_map(|id| {
+                    graph.nodes.get(id).map(|n| {
+                        let label = match &n.node_type {
+                            NodeType::Function(f) => format!("fn {}()", f.name),
+                            NodeType::Class(c) => format!("class {}", c.name),
+                            NodeType::Module(m) => format!("mod {}", m.name),
+                            NodeType::File(f) => format!("file {}", f.path),
+                        };
+                        (id.clone(), n.importance_score, label)
+                    })
+                })
                 .collect();
             samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             let sample_labels: Vec<String> = samples
@@ -322,8 +333,9 @@ pub async fn export_summary_string(
                 }
             }
         }
-        let mut edge_vec: Vec<((String, String), (usize, f32))> = edge_buckets.into_iter().collect();
-        edge_vec.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        let mut edge_vec: Vec<((String, String), (usize, f32))> =
+            edge_buckets.into_iter().collect();
+        edge_vec.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
         for ((src, dst), (cnt, wsum)) in edge_vec.into_iter().take(max_communities * 2) {
             comm_edges_out.push((src, dst, cnt, wsum));
         }
@@ -337,28 +349,46 @@ pub async fn export_summary_string(
         for e in &graph.edges {
             if let crate::architectural_impact::dependency_graph::EdgeType::Calls = e.edge_type {
                 if kept.contains(&e.from) && kept.contains(&e.to) {
-                    forward.entry(e.from.clone()).or_default().push(e.to.clone());
+                    forward
+                        .entry(e.from.clone())
+                        .or_default()
+                        .push(e.to.clone());
                 }
             }
         }
         // 从函数类型的种子出发采样
         let mut total = 0usize;
         for sid in &seed_ids {
-            if total >= path_samples { break; }
+            if total >= path_samples {
+                break;
+            }
             if let Some(node) = graph.nodes.get(sid) {
                 if let NodeType::Function(_) = node.node_type {
-                    let samples = sample_paths_from(&graph, &forward, sid, path_max_hops, path_samples - total);
+                    let samples = sample_paths_from(
+                        &graph,
+                        &forward,
+                        sid,
+                        path_max_hops,
+                        path_samples - total,
+                    );
                     for path_ids in samples {
-                        let labels: Vec<String> = path_ids.iter().filter_map(|nid| graph.nodes.get(nid).map(|n| match &n.node_type {
-                            NodeType::Function(f) => format!("fn {}()", f.name),
-                            NodeType::Class(c) => format!("class {}", c.name),
-                            NodeType::Module(m) => format!("mod {}", m.name),
-                            NodeType::File(f) => format!("file {}", f.path),
-                        })).collect();
+                        let labels: Vec<String> = path_ids
+                            .iter()
+                            .filter_map(|nid| {
+                                graph.nodes.get(nid).map(|n| match &n.node_type {
+                                    NodeType::Function(f) => format!("fn {}()", f.name),
+                                    NodeType::Class(c) => format!("class {}", c.name),
+                                    NodeType::Module(m) => format!("mod {}", m.name),
+                                    NodeType::File(f) => format!("file {}", f.path),
+                                })
+                            })
+                            .collect();
                         if !labels.is_empty() {
                             path_examples_out.push(labels);
                             total += 1;
-                            if total >= path_samples { break; }
+                            if total >= path_samples {
+                                break;
+                            }
                         }
                     }
                 }
@@ -397,31 +427,46 @@ pub async fn export_summary_string(
                 + comm_edges.len() * 50
                 + path_items * 30;
 
-            if estimated <= char_budget { break; }
+            if estimated <= char_budget {
+                break;
+            }
             // 依次降级：radius→top_k→communities→paths→seeds
             if !reduced_radius && radius_eff > 1 {
                 radius_eff = 1;
                 // 重新计算 kept 与 top（受半径影响）
-                let mut new_kept: std::collections::HashSet<String> = std::collections::HashSet::new();
-                let mut q: std::collections::VecDeque<(String, usize)> = std::collections::VecDeque::new();
+                let mut new_kept: std::collections::HashSet<String> =
+                    std::collections::HashSet::new();
+                let mut q: std::collections::VecDeque<(String, usize)> =
+                    std::collections::VecDeque::new();
                 for sid in &seed_ids {
                     new_kept.insert(sid.clone());
                     q.push_back((sid.clone(), 0));
                 }
                 while let Some((nid, d)) = q.pop_front() {
-                    if d >= radius_eff { continue; }
+                    if d >= radius_eff {
+                        continue;
+                    }
                     for dep in graph.get_dependencies(&nid) {
-                        if new_kept.insert((*dep).clone()) { q.push_back(((*dep).clone(), d + 1)); }
+                        if new_kept.insert((*dep).clone()) {
+                            q.push_back(((*dep).clone(), d + 1));
+                        }
                     }
                     for dep in graph.get_dependents(&nid) {
-                        if new_kept.insert((*dep).clone()) { q.push_back(((*dep).clone(), d + 1)); }
+                        if new_kept.insert((*dep).clone()) {
+                            q.push_back(((*dep).clone(), d + 1));
+                        }
                     }
                 }
                 kept_set = new_kept;
                 // 重新计算 top
                 let mut t: Vec<(String, f32)> = kept_set
                     .iter()
-                    .filter_map(|id| graph.nodes.get(id).map(|n| (id.clone(), n.importance_score)))
+                    .filter_map(|id| {
+                        graph
+                            .nodes
+                            .get(id)
+                            .map(|n| (id.clone(), n.importance_score))
+                    })
                     .collect();
                 t.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 if t.len() > top_vec.len() { /* 保持不扩增 */ }
@@ -530,7 +575,11 @@ pub async fn export_summary_string(
             truncated,
             communities: comm_json,
             community_edges: edges_json,
-            path_examples: if with_paths { Some(path_examples_out.clone()) } else { None },
+            path_examples: if with_paths {
+                Some(path_examples_out.clone())
+            } else {
+                None
+            },
         };
         return Ok(serde_json::to_string_pretty(&s)?);
     }
@@ -542,16 +591,23 @@ pub async fn export_summary_string(
         "nodes: {}, edges: {}, avg_degree: {:.2}, components: {}\n",
         stats.node_count, stats.edge_count, stats.avg_degree, stats.cycles_count
     ));
-    out.push_str(&format!("seeds_preview (<=20): {}\n", seeds_preview.join(", ")));
+    out.push_str(&format!(
+        "seeds_preview (<=20): {}\n",
+        seeds_preview.join(", ")
+    ));
     out.push_str(&format!("kept_nodes (radius={}): {}\n", radius, kept.len()));
     out.push_str("top_nodes (by PageRank):\n");
     for (i, (id, score)) in top.iter().take(10).enumerate() {
-        let label = graph.nodes.get(id).map(|n| match &n.node_type {
-            NodeType::Function(f) => format!("fn {}()", f.name),
-            NodeType::Class(c) => format!("class {}", c.name),
-            NodeType::Module(m) => format!("mod {}", m.name),
-            NodeType::File(f) => format!("file {}", f.path),
-        }).unwrap_or_else(|| id.clone());
+        let label = graph
+            .nodes
+            .get(id)
+            .map(|n| match &n.node_type {
+                NodeType::Function(f) => format!("fn {}()", f.name),
+                NodeType::Class(c) => format!("class {}", c.name),
+                NodeType::Module(m) => format!("mod {}", m.name),
+                NodeType::File(f) => format!("file {}", f.path),
+            })
+            .unwrap_or_else(|| id.clone());
         out.push_str(&format!("  {}. {} (pr={:.5})\n", i + 1, label, score));
     }
 
@@ -563,13 +619,21 @@ pub async fn export_summary_string(
                 i + 1,
                 cid,
                 size,
-                samples.iter().take(max_nodes_per_community).cloned().collect::<Vec<_>>().join(", ")
+                samples
+                    .iter()
+                    .take(max_nodes_per_community)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
         if !comm_edges_out.is_empty() {
             out.push_str("  cross-community edges (top):\n");
             for (src, dst, cnt, wsum) in comm_edges_out.iter().take(20) {
-                out.push_str(&format!("    {} -> {}: edges={} w_sum={:.2}\n", src, dst, cnt, wsum));
+                out.push_str(&format!(
+                    "    {} -> {}: edges={} w_sum={:.2}\n",
+                    src, dst, cnt, wsum
+                ));
             }
         }
     }
@@ -594,7 +658,9 @@ fn sample_paths_from(
     let mut results: Vec<Vec<String>> = Vec::new();
     let mut stack: Vec<(String, Vec<String>)> = vec![(start.to_string(), vec![start.to_string()])];
     while let Some((node_id, path)) = stack.pop() {
-        if results.len() >= limit { break; }
+        if results.len() >= limit {
+            break;
+        }
         if path.len() - 1 >= max_hops {
             results.push(path.clone());
             continue;
@@ -629,8 +695,8 @@ fn label_propagation_communities(
     graph: &DependencyGraph,
     max_iters: usize,
 ) -> HashMap<String, String> {
-    use rand::{rngs::StdRng, SeedableRng};
     use rand::seq::SliceRandom;
+    use rand::{rngs::StdRng, SeedableRng};
 
     // 初始标签：每个节点的标签为自身ID
     let mut labels: HashMap<String, String> = graph
@@ -643,8 +709,12 @@ fn label_propagation_communities(
     let mut neighbors: HashMap<String, Vec<String>> = HashMap::new();
     for id in graph.nodes.keys() {
         let mut neigh = Vec::new();
-        for d in graph.get_dependencies(id) { neigh.push((*d).clone()); }
-        for d in graph.get_dependents(id) { neigh.push((*d).clone()); }
+        for d in graph.get_dependencies(id) {
+            neigh.push((*d).clone());
+        }
+        for d in graph.get_dependents(id) {
+            neigh.push((*d).clone());
+        }
         neigh.sort();
         neigh.dedup();
         neighbors.insert(id.clone(), neigh);
@@ -658,14 +728,20 @@ fn label_propagation_communities(
         node_order.shuffle(&mut rng);
         for id in node_order.iter() {
             let neigh = neighbors.get(id).cloned().unwrap_or_default();
-            if neigh.is_empty() { continue; }
+            if neigh.is_empty() {
+                continue;
+            }
             let mut freq: HashMap<String, usize> = HashMap::new();
             for n in neigh.iter() {
                 if let Some(l) = labels.get(n) {
                     *freq.entry(l.clone()).or_insert(0) += 1;
                 }
             }
-            if let Some((&_max_count, candidates)) = freq.values().max().map(|m| (m, freq.iter().filter(|(_, &v)| v == *m).collect::<Vec<_>>())) {
+            if let Some((&_max_count, candidates)) = freq
+                .values()
+                .max()
+                .map(|m| (m, freq.iter().filter(|(_, &v)| v == *m).collect::<Vec<_>>()))
+            {
                 // 选择字典序最小的标签以保证确定性
                 let mut best = candidates
                     .into_iter()
@@ -679,7 +755,9 @@ fn label_propagation_communities(
                 }
             }
         }
-        if changed == 0 { break; }
+        if changed == 0 {
+            break;
+        }
     }
 
     labels

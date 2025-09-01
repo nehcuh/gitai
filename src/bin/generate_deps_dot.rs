@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     // Re-build graph via builder already done; here we compute critical again
-    
+
     // Write file
     build_global_dependency_graph(Path::new(scan_dir)).await?; // no-op to ensure await context
                                                                // We need the graph from earlier scope; recompute critical via options already set.
