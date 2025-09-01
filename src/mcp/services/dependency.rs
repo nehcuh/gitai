@@ -8,6 +8,7 @@ use rmcp::model::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 /// Dependency 服务
 pub struct DependencyService {
@@ -34,6 +35,34 @@ pub struct DependencyParams {
     pub include_imports: Option<bool>,
     /// 详细程度 (0-3)
     pub verbosity: Option<u32>,
+}
+
+/// 图格式转换参数
+#[derive(Debug, Deserialize)]
+pub struct ConvertGraphParams {
+    /// 输入格式（dot 或 mermaid）
+    pub input_format: String,
+    /// 输入内容
+    pub input_content: String,
+    /// 输出格式（png、svg、pdf）
+    pub output_format: String,
+    /// 输出文件路径
+    pub output_path: String,
+    /// Graphviz 布局引擎（可选）
+    pub engine: Option<String>,
+}
+
+/// 图格式转换结果
+#[derive(Debug, Serialize)]
+pub struct ConvertGraphResult {
+    /// 操作是否成功
+    pub success: bool,
+    /// 结果消息
+    pub message: String,
+    /// 输出文件路径
+    pub output_path: String,
+    /// 额外信息
+    pub details: HashMap<String, String>,
 }
 
 /// 依赖图分析结果
@@ -695,6 +724,114 @@ impl DependencyService {
             EdgeType::DependsOn => "-->".to_string(),   // 实线箭头表示依赖
         }
     }
+
+    /// 将图格式转换为图像
+    async fn convert_graph_to_image(
+        &self,
+        params: ConvertGraphParams,
+    ) -> Result<ConvertGraphResult, Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "🎨 开始转换图格式: {} -> {}",
+            params.input_format, params.output_format
+        );
+
+        // 验证输入格式
+        let input_format = params.input_format.to_lowercase();
+        if input_format != "dot" && input_format != "mermaid" {
+            return Err(format!("不支持的输入格式: {}", params.input_format).into());
+        }
+
+        // 验证输出格式
+        let output_format = params.output_format.to_lowercase();
+        if !matches!(output_format.as_str(), "png" | "svg" | "pdf") {
+            return Err(format!("不支持的输出格式: {}", params.output_format).into());
+        }
+
+        // 如果输入是 Mermaid，先转换为 DOT
+        let dot_content = if input_format == "mermaid" {
+            info!("🔄 将 Mermaid 转换为 DOT 格式");
+            // Mermaid 转 DOT 需要特殊处理，目前不支持
+            return Err("目前不支持 Mermaid 转换，请使用 DOT 格式输入".into());
+        } else {
+            params.input_content.clone()
+        };
+
+        // 创建临时 DOT 文件
+        let temp_dir = std::env::temp_dir();
+        let temp_dot_file = temp_dir.join(format!("gitai_graph_{}.dot", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        ));
+        
+        std::fs::write(&temp_dot_file, &dot_content)
+            .map_err(|e| format!("无法写入临时 DOT 文件: {}", e))?;
+
+        // 使用 Graphviz 转换
+        let engine = params.engine.unwrap_or_else(|| "dot".to_string());
+        
+        // 构建 Graphviz 命令
+        let output = std::process::Command::new(&engine)
+            .arg("-T")
+            .arg(&output_format)
+            .arg("-o")
+            .arg(&params.output_path)
+            .arg(&temp_dot_file)
+            .output()
+            .map_err(|e| {
+                format!(
+                    "无法执行 Graphviz 命令 '{}': {}\n请确保 Graphviz 已安装并在 PATH 中",
+                    engine, e
+                )
+            })?;
+
+        // 清理临时文件
+        let _ = std::fs::remove_file(&temp_dot_file);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Graphviz 转换失败: {}\n命令: {} -T{} -o {} {}",
+                stderr,
+                engine,
+                output_format,
+                params.output_path,
+                temp_dot_file.display()
+            )
+            .into());
+        }
+
+        // 检查输出文件是否存在
+        if !std::path::Path::new(&params.output_path).exists() {
+            return Err(format!("输出文件未生成: {}", params.output_path).into());
+        }
+
+        let file_size = std::fs::metadata(&params.output_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        info!(
+            "✅ 图像生成成功: {} ({} bytes)",
+            params.output_path, file_size
+        );
+
+        Ok(ConvertGraphResult {
+            success: true,
+            message: format!(
+                "成功将 {} 转换为 {} 格式",
+                params.input_format, params.output_format
+            ),
+            output_path: params.output_path,
+            details: {
+                let mut details = HashMap::new();
+                details.insert("engine".to_string(), engine);
+                details.insert("file_size".to_string(), file_size.to_string());
+                details.insert("format".to_string(), output_format);
+                details
+            },
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -727,6 +864,41 @@ impl GitAiMcpService for DependencyService {
             .clone(),
         );
 
+        let convert_schema = Arc::new(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "input_format": {
+                        "type": "string",
+                        "enum": ["dot", "mermaid"],
+                        "description": "输入格式（dot 或 mermaid）"
+                    },
+                    "input_content": {
+                        "type": "string",
+                        "description": "输入的图内容（DOT 或 Mermaid 格式）"
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "enum": ["png", "svg", "pdf"],
+                        "description": "输出格式（png、svg 或 pdf）"
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "输出文件路径"
+                    },
+                    "engine": {
+                        "type": "string",
+                        "enum": ["dot", "neato", "circo", "fdp", "sfdp", "twopi"],
+                        "description": "Graphviz 布局引擎（默认 dot）"
+                    }
+                },
+                "required": ["input_format", "input_content", "output_format", "output_path"]
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
         vec![
             Tool {
                 name: "execute_dependency_graph".to_string().into(),
@@ -742,6 +914,13 @@ impl GitAiMcpService for DependencyService {
                     .to_string()
                     .into(),
                 input_schema: schema,
+            },
+            Tool {
+                name: "convert_graph_to_image".to_string().into(),
+                description: "将 DOT 或 Mermaid 格式的图转换为图像文件（PNG、SVG、PDF）"
+                    .to_string()
+                    .into(),
+                input_schema: convert_schema,
             },
         ]
     }
@@ -764,6 +943,17 @@ impl GitAiMcpService for DependencyService {
                     .map_err(|e| execution_error("dependency", e))?;
 
                 serde_json::to_value(&result).map_err(|e| serialize_error("dependency", e))
+            }
+            "convert_graph_to_image" => {
+                let params: ConvertGraphParams =
+                    serde_json::from_value(arguments).map_err(|e| parse_error("convert_graph", e))?;
+
+                let result = self
+                    .convert_graph_to_image(params)
+                    .await
+                    .map_err(|e| execution_error("convert_graph", e))?;
+
+                serde_json::to_value(&result).map_err(|e| serialize_error("convert_graph", e))
             }
             _ => Err(invalid_parameters_error(format!(
                 "Unknown tool: {}",
