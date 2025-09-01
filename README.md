@@ -460,10 +460,10 @@ gitai review --tree-sitter --security-scan --scan-tool=opengrep
 #### 评审流程图（简化）
 ```mermaid
 flowchart LR
-  A[gitai review] --> B{模式}
-  B -->|基础| C[结构/安全(可选)] --> D[review 模板] --> E[AI/回退] --> F[输出]
-  B -->|--full| G[依赖图 + PageRank + 影响范围] --> H[注入 Dependency Insights] --> E
-  B -->|--deviation-analysis| I[deviation 模板] --> E
+  A["gitai review"] --> B{"模式"}
+  B -->|基础| C["结构/安全(可选)"] --> D["review 模板"] --> E["AI/回退"] --> F["输出"]
+  B -->|--full| G["依赖图 + PageRank + 影响范围"] --> H["注入 Dependency Insights"] --> E
+  B -->|--deviation-analysis| I["deviation 模板"] --> E
 ```
 
 #### Issue 关联（当前支持）
