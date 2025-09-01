@@ -377,7 +377,7 @@ impl McpDependencyConfig {
     /// 验证 MCP Dependency 服务配置
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证输出格式
-        let valid_formats = ["json", "dot", "svg", "mermaid"];
+        let valid_formats = ["json", "dot", "svg", "mermaid", "ascii"];
         if !valid_formats.contains(&self.default_format.as_str()) {
             return Err(format!(
                 "不支持的输出格式: {}，支持的格式: {:?}",
@@ -444,7 +444,7 @@ impl Default for Config {
                     }),
                     analysis: Some(McpAnalysisConfig { verbosity: 1 }),
                     dependency: Some(McpDependencyConfig {
-                        default_format: "svg".to_string(),
+                        default_format: "ascii".to_string(),
                         verbosity: 1,
                         default_include_calls: true,
                         default_include_imports: true,

@@ -190,12 +190,28 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                             },
                                             {
                                                 "name": "export_dependency_graph",
-                                                "description": "Export global/subtree dependency graph in JSON, DOT, SVG or Mermaid format. Warning: output may be very large; prefer summarize_graph (budget-adaptive) and only use full export when necessary.",
+                                                "description": "Export dependency graph (default ASCII). You can also use execute_dependency_graph with format=json|dot|svg|mermaid|ascii.",
                                                 "inputSchema": {
                                                     "type": "object",
                                                     "properties": {
                                                         "path": {"type": "string", "description": "Scan directory (default .)"},
-                                                        "threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Critical node highlight threshold (0-1), default 0.15"}
+                                                        "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
+                                                        "output": {"type": "string", "description": "Output file path (optional)"},
+                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
+                                                    },
+                                                    "required": ["path"]
+                                                }
+                                            },
+                                            {
+                                                "name": "execute_dependency_graph",
+                                                "description": "Generate dependency graph (default ASCII) with format=json|dot|svg|mermaid|ascii.",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
+                                                        "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
+                                                        "output": {"type": "string", "description": "Output file path (optional)"},
+                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
                                                     },
                                                     "required": ["path"]
                                                 }

@@ -217,36 +217,62 @@ impl ScanService {
             format!("{:.2}s", scan_result.execution_time),
         );
 
-        if let Some(rules_info) = scan_result.rules_info {
+        // 添加规则信息到详情中
+        let has_valid_rules = if let Some(rules_info) = scan_result.rules_info {
             details.insert(
                 "total_rules".to_string(),
                 rules_info.total_rules.to_string(),
             );
             details.insert("rules_dir".to_string(), rules_info.dir);
-        }
+            rules_info.total_rules > 0
+        } else {
+            // 没有规则信息，可能是规则目录为空
+            details.insert("total_rules".to_string(), "0".to_string());
+            details.insert("rules_dir".to_string(), "未找到规则目录".to_string());
+            false
+        };
 
         let findings_count = findings.len();
         let severity_counts = self.count_by_severity(&findings);
 
-        // 改进成功判断逻辑：只要能得到扫描结果就算成功
-        // stderr 输出不应该导致扫描失败
-        let success = scan_result.error.is_none() || !findings.is_empty();
+        // 改进成功判断逻辑：
+        // 1. 没有错误就算成功
+        // 2. 即使有错误，如果找到了问题也算部分成功
+        let success = scan_result.error.is_none();
+
+        // 改进消息生成逻辑
+        let message = if let Some(error) = scan_result.error {
+            // 检查是否是因为没有规则
+            if error.contains("exit status 2") || error.contains("No rules") {
+                if !has_valid_rules {
+                    format!("扫描完成，未加载到有效规则（规则目录可能为空或无效）")
+                } else {
+                    format!("扫描完成，未发现问题")
+                }
+            } else if !findings.is_empty() {
+                // 有发现但也有错误，说明扫描部分成功
+                format!(
+                    "扫描完成，发现 {} 个问题（有警告: {}）",
+                    findings_count, error
+                )
+            } else {
+                // 有错误且无发现
+                format!("扫描失败: {}", error)
+            }
+        } else {
+            // 没有错误
+            if findings_count > 0 {
+                format!("扫描完成，发现 {} 个问题", findings_count)
+            } else if !has_valid_rules {
+                format!("扫描完成，但未加载到有效规则")
+            } else {
+                format!("扫描完成，未发现问题")
+            }
+        };
 
         ScanResult {
             success,
-            message: if let Some(error) = scan_result.error {
-                // 如果有发现但也有错误，说明扫描部分成功
-                if !findings.is_empty() {
-                    format!(
-                        "扫描完成，发现 {} 个问题（有警告: {}）",
-                        findings_count, error
-                    )
-                } else {
-                    format!("扫描完成，但有错误: {}", error)
-                }
-            } else {
-                format!("扫描完成，发现 {} 个问题", findings_count)
-            },
+            message,
             findings,
             summary: ScanSummary {
                 total_findings: findings_count,
@@ -283,7 +309,7 @@ impl crate::mcp::GitAiMcpService for ScanService {
     }
 
     fn description(&self) -> &str {
-        "执行安全扫描，支持多种扫描工具和语言过滤"
+        "执行安全扫描，支持多语言自动检测与可选语言过滤"
     }
 
     fn tools(&self) -> Vec<Tool> {
@@ -305,7 +331,7 @@ impl crate::mcp::GitAiMcpService for ScanService {
                         },
                         "lang": {
                             "type": "string",
-                            "description": "语言过滤 (可选，如 rust, python, java)"
+                            "description": "语言过滤 (可选；默认自动检测并使用多语言规则)"
                         },
                         "timeout": {
                             "type": "integer",
