@@ -55,6 +55,8 @@ pub struct DependencyResult {
     pub dot_content: Option<String>,
     /// Mermaid 格式内容
     pub mermaid_content: Option<String>,
+    /// ASCII 文本内容
+    pub ascii_content: Option<String>,
     /// 额外信息
     pub details: HashMap<String, String>,
 }
@@ -187,6 +189,7 @@ impl DependencyService {
                 graph_data: None,
                 dot_content: None,
                 mermaid_content: None,
+                ascii_content: None,
                 details: {
                     let mut details = HashMap::new();
                     details.insert("directory_path".to_string(), dir_path.display().to_string());
@@ -301,6 +304,7 @@ impl DependencyService {
                     graph_data: Some(graph),
                     dot_content: None,
                     mermaid_content: None,
+                    ascii_content: None,
                     details: HashMap::new(),
                 })
             }
@@ -325,6 +329,7 @@ impl DependencyService {
                     graph_data: None,
                     dot_content: Some(dot_content),
                     mermaid_content: None,
+                    ascii_content: None,
                     details: HashMap::new(),
                 })
             }
@@ -360,6 +365,7 @@ impl DependencyService {
                     graph_data: None,
                     dot_content: Some(dot_content),
                     mermaid_content: None,
+                    ascii_content: None,
                     details: {
                         let mut details = HashMap::new();
                         details.insert(
@@ -390,6 +396,32 @@ impl DependencyService {
                     graph_data: None,
                     dot_content: None,
                     mermaid_content: Some(mermaid_content),
+                    ascii_content: None,
+                    details: HashMap::new(),
+                })
+            }
+            "ascii" => {
+                info!("📄 生成 ASCII 文本依赖图");
+                let verbosity = params.verbosity.unwrap_or(self.verbosity);
+                let ascii_content = Self::convert_to_ascii(&graph, verbosity);
+
+                // 如果指定了输出文件，写入文件
+                if let Some(output_path) = &params.output {
+                    std::fs::write(output_path, &ascii_content)
+                        .map_err(|e| format!("无法写入 ASCII 文件: {e}"))?;
+                    info!("📁 ASCII 文件已保存到: {output_path}");
+                }
+
+                Ok(DependencyResult {
+                    success: true,
+                    message: "ASCII 文本依赖图生成成功".to_string(),
+                    format: "ascii".to_string(),
+                    output_path: params.output.clone(),
+                    statistics,
+                    graph_data: None,
+                    dot_content: None,
+                    mermaid_content: None,
+                    ascii_content: Some(ascii_content),
                     details: HashMap::new(),
                 })
             }
@@ -533,6 +565,95 @@ impl DependencyService {
         mermaid
     }
 
+    /// 将依赖图转换为 ASCII 文本
+    fn convert_to_ascii(graph: &DependencyGraph, verbosity: u32) -> String {
+        // 为节点分配短 ID，保证稳定性（按原 ID 排序）
+        let mut node_ids: Vec<&String> = graph.nodes.keys().collect();
+        node_ids.sort();
+        let mut id_map: HashMap<String, String> = HashMap::new();
+        for (i, id) in node_ids.iter().enumerate() {
+            id_map.insert((**id).clone(), format!("N{}", i + 1));
+        }
+
+        let mut out = String::new();
+        out.push_str("# Dependency Graph (ASCII)\n");
+        out.push_str(&format!(
+            "nodes: {}, edges: {}\n",
+            graph.nodes.len(), graph.edges.len()
+        ));
+        let stats = graph.get_statistics();
+        out.push_str(&format!(
+            "avg_degree: {:.2}, cycles: {}, critical: {}\n\n",
+            stats.avg_degree, stats.cycles_count, stats.critical_nodes_count
+        ));
+
+        // 打印节点映射
+        out.push_str("[Nodes]\n");
+        let mut nodes_sorted: Vec<(&String, &crate::architectural_impact::dependency_graph::Node)> =
+            graph.nodes.iter().collect();
+        nodes_sorted.sort_by(|a, b| a.0.cmp(b.0));
+        for (id, node) in nodes_sorted {
+            let short = id_map.get(id).cloned().unwrap_or_else(|| id.clone());
+            let label = match &node.node_type {
+                NodeType::Function(f) => format!("fn {}()", f.name),
+                NodeType::Class(c) => format!("class {}", c.name),
+                NodeType::Module(m) => format!("mod {}", m.name),
+                NodeType::File(f) => format!("file {}", f.path),
+            };
+            if verbosity >= 2 {
+                out.push_str(&format!(
+                    "  {short}: {label}  [loc={}:{}..{}, score={:.2}]\n",
+                    node.metadata.file_path,
+                    node.metadata.start_line,
+                    node.metadata.end_line,
+                    node.importance_score
+                ));
+            } else {
+                out.push_str(&format!("  {short}: {label}\n"));
+            }
+        }
+        out.push_str("\n[Edges]\n");
+        // 排序边，保证稳定性
+        let mut edges_sorted = graph.edges.clone();
+        edges_sorted.sort_by(|a, b| {
+            let c = a.from.cmp(&b.from);
+            if c == std::cmp::Ordering::Equal { a.to.cmp(&b.to) } else { c }
+        });
+        for e in edges_sorted {
+            let from_s = id_map.get(&e.from).cloned().unwrap_or_else(|| e.from.clone());
+            let to_s = id_map.get(&e.to).cloned().unwrap_or_else(|| e.to.clone());
+            let etype = match e.edge_type {
+                EdgeType::Calls => "CALLS",
+                EdgeType::Imports => "IMPORTS",
+                EdgeType::Exports => "EXPORTS",
+                EdgeType::Inherits => "INHERITS",
+                EdgeType::Implements => "IMPLEMENTS",
+                EdgeType::Uses => "USES",
+                EdgeType::References => "REFS",
+                EdgeType::Contains => "CONTAINS",
+                EdgeType::DependsOn => "DEPENDS",
+            };
+            if verbosity >= 2 {
+                let mut meta = String::new();
+                if let Some(m) = &e.metadata {
+                    if let Some(ref notes) = m.notes { if !notes.is_empty() { meta.push_str(&format!(" notes={}", notes)); } }
+                    if let Some(cc) = m.call_count { meta.push_str(&format!(" calls={}", cc)); }
+                    if m.is_strong_dependency { meta.push_str(" strong"); }
+                }
+                out.push_str(&format!(
+                    "  {from} -[{etype} w={:.2}]{meta}-> {to}\n",
+                    e.weight,
+                    from = from_s,
+                    to = to_s
+                ));
+            } else {
+                out.push_str(&format!("  {from} -[{etype}]-> {to}\n", from = from_s, to = to_s));
+            }
+        }
+
+        out
+    }
+
     /// 获取节点的显示名称
     fn get_node_display_name(node_id: &str) -> String {
         // 从节点 ID 中提取有意义的名称
@@ -587,54 +708,42 @@ impl GitAiMcpService for DependencyService {
     }
 
     fn tools(&self) -> Vec<Tool> {
-        vec![Tool {
-            name: "execute_dependency_graph".to_string().into(),
-            description: "生成代码依赖图，支持 JSON、DOT、SVG 和 Mermaid 格式输出"
-                .to_string()
-                .into(),
-            input_schema: std::sync::Arc::new(
-                serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "要分析的文件或目录路径"
-                        },
-                        "format": {
-                            "type": "string",
-                            "enum": ["json", "dot", "svg", "mermaid"],
-                            "description": "输出格式，支持 JSON、DOT、SVG 和 Mermaid"
-                        },
-                        "output": {
-                            "type": "string",
-                            "description": "输出文件路径（可选）"
-                        },
-                        "depth": {
-                            "type": "integer",
-                            "description": "分析深度（可选，默认为无限制）"
-                        },
-                        "include_calls": {
-                            "type": "boolean",
-                            "description": "是否包含函数调用关系（默认为 true）"
-                        },
-                        "include_imports": {
-                            "type": "boolean",
-                            "description": "是否包含导入关系（默认为 true）"
-                        },
-                        "verbosity": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 3,
-                            "description": "详细程度，0-3（可选，默认为 1）"
-                        }
-                    },
-                    "required": ["path"]
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            ),
-        }]
+        let schema = std::sync::Arc::new(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "要分析的文件或目录路径"},
+                    "format": {"type": "string", "enum": ["json", "dot", "svg", "mermaid", "ascii"], "description": "输出格式（默认 ascii）"},
+                    "output": {"type": "string", "description": "输出文件路径（可选）"},
+                    "depth": {"type": "integer", "description": "分析深度（可选，默认为无限制）"},
+                    "include_calls": {"type": "boolean", "description": "是否包含函数调用关系（默认为 true）"},
+                    "include_imports": {"type": "boolean", "description": "是否包含导入关系（默认为 true）"},
+                    "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "详细程度，0-3（可选，默认为 1）"}
+                },
+                "required": ["path"]
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+
+        vec![
+            Tool {
+                name: "execute_dependency_graph".to_string().into(),
+                description: "生成代码依赖图（默认 ASCII），支持 JSON、DOT、SVG、Mermaid 和 ASCII 文本格式输出"
+                    .to_string()
+                    .into(),
+                input_schema: schema.clone(),
+            },
+            Tool {
+                // 别名：兼容客户端使用 export_dependency_graph 的习惯
+                name: "export_dependency_graph".to_string().into(),
+                description: "导出依赖图（默认 ASCII），支持 JSON、DOT、SVG、Mermaid 和 ASCII 文本格式输出"
+                    .to_string()
+                    .into(),
+                input_schema: schema,
+            },
+        ]
     }
 
     async fn handle_tool_call(
@@ -645,7 +754,7 @@ impl GitAiMcpService for DependencyService {
         debug!("🔧 Dependency 服务处理工具调用: {}", tool_name);
 
         match tool_name {
-            "execute_dependency_graph" => {
+            "execute_dependency_graph" | "export_dependency_graph" => {
                 let params: DependencyParams =
                     serde_json::from_value(arguments).map_err(|e| parse_error("dependency", e))?;
 

@@ -103,28 +103,39 @@ pub fn run_opengrep_scan(
                 .join("rules")
         });
     let mut rules_info: Option<RulesInfo> = None;
+    let mut used_config_paths: Vec<std::path::PathBuf> = Vec::new();
     if rules_dir.exists() {
         if let Ok(mut iter) = std::fs::read_dir(&rules_dir) {
             if iter.next().is_some() {
-                // 若指定了语言，直接使用对应子目录；否则再尝试自动选择
-                let rules_root = if let Some(l) = lang {
-                    rules_dir.join(l)
+                // 语言已指定：仅使用该子目录；未指定：包含所有存在的语言子目录，避免根目录中的非规则 YAML 被解析
+                let known_langs = [
+                    "java", "python", "javascript", "typescript", "go", "rust", "c", "cpp",
+                    "ruby", "php", "kotlin", "scala", "swift",
+                ];
+                if let Some(l) = lang {
+                    let candidate = rules_dir.join(l);
+                    let rules_root = if candidate.exists() { candidate } else { rules_dir.clone() };
+                    used_config_paths.push(rules_root.clone());
                 } else {
-                    select_language_rules(&rules_dir, path)
-                        .unwrap_or_else(|| pick_rules_path(&rules_dir))
-                };
-                args.push(format!("--config={}", rules_root.display()));
-                // 读取元信息：先尝试具体的规则目录，再尝试根目录
-                rules_info = read_rules_info(&rules_root)
-                    .and_then(|info| {
-                        // 如果子目录没有规则计数，尝试从父目录获取
-                        if info.total_rules == 0 {
-                            None
-                        } else {
-                            Some(info)
-                        }
-                    })
-                    .or_else(|| read_rules_info(&rules_dir));
+                    for l in known_langs { 
+                        let p = rules_dir.join(l);
+                        if p.exists() && p.is_dir() { used_config_paths.push(p); }
+                    }
+                    // 回退：若没有任何语言子目录存在，则退回根目录
+                    if used_config_paths.is_empty() {
+                        used_config_paths.push(rules_dir.clone());
+                    }
+                }
+
+                // 添加所有配置目录
+                for p in &used_config_paths {
+                    args.push(format!("--config={}", p.display()));
+                }
+
+                // 读取元信息：优先使用第一个有效目录；如果没有，则尝试根目录
+                if let Some(first) = used_config_paths.first() {
+                    rules_info = read_rules_info(first).or_else(|| read_rules_info(&rules_dir));
+                }
             }
         }
     }
@@ -142,26 +153,85 @@ pub fn run_opengrep_scan(
 
     let execution_time = start_time.elapsed().as_secs_f64();
 
+    // 处理退出码
+    // OpenGrep/Semgrep 退出码说明：
+    // 0 = 成功，有或没有发现
+    // 1 = 未捕获的错误
+    // 2 = 命令无效或找不到规则/文件
+    // 对于退出码 2，我们需要检查是否真的是错误还是只是没有发现
+    let exit_code = output.status.code().unwrap_or(-1);
+    
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::warn!("OpenGrep 返回非零状态码: {stderr}");
-        return Ok(ScanResult {
-            tool: "opengrep".to_string(),
-            version: if include_version {
-                get_opengrep_version()?
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr_trim = stderr.trim();
+        
+        // 退出码 2 可能只是没有匹配的文件或规则，需要进一步判断
+        if exit_code == 2 {
+            // 检查是否有实际的错误信息
+            if stderr_trim.is_empty() || stderr_trim.contains("No rules") || stderr_trim.contains("No files") {
+                // 这是一个"无发现"的情况，不是真正的错误
+                log::info!("OpenGrep 退出码 2：无匹配规则或文件，视为成功扫描");
+                // 继续处理，将其视为成功但无发现
             } else {
-                "unknown".to_string()
-            },
-            execution_time,
-            findings: vec![],
-            error: Some(stderr.to_string()),
-            rules_info,
-        });
+                // 有实际的错误信息
+                let err_msg = stderr_trim.to_string();
+                log::warn!("OpenGrep 返回错误状态码 2: {}", err_msg);
+                return Ok(ScanResult {
+                    tool: "opengrep".to_string(),
+                    version: if include_version {
+                        get_opengrep_version()?
+                    } else {
+                        "unknown".to_string()
+                    },
+                    execution_time,
+                    findings: vec![],
+                    error: Some(err_msg),
+                    rules_info,
+                });
+            }
+        } else {
+            // 其他非零退出码，视为错误
+            let err_msg = if !stderr_trim.is_empty() {
+                stderr_trim.to_string()
+            } else {
+                // 附带 stdout 的前几行，帮助定位（截断到 500 字符）
+                let head = stdout.lines().take(5).collect::<Vec<_>>().join(" | ");
+                if head.is_empty() {
+                    format!("OpenGrep exited with status {} (no stderr)", exit_code)
+                } else {
+                    let mut s = format!("OpenGrep exited with status {} (no stderr). stdout: {}", exit_code, head);
+                    if s.len() > 500 { s.truncate(500); }
+                    s
+                }
+            };
+            log::warn!("OpenGrep 返回非零状态码 ({}): {}", exit_code, err_msg);
+            return Ok(ScanResult {
+                tool: "opengrep".to_string(),
+                version: if include_version {
+                    get_opengrep_version()?
+                } else {
+                    "unknown".to_string()
+                },
+                execution_time,
+                findings: vec![],
+                error: Some(err_msg),
+                rules_info,
+            });
+        }
     }
 
     // 解析结果
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!("📄 OpenGrep stdout: {stdout}");
+    if !used_config_paths.is_empty() {
+        let joined = used_config_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        debug!("📦 使用规则目录: {}", joined);
+    }
 
     let findings = match parse_opengrep_output(&stdout) {
         Ok(f) => f,

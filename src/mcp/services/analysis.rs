@@ -457,7 +457,7 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
             },
             Tool {
                 name: "export_dependency_graph".to_string().into(),
-                description: "导出依赖图（全局/子目录），支持 JSON、DOT、SVG 和 Mermaid 格式输出".to_string().into(),
+                description: "导出依赖图（全局/子目录），支持 JSON、DOT、SVG 和 Mermaid 格式输出。注意：输出可能非常长，建议优先使用 summarize_graph（预算自适应裁剪），仅在必要时导出完整图。".to_string().into(),
                 input_schema: Arc::new(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -481,6 +481,29 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                         "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "最多返回路径数，默认 20"}
                     },
                     "required": ["path", "start"]
+                }).as_object().unwrap().clone()),
+            },
+            Tool {
+                name: "summarize_graph".to_string().into(),
+                description: "图摘要（支持社区压缩与预算自适应裁剪）".to_string().into(),
+                input_schema: Arc::new(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "扫描目录（默认 .）"},
+                        "radius": {"type": "integer", "minimum": 1, "description": "从种子出发的邻域半径（默认1）"},
+                        "top_k": {"type": "integer", "minimum": 1, "description": "Top节点上限（默认200）"},
+                        "seeds_from_diff": {"type": "boolean", "description": "从 git diff 推导变更种子（默认false）"},
+                        "format": {"type": "string", "enum": ["json", "text"], "description": "输出格式（默认json）"},
+                        "budget_tokens": {"type": "integer", "minimum": 0, "description": "预算token用于自适应裁剪（默认3000）"},
+                        "community": {"type": "boolean", "description": "启用社区压缩（v1）"},
+                        "comm_alg": {"type": "string", "enum": ["labelprop"], "description": "社区检测算法（默认labelprop）"},
+                        "max_communities": {"type": "integer", "minimum": 1, "description": "社区数量上限（默认50）"},
+                        "max_nodes_per_community": {"type": "integer", "minimum": 1, "description": "每个社区展示节点上限（默认10）"},
+                        "with_paths": {"type": "boolean", "description": "启用路径采样（v2）"},
+                        "path_samples": {"type": "integer", "minimum": 0, "description": "路径样本数量（默认5）"},
+                        "path_max_hops": {"type": "integer", "minimum": 1, "description": "单条路径最大跳数（默认5）"}
+                    },
+                    "required": ["path"]
                 }).as_object().unwrap().clone()),
             }
         ]
@@ -560,6 +583,87 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                 .await
                 .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
                 Ok(serde_json::json!({"chains": chains, "message": "ok"}))
+            }
+            "summarize_graph" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(".");
+                let radius = arguments
+                    .get("radius")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1) as usize;
+                let top_k = arguments
+                    .get("top_k")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(200) as usize;
+                let seeds_from_diff = arguments
+                    .get("seeds_from_diff")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let format = arguments
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("json");
+                let budget_tokens = arguments
+                    .get("budget_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(3000) as usize;
+                let community = arguments
+                    .get("community")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let comm_alg = arguments
+                    .get("comm_alg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("labelprop");
+                let max_communities = arguments
+                    .get("max_communities")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(50) as usize;
+                let max_nodes_per_community = arguments
+                    .get("max_nodes_per_community")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10) as usize;
+                let with_paths = arguments
+                    .get("with_paths")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let path_samples = arguments
+                    .get("path_samples")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+                let path_max_hops = arguments
+                    .get("path_max_hops")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(5) as usize;
+
+                let out = crate::architectural_impact::graph_export::export_summary_string(
+                    std::path::Path::new(path),
+                    radius,
+                    top_k,
+                    seeds_from_diff,
+                    format,
+                    budget_tokens,
+                    community,
+                    comm_alg,
+                    max_communities,
+                    max_nodes_per_community,
+                    with_paths,
+                    path_samples,
+                    path_max_hops,
+                )
+                .await
+                .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
+
+                if format == "json" {
+                    match serde_json::from_str::<serde_json::Value>(&out) {
+                        Ok(v) => Ok(v),
+                        Err(_e) => Ok(serde_json::json!({"summary": out, "format": format, "message": "returned raw JSON string due to parse failure"})),
+                    }
+                } else {
+                    Ok(serde_json::json!({"summary": out, "format": format}))
+                }
             }
             _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
         }

@@ -98,6 +98,29 @@ cargo build --release --features full
 - **平台支持**：支持Coding.net、GitHub等DevOps平台的Issue集成
 - **规范化提交**：自动生成符合团队规范的提交信息格式
 
+### 📈 依赖图导出与图摘要 (`gitai graph`)
+- **导出DOT**：生成可视化用的 Graphviz DOT 文件
+  - 示例：`gitai graph --path=. --output=dependency_graph.dot --threshold=0.15`
+- **图摘要（LLM友好）**：按变更种子与半径裁剪、输出 Top-K 重要节点
+  - 示例：`gitai graph --summary --radius=1 --top-k=200 --seeds-from-diff`
+  - 输出格式：`--summary-format text|json`
+- **社区压缩（v1）**：启用社区检测与模块级压缩，便于在有限token内表达结构
+  - 选项：`--community [--comm-alg=labelprop] [--max-communities=50] [--max-nodes-per-community=10]`
+  - 示例：`gitai graph --summary --community --summary-format=json > graph_summary.json`
+- **路径采样（v2）**：输出少量代表性的调用链路径样例（Calls-only），帮助理解影响范围
+  - 选项：`--with-paths [--path-samples=5] [--path-max-hops=5]`
+  - 示例（变更驱动 + 社区压缩 + 路径样例）：
+    - `gitai graph --summary --community --with-paths \
+        --seeds-from-diff --path-samples=5 --path-max-hops=5 \
+        --summary-format=json > graph_summary_paths.json`
+- **预算自适应（v3）**：在给定 token 预算下自动裁剪摘要（radius→top_k→communities→paths→seeds）
+  - 选项：`--budget-tokens=3000`（默认 3000；粗略按 1 token ≈ 4 字符）
+  - 示例（强制收缩以满足预算）：
+    - `gitai graph --summary --community --with-paths \
+        --radius=2 --top-k=300 --budget-tokens=1500 \
+        --summary-format=json > graph_summary_budget.json`
+  - JSON 输出将包含 `truncated: true` 表示发生了自动降级
+
 ### 🛡️ 代码安全扫描 (`gitai scan`)
 - **高性能扫描**：集成OpenGrep引擎，支持30+种编程语言的安全规则
 - **智能规则管理**：自动下载和更新安全规则库，支持自定义规则源
