@@ -729,32 +729,32 @@ async fn handle_init(
         Ok(config_path) => {
             println!("✅ 配置初始化成功!");
             println!("📁 配置文件: {}", config_path.display());
-            
+
             // 如果需要下载资源
             if download_resources && !offline {
                 println!();
                 println!("📦 正在下载资源...");
-                
+
                 // 下载 Tree-sitter queries
                 println!("🌳 下载 Tree-sitter queries...");
                 match download_tree_sitter_resources().await {
                     Ok(()) => println!("✅ Tree-sitter queries 下载完成"),
                     Err(e) => eprintln!("⚠️  Tree-sitter queries 下载失败: {e}"),
                 }
-                
+
                 // 下载 OpenGrep 规则（如果可能的话）
                 println!("🔒 下载 OpenGrep 规则...");
                 match download_opengrep_resources(&config_path).await {
                     Ok(()) => println!("✅ OpenGrep 规则下载完成"),
                     Err(e) => eprintln!("⚠️  OpenGrep 规则下载失败: {e}"),
                 }
-                
+
                 println!("✅ 资源下载完成！");
             } else if download_resources && offline {
                 println!();
                 println!("⚠️  离线模式下无法下载资源");
             }
-            
+
             println!();
             println!("🎉 您现在可以使用 GitAI 了:");
             println!("  gitai review     - 代码评审");
@@ -1296,7 +1296,7 @@ async fn download_opengrep_resources(_config_path: &std::path::Path) -> Result<(
     #[cfg(feature = "security")]
     {
         use gitai::resource_manager::{load_resource_config, ResourceManager};
-        
+
         // 尝试加载资源配置
         match load_resource_config(_config_path) {
             Ok(resource_config) => {
