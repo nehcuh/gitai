@@ -6,8 +6,8 @@ version = "1.0.0"
 [sources]
 # Resource download sources - can be overridden for internal mirrors
 config_url = "https://raw.githubusercontent.com/nehcuh/gitai/main/assets/config.example.toml"
-rules_url = "https://github.com/nehcuh/gitai-rules.git"
-tree_sitter_url = "https://github.com/nehcuh/gitai-tree-sitter.git"
+rules_url = "https://github.com/opengrep/opengrep-rules.git"
+tree_sitter_url = "https://github.com/nvim-treesitter/nvim-treesitter.git"
 
 # Fallback sources (used when primary sources are unavailable)
 fallback_sources = [
