@@ -1,48 +1,185 @@
 # GitAI 配置文件示例
 # 复制此文件到 ~/.config/gitai/config.toml 并根据需要修改
 
+# ============================================================================
+# AI 配置
+# ============================================================================
 [ai]
 # AI 服务 API 地址
-api_url = "http://localhost:1234/v1/chat/completions"
+# 支持的服务示例：
+#   - Ollama: http://localhost:11434/v1/chat/completions
+#   - OpenAI: https://api.openai.com/v1/chat/completions
+#   - Claude: https://api.anthropic.com/v1/messages
+#   - 自定义: https://your-api.example.com/v1/chat/completions
+api_url = "http://localhost:11434/v1/chat/completions"
 
 # 使用的模型名称
+# 推荐模型：
+#   - Ollama: qwen2.5:32b, codellama, llama2, deepseek-coder
+#   - OpenAI: gpt-4, gpt-4-turbo, gpt-3.5-turbo
+#   - Claude: claude-3-sonnet, claude-3-opus
 model = "qwen2.5:32b"
 
 # 温度参数 (0.0-1.0)
-temperature = 0.7
+# 较低的值（0.1-0.3）使输出更确定，适合代码生成
+# 较高的值（0.7-1.0）使输出更多样，适合创意任务
+temperature = 0.3
 
 # API 密钥 (可选，某些服务需要)
-api_key = "your_api_key"
+# 对于 Ollama 等本地服务，通常不需要
+# api_key = "your_api_key_here"
 
+# ============================================================================
+# 安全扫描配置
+# ============================================================================
 [scan]
 # 默认扫描路径 (可选，未设置时使用当前目录)
-default_path = "/path/to/your/project"
+# default_path = "."
 
 # 扫描超时时间（秒）
 timeout = 300
 
-# 并发任务数
-jobs = 4
+# 并发任务数 (0 表示使用 OpenGrep 默认值)
+jobs = 0
 
-# 规则目录（可选）。未设置时使用 ~/.cache/gitai/rules
-# rules_dir = "/home/you/.cache/gitai/rules"
+# 规则目录（可选）
+# 未设置时使用 ~/.cache/gitai/rules
+# rules_dir = "~/.cache/gitai/rules"
 
+# ============================================================================
 # DevOps 平台配置 (可选)
+# ============================================================================
 # [devops]
 # # 平台类型 (coding, github, gitlab)
-# platform = "coding"
+# platform = "github"
 # 
 # # API 基础URL
-# base_url = "https://your-org.coding.net"
+# # GitHub: https://api.github.com
+# # GitLab: https://gitlab.com/api/v4
+# # Coding: https://your-org.coding.net
+# base_url = "https://api.github.com"
 # 
 # # 认证令牌
+# # 请使用具有适当权限的个人访问令牌
 # token = "your_devops_token"
 # 
 # # 项目标识 (可选)
-# project = "your-team/your-project"
+# # 格式: owner/repo 或 namespace/project
+# project = "your-org/your-project"
 # 
 # # 超时时间（秒）
 # timeout = 30
 # 
 # # 重试次数
 # retry_count = 3
+
+# ============================================================================
+# MCP (Model Context Protocol) 配置
+# ============================================================================
+[mcp]
+# 启用 MCP 服务器
+# 设为 true 以启用与 LLM 客户端的集成
+enabled = true
+
+# ----------------------------------------------------------------------------
+# MCP 服务器配置
+# ----------------------------------------------------------------------------
+[mcp.server]
+# 传输协议
+# - stdio: 标准输入/输出（推荐用于本地 LLM 集成）
+# - tcp: TCP 网络协议（用于远程连接）
+# - sse: Server-Sent Events（用于 Web 集成）
+transport = "stdio"
+
+# 监听地址（仅用于 tcp/sse 传输）
+# listen_addr = "127.0.0.1:8080"
+
+# 服务名称
+name = "gitai"
+
+# 服务版本
+version = "1.0.0"
+
+# ----------------------------------------------------------------------------
+# MCP 服务配置
+# ----------------------------------------------------------------------------
+[mcp.services]
+# 启用的服务列表
+# 可用服务: review, commit, scan, analysis, dependency
+enabled = ["review", "commit", "scan", "analysis", "dependency"]
+
+# --- 代码评审服务配置 ---
+[mcp.services.review]
+# 默认输出格式 (text, json, markdown)
+default_format = "text"
+
+# 默认启用 Tree-sitter 结构分析
+default_tree_sitter = true
+
+# 默认启用安全扫描
+default_security_scan = false
+
+# --- 智能提交服务配置 ---
+[mcp.services.commit]
+# 默认添加所有文件
+default_add_all = false
+
+# 默认启用代码评审
+default_review = false
+
+# 默认启用 Tree-sitter 分析
+default_tree_sitter = false
+
+# --- 安全扫描服务配置 ---
+[mcp.services.scan]
+# 默认扫描工具 (opengrep, auto)
+default_tool = "opengrep"
+
+# 默认超时时间（秒）
+default_timeout = 300
+
+# --- 代码分析服务配置 ---
+[mcp.services.analysis]
+# 默认输出详细程度 (0-2)
+# 0: 最少信息，1: 标准信息，2: 详细信息
+verbosity = 1
+
+# --- 依赖图服务配置 ---
+[mcp.services.dependency]
+# 默认输出格式
+# - json: JSON 格式（适合程序处理）
+# - dot: Graphviz DOT 格式
+# - svg: SVG 图像（需要 Graphviz）
+# - mermaid: Mermaid 图表（适合文档）
+# - ascii: ASCII 文本（适合终端查看）
+default_format = "ascii"
+
+# 默认详细程度 (0-3)
+# 0: 最简洁，1: 基本信息，2: 详细信息，3: 完整信息
+verbosity = 1
+
+# 默认包含函数调用关系
+default_include_calls = true
+
+# 默认包含导入关系
+default_include_imports = true
+
+# 是否排除测试代码（默认为 true）
+# 设为 false 可以在依赖图中包含测试文件和测试函数
+exclude_test_code = true
+
+# ============================================================================
+# 高级配置（通常不需要修改）
+# ============================================================================
+
+# 语言偏好设置（可选）
+# language = "zh-CN"
+
+# 日志级别（可选）
+# log_level = "info"
+
+# 缓存目录（可选）
+# cache_dir = "~/.cache/gitai"
+
+# 配置目录（可选）
+# config_dir = "~/.config/gitai"
