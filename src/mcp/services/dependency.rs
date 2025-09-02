@@ -468,12 +468,29 @@ impl DependencyService {
         dir_path: &Path,
     ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
         let mut code_files = Vec::new();
+        
+        // 获取是否排除测试代码的配置
+        let exclude_test_code = if let Some(mcp_config) = &self.config.mcp {
+            if let Some(dependency_config) = mcp_config.services.dependency.as_ref() {
+                dependency_config.exclude_test_code
+            } else {
+                true // 默认排除测试代码
+            }
+        } else {
+            true // 默认排除测试代码
+        };
 
         for entry in std::fs::read_dir(dir_path)? {
             let entry = entry?;
             let path = entry.path();
 
             if path.is_file() {
+                // 检查是否为测试文件
+                if exclude_test_code && Self::is_test_file(&path) {
+                    debug!("🚫 跳过测试文件: {}", path.display());
+                    continue;
+                }
+                
                 if let Some(extension) = path.extension() {
                     if let Some(ext_str) = extension.to_str() {
                         if Self::is_supported_code_file(ext_str) {
@@ -482,6 +499,12 @@ impl DependencyService {
                     }
                 }
             } else if path.is_dir() {
+                // 检查是否为测试目录
+                if exclude_test_code && Self::is_test_directory(&path) {
+                    debug!("🚫 跳过测试目录: {}", path.display());
+                    continue;
+                }
+                
                 // 递归搜索子目录
                 let sub_files = self.find_code_files(&path)?;
                 code_files.extend(sub_files);
@@ -497,6 +520,62 @@ impl DependencyService {
             extension.to_lowercase().as_str(),
             "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "h" | "hpp"
         )
+    }
+    
+    /// 检查是否为测试文件
+    fn is_test_file(path: &Path) -> bool {
+        if let Some(file_name) = path.file_name() {
+            if let Some(name_str) = file_name.to_str() {
+                let name_lower = name_str.to_lowercase();
+                // 检查常见的测试文件命名模式
+                return name_lower.ends_with("_test.rs")
+                    || name_lower.ends_with("_tests.rs")
+                    || name_lower.starts_with("test_")
+                    || name_lower.ends_with("_test.go")
+                    || name_lower.ends_with("_test.py")
+                    || name_lower.ends_with("_test.js")
+                    || name_lower.ends_with("_test.ts")
+                    || name_lower.ends_with(".test.js")
+                    || name_lower.ends_with(".test.ts")
+                    || name_lower.ends_with(".spec.js")
+                    || name_lower.ends_with(".spec.ts")
+                    || name_lower.ends_with("_test.java")
+                    || name_lower == "test.rs"
+                    || name_lower == "tests.rs";
+            }
+        }
+        
+        // 检查路径中是否包含 tests 目录
+        if let Some(path_str) = path.to_str() {
+            return path_str.contains("/tests/") 
+                || path_str.contains("/test/")
+                || path_str.contains("/__tests__/")
+                || path_str.contains("/test_")
+                || path_str.contains("/tests_");
+        }
+        
+        false
+    }
+    
+    /// 检查是否为测试目录
+    fn is_test_directory(path: &Path) -> bool {
+        if let Some(dir_name) = path.file_name() {
+            if let Some(name_str) = dir_name.to_str() {
+                let name_lower = name_str.to_lowercase();
+                // 检查常见的测试目录名称
+                return name_lower == "tests"
+                    || name_lower == "test"
+                    || name_lower == "__tests__"
+                    || name_lower == "test_data"
+                    || name_lower == "testdata"
+                    || name_lower == "testing"
+                    || name_lower.starts_with("test_")
+                    || name_lower.starts_with("tests_")
+                    || name_lower.ends_with("_test")
+                    || name_lower.ends_with("_tests");
+            }
+        }
+        false
     }
 
     /// 从文件路径推断语言

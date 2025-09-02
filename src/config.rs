@@ -371,6 +371,14 @@ pub struct McpDependencyConfig {
     pub default_include_calls: bool,
     /// 是否默认包含导入关系
     pub default_include_imports: bool,
+    /// 是否排除测试代码（默认为 true）
+    #[serde(default = "default_exclude_test_code")]
+    pub exclude_test_code: bool,
+}
+
+/// 默认排除测试代码
+fn default_exclude_test_code() -> bool {
+    true
 }
 
 impl McpDependencyConfig {
@@ -448,6 +456,7 @@ impl Default for Config {
                         verbosity: 1,
                         default_include_calls: true,
                         default_include_imports: true,
+                        exclude_test_code: true,
                     }),
                 },
             }),
