@@ -468,7 +468,7 @@ impl DependencyService {
         dir_path: &Path,
     ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
         let mut code_files = Vec::new();
-        
+
         // 获取是否排除测试代码的配置
         let exclude_test_code = if let Some(mcp_config) = &self.config.mcp {
             if let Some(dependency_config) = mcp_config.services.dependency.as_ref() {
@@ -490,7 +490,7 @@ impl DependencyService {
                     debug!("🚫 跳过测试文件: {}", path.display());
                     continue;
                 }
-                
+
                 if let Some(extension) = path.extension() {
                     if let Some(ext_str) = extension.to_str() {
                         if Self::is_supported_code_file(ext_str) {
@@ -504,7 +504,7 @@ impl DependencyService {
                     debug!("🚫 跳过测试目录: {}", path.display());
                     continue;
                 }
-                
+
                 // 递归搜索子目录
                 let sub_files = self.find_code_files(&path)?;
                 code_files.extend(sub_files);
@@ -521,7 +521,7 @@ impl DependencyService {
             "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "h" | "hpp"
         )
     }
-    
+
     /// 检查是否为测试文件
     fn is_test_file(path: &Path) -> bool {
         if let Some(file_name) = path.file_name() {
@@ -544,19 +544,19 @@ impl DependencyService {
                     || name_lower == "tests.rs";
             }
         }
-        
+
         // 检查路径中是否包含 tests 目录
         if let Some(path_str) = path.to_str() {
-            return path_str.contains("/tests/") 
+            return path_str.contains("/tests/")
                 || path_str.contains("/test/")
                 || path_str.contains("/__tests__/")
                 || path_str.contains("/test_")
                 || path_str.contains("/tests_");
         }
-        
+
         false
     }
-    
+
     /// 检查是否为测试目录
     fn is_test_directory(path: &Path) -> bool {
         if let Some(dir_name) = path.file_name() {

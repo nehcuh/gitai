@@ -39,7 +39,9 @@ impl QueriesManager {
     }
 
     /// 创建带自定义基础URL的查询管理器
-    pub fn with_base_url(base_url: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn with_base_url(
+        base_url: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| dirs::home_dir().unwrap().join(".cache"))
             .join("gitai")
@@ -47,17 +49,22 @@ impl QueriesManager {
 
         // 从配置文件中读取 tree_sitter_url，如果无法读取则使用默认值或传入的 base_url
         let tree_sitter_base_url = base_url
-            .or_else(|| Self::load_tree_sitter_url_from_config())
+            .or_else(Self::load_tree_sitter_url_from_config)
             .unwrap_or_else(|| DEFAULT_NVIM_TREESITTER_BASE.to_string());
 
         // 如果来自配置的是git仓库URL，转换为raw URL
-        let tree_sitter_base_url = if tree_sitter_base_url.contains("github.com") && tree_sitter_base_url.ends_with(".git") {
+        let tree_sitter_base_url = if tree_sitter_base_url.contains("github.com")
+            && tree_sitter_base_url.ends_with(".git")
+        {
             tree_sitter_base_url
                 .replace(".git", "")
                 .replace("github.com/", "raw.githubusercontent.com/")
                 + "/master/queries"
-        } else if tree_sitter_base_url.contains("github.com") && !tree_sitter_base_url.contains("raw.githubusercontent.com") {
-            tree_sitter_base_url.replace("github.com/", "raw.githubusercontent.com/") + "/master/queries"
+        } else if tree_sitter_base_url.contains("github.com")
+            && !tree_sitter_base_url.contains("raw.githubusercontent.com")
+        {
+            tree_sitter_base_url.replace("github.com/", "raw.githubusercontent.com/")
+                + "/master/queries"
         } else {
             tree_sitter_base_url
         };
@@ -99,7 +106,7 @@ impl QueriesManager {
 
         let content = std::fs::read_to_string(&config_path).ok()?;
         let config: toml::Value = toml::from_str(&content).ok()?;
-        
+
         config
             .get("sources")?
             .get("tree_sitter_url")?

@@ -434,7 +434,9 @@ pub fn load_resource_config(config_path: &Path) -> Result<ResourceConfig> {
         );
         table.insert(
             "tree_sitter_url".to_string(),
-            toml::Value::String("https://github.com/nvim-treesitter/nvim-treesitter.git".to_string()),
+            toml::Value::String(
+                "https://github.com/nvim-treesitter/nvim-treesitter.git".to_string(),
+            ),
         );
         table.insert("fallback_sources".to_string(), toml::Value::Array(vec![]));
         table.insert(
