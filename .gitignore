@@ -60,3 +60,14 @@ config.toml
 # Documentation
 *.orig
 *.rej
+
+# Dependency graph files (generated)
+dependency_graph.dot
+deps.dot
+deps.png
+dependency_graph_ascii.txt
+graph_summary*.json
+
+# Debug scripts
+debug_*.rs
+debug_*.sh
