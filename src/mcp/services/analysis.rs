@@ -659,7 +659,9 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                 if format == "json" {
                     match serde_json::from_str::<serde_json::Value>(&out) {
                         Ok(v) => Ok(v),
-                        Err(_e) => Ok(serde_json::json!({"summary": out, "format": format, "message": "returned raw JSON string due to parse failure"})),
+                        Err(_e) => Ok(
+                            serde_json::json!({"summary": out, "format": format, "message": "returned raw JSON string due to parse failure"}),
+                        ),
                     }
                 } else {
                     Ok(serde_json::json!({"summary": out, "format": format}))

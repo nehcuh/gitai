@@ -33,7 +33,10 @@ pub async fn execute_review(
     // 依赖分析洞察（若有）
     if result.details.contains_key("dep_nodes") {
         println!("\n🔗 依赖分析洞察:");
-        if let (Some(nodes), Some(edges)) = (result.details.get("dep_nodes"), result.details.get("dep_edges")) {
+        if let (Some(nodes), Some(edges)) = (
+            result.details.get("dep_nodes"),
+            result.details.get("dep_edges"),
+        ) {
             println!("  图规模: {nodes} 节点 / {edges} 边");
         }
         if let Some(avg) = result.details.get("dep_avg_degree") {
@@ -67,7 +70,7 @@ pub async fn execute_review_with_result(
 ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
     // 获取代码变更
     let diff = crate::git::get_all_diff()?;
-    
+
     // 如果没有变更，返回空结果
     if diff.trim().is_empty() {
         return Ok(ReviewResult {
@@ -80,10 +83,10 @@ pub async fn execute_review_with_result(
             recommendations: Vec::new(),
         });
     }
-    
+
     // 生成缓存键
     let cache_key = super::cache::build_cache_key(&diff, &review_config);
-    
+
     // 检查缓存
     if let Some(cached_result) = super::cache::check_cache(&cache_key)? {
         println!("📦 使用缓存的评审结果");
@@ -97,11 +100,11 @@ pub async fn execute_review_with_result(
             recommendations: Vec::new(),
         });
     }
-    
+
     // 检查暂存状态
     let has_unstaged = crate::git::has_unstaged_changes().unwrap_or(false);
     let has_staged = crate::git::has_staged_changes().unwrap_or(false);
-    
+
     if has_unstaged {
         println!("💡 提示：检测到未暂存的代码变更");
         println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
@@ -117,20 +120,22 @@ pub async fn execute_review_with_result(
         println!("🔍 检查未推送的提交...");
         println!("   📝 GitAI将分析最近的提交变更");
     }
-    
+
     // 如果启用了 tree-sitter 分析
     let mut structural_summary = None;
     if review_config.tree_sitter {
         println!("🌳 使用 Tree-sitter 进行结构分析...");
-        structural_summary = super::analyzer::perform_structural_analysis(&diff, &review_config.language).await?;
+        structural_summary =
+            super::analyzer::perform_structural_analysis(&diff, &review_config.language).await?;
         if structural_summary.is_some() {
             println!("  ✅ 结构分析完成");
         }
     }
-    
+
     // 执行架构影响分析
-    let architectural_impact = super::analyzer::perform_architectural_impact_analysis(&diff).await?;
-    
+    let architectural_impact =
+        super::analyzer::perform_architectural_impact_analysis(&diff).await?;
+
     // 依赖分析与 PageRank（受 deviation_analysis 控制）
     let mut dep_details: Vec<(String, String)> = Vec::new();
     let mut dep_score_penalty: u8 = 0;
@@ -138,7 +143,11 @@ pub async fn execute_review_with_result(
     let mut dep_prompt: Option<String> = None;
     if review_config.full || review_config.deviation_analysis {
         println!("🔗 正在进行依赖图与 PageRank 分析...");
-        match crate::architectural_impact::graph_export::build_global_dependency_graph(std::path::Path::new(".")).await {
+        match crate::architectural_impact::graph_export::build_global_dependency_graph(
+            std::path::Path::new("."),
+        )
+        .await
+        {
             Ok(mut graph) => {
                 // 计算 PageRank 并统计
                 let pagerank = graph.calculate_pagerank(0.85, 20, 1e-4);
@@ -146,7 +155,10 @@ pub async fn execute_review_with_result(
                 let critical = graph.identify_critical_nodes(0.15);
                 dep_details.push(("dep_nodes".to_string(), stats.node_count.to_string()));
                 dep_details.push(("dep_edges".to_string(), stats.edge_count.to_string()));
-                dep_details.push(("dep_avg_degree".to_string(), format!("{:.2}", stats.avg_degree)));
+                dep_details.push((
+                    "dep_avg_degree".to_string(),
+                    format!("{:.2}", stats.avg_degree),
+                ));
                 dep_details.push(("dep_critical_nodes".to_string(), critical.len().to_string()));
 
                 // Top PageRank 节点
@@ -178,8 +190,10 @@ pub async fn execute_review_with_result(
                         }
                     }
 
-                    let mut impacted: std::collections::HashMap<String, f32> = std::collections::HashMap::new();
-                    let mut impacted_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+                    let mut impacted: std::collections::HashMap<String, f32> =
+                        std::collections::HashMap::new();
+                    let mut impacted_set: std::collections::HashSet<String> =
+                        std::collections::HashSet::new();
                     let mut critical_hits = 0usize;
 
                     for id in &changed_ids {
@@ -239,7 +253,10 @@ pub async fn execute_review_with_result(
                     }
 
                     if critical_hits > 0 {
-                        dep_details.push(("dep_critical_impacts".to_string(), critical_hits.to_string()));
+                        dep_details.push((
+                            "dep_critical_impacts".to_string(),
+                            critical_hits.to_string(),
+                        ));
                         dep_score_penalty = dep_score_penalty
                             .saturating_add((critical_hits as u8).saturating_mul(5));
                     }
@@ -253,13 +270,20 @@ pub async fn execute_review_with_result(
                         ));
                         lines.push(format!(
                             "关键节点数: {}，命中关键变更: {}",
-                            critical.len(), local_critical_hits
+                            critical.len(),
+                            local_critical_hits
                         ));
                         if !top_pr.is_empty() {
                             lines.push(format!("PageRank Top: {}", top_pr.join(", ")));
                         }
-                        if let Some(last) = dep_details.iter().find(|(k, _)| k == "dep_top_impacted").map(|(_, v)| v.clone()) {
-                            if !last.is_empty() { lines.push(format!("影响度 Top: {last}")); }
+                        if let Some(last) = dep_details
+                            .iter()
+                            .find(|(k, _)| k == "dep_top_impacted")
+                            .map(|(_, v)| v.clone())
+                        {
+                            if !last.is_empty() {
+                                lines.push(format!("影响度 Top: {last}"));
+                            }
                         }
                         dep_prompt = Some(lines.join("\n"));
                     }
@@ -270,7 +294,7 @@ pub async fn execute_review_with_result(
             }
         }
     }
-    
+
     // 如果启用了安全扫描
     #[cfg(feature = "security")]
     let mut security_findings: Vec<super::types::Finding> = Vec::new();
@@ -286,7 +310,7 @@ pub async fn execute_review_with_result(
             Some(60),
             false,
         )?;
-        
+
         if !scan_result.findings.is_empty() {
             println!("  ⚠️  发现 {} 个安全问题", scan_result.findings.len());
             security_findings.extend(scan_result.findings.into_iter().map(Into::into));
@@ -294,17 +318,15 @@ pub async fn execute_review_with_result(
             println!("  ✅ 未发现安全问题");
         }
     }
-    
+
     // 调用 AI 进行评审
     #[cfg(feature = "ai")]
     println!("🤖 正在调用 AI 进行代码评审...");
     #[cfg(not(feature = "ai"))]
     println!("🤖 AI 功能未启用，使用基础规则生成结果...");
-    
-    let mut prompt = format!(
-        "请对以下代码变更进行详细评审：\n\n{diff}\n\n"
-    );
-    
+
+    let mut prompt = format!("请对以下代码变更进行详细评审：\n\n{diff}\n\n");
+
     if let Some(ref summary) = structural_summary {
         prompt.push_str(&format!("\n结构分析结果：\n{summary:#?}\n"));
     }
@@ -314,13 +336,13 @@ pub async fn execute_review_with_result(
         prompt.push_str(dep_txt);
         prompt.push('\n');
     }
-    
+
     prompt.push_str("请提供：\n");
     prompt.push_str("1. 代码质量评估\n");
     prompt.push_str("2. 潜在问题和风险\n");
     prompt.push_str("3. 改进建议\n");
     prompt.push_str("4. 总体评分（1-100）\n");
-    
+
     // 在 full 模式或存在偏差分析时，尝试加入 DevOps Issue 上下文
     let devops_issue_context = {
         #[cfg(feature = "devops")]
@@ -342,7 +364,11 @@ pub async fn execute_review_with_result(
                                         issue.title,
                                         issue.priority.as_deref().unwrap_or("未设置"),
                                         issue.assignee.as_deref().unwrap_or("未指派"),
-                                        if issue.labels.is_empty() { "无".to_string() } else { issue.labels.join(", ") },
+                                        if issue.labels.is_empty() {
+                                            "无".to_string()
+                                        } else {
+                                            issue.labels.join(", ")
+                                        },
                                         issue.url
                                     );
                                 }
@@ -398,46 +424,63 @@ pub async fn execute_review_with_result(
             summary_text
         }
     };
-    
+
     // 解析 AI 响应并构建结果
     let mut details = std::collections::HashMap::new();
     details.insert("review_result".to_string(), ai_response.clone());
-    
+
     if review_config.tree_sitter {
         details.insert("tree_sitter".to_string(), "true".to_string());
     }
-    
+
     // 添加架构影响分析结果
     if let Some(ref impact) = architectural_impact {
-        let total_changes = impact.function_changes.len() + 
-                            impact.struct_changes.len() + 
-                            impact.interface_changes.len();
+        let total_changes = impact.function_changes.len()
+            + impact.struct_changes.len()
+            + impact.interface_changes.len();
         details.insert("total_changes".to_string(), total_changes.to_string());
-        details.insert("breaking_changes_count".to_string(), 
-                      impact.impact_summary.breaking_changes.len().to_string());
-        details.insert("affected_modules".to_string(), 
-                      impact.impact_summary.affected_modules.join(", "));
-        
+        details.insert(
+            "breaking_changes_count".to_string(),
+            impact.impact_summary.breaking_changes.len().to_string(),
+        );
+        details.insert(
+            "affected_modules".to_string(),
+            impact.impact_summary.affected_modules.join(", "),
+        );
+
         // 添加风险级别
-        details.insert("risk_level".to_string(), impact.impact_summary.risk_level.clone());
+        details.insert(
+            "risk_level".to_string(),
+            impact.impact_summary.risk_level.clone(),
+        );
     }
 
     // 合并依赖分析详情
-    for (k, v) in dep_details { details.insert(k, v); }
-    
+    for (k, v) in dep_details {
+        details.insert(k, v);
+    }
+
     // 添加安全扫描结果
     if !security_findings.is_empty() {
-        details.insert("security_findings_count".to_string(), 
-                      security_findings.len().to_string());
+        details.insert(
+            "security_findings_count".to_string(),
+            security_findings.len().to_string(),
+        );
     }
-    
+
     // 简单的评分提取（尝试从 AI 响应中找到数字）
     let mut score = extract_score_from_response(&ai_response).unwrap_or(85);
-    
+
     // 根据安全问题调整评分
     if !security_findings.is_empty() {
-        let critical_count = security_findings.iter()
-            .filter(|f| matches!(f.severity, super::types::Severity::Critical | super::types::Severity::High))
+        let critical_count = security_findings
+            .iter()
+            .filter(|f| {
+                matches!(
+                    f.severity,
+                    super::types::Severity::Critical | super::types::Severity::High
+                )
+            })
             .count();
         score = score.saturating_sub((critical_count * 10) as u8);
     }
@@ -445,14 +488,14 @@ pub async fn execute_review_with_result(
     if dep_score_penalty > 0 {
         score = score.saturating_sub(dep_score_penalty);
     }
-    
+
     // 保存缓存
     super::cache::save_cache(&cache_key, &ai_response, &review_config.language)?;
 
     // 合并发现（安全 + 依赖分析）
     let mut combined_findings = security_findings;
     combined_findings.extend(extra_findings);
-    
+
     Ok(ReviewResult {
         success: true,
         message: "代码评审完成".to_string(),

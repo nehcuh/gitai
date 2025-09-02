@@ -109,17 +109,34 @@ pub fn run_opengrep_scan(
             if iter.next().is_some() {
                 // 语言已指定：仅使用该子目录；未指定：包含所有存在的语言子目录，避免根目录中的非规则 YAML 被解析
                 let known_langs = [
-                    "java", "python", "javascript", "typescript", "go", "rust", "c", "cpp",
-                    "ruby", "php", "kotlin", "scala", "swift",
+                    "java",
+                    "python",
+                    "javascript",
+                    "typescript",
+                    "go",
+                    "rust",
+                    "c",
+                    "cpp",
+                    "ruby",
+                    "php",
+                    "kotlin",
+                    "scala",
+                    "swift",
                 ];
                 if let Some(l) = lang {
                     let candidate = rules_dir.join(l);
-                    let rules_root = if candidate.exists() { candidate } else { rules_dir.clone() };
+                    let rules_root = if candidate.exists() {
+                        candidate
+                    } else {
+                        rules_dir.clone()
+                    };
                     used_config_paths.push(rules_root.clone());
                 } else {
-                    for l in known_langs { 
+                    for l in known_langs {
                         let p = rules_dir.join(l);
-                        if p.exists() && p.is_dir() { used_config_paths.push(p); }
+                        if p.exists() && p.is_dir() {
+                            used_config_paths.push(p);
+                        }
                     }
                     // 回退：若没有任何语言子目录存在，则退回根目录
                     if used_config_paths.is_empty() {
@@ -160,16 +177,19 @@ pub fn run_opengrep_scan(
     // 2 = 命令无效或找不到规则/文件
     // 对于退出码 2，我们需要检查是否真的是错误还是只是没有发现
     let exit_code = output.status.code().unwrap_or(-1);
-    
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr_trim = stderr.trim();
-        
+
         // 退出码 2 可能只是没有匹配的文件或规则，需要进一步判断
         if exit_code == 2 {
             // 检查是否有实际的错误信息
-            if stderr_trim.is_empty() || stderr_trim.contains("No rules") || stderr_trim.contains("No files") {
+            if stderr_trim.is_empty()
+                || stderr_trim.contains("No rules")
+                || stderr_trim.contains("No files")
+            {
                 // 这是一个"无发现"的情况，不是真正的错误
                 log::info!("OpenGrep 退出码 2：无匹配规则或文件，视为成功扫描");
                 // 继续处理，将其视为成功但无发现
@@ -200,8 +220,13 @@ pub fn run_opengrep_scan(
                 if head.is_empty() {
                     format!("OpenGrep exited with status {} (no stderr)", exit_code)
                 } else {
-                    let mut s = format!("OpenGrep exited with status {} (no stderr). stdout: {}", exit_code, head);
-                    if s.len() > 500 { s.truncate(500); }
+                    let mut s = format!(
+                        "OpenGrep exited with status {} (no stderr). stdout: {}",
+                        exit_code, head
+                    );
+                    if s.len() > 500 {
+                        s.truncate(500);
+                    }
                     s
                 }
             };
@@ -362,15 +387,13 @@ fn create_finding_from_result(
     let severity_str = item["severity"].as_str().unwrap_or("WARNING");
 
     let code_snippet = item["lines"].as_str().map(|s| s.to_string());
-    
+
     let message = item["extra"]["message"]
         .as_str()
         .unwrap_or(title.as_str())
         .to_string();
-    
-    let remediation = item["extra"]["fix"]
-        .as_str()
-        .map(|s| s.to_string());
+
+    let remediation = item["extra"]["fix"].as_str().map(|s| s.to_string());
 
     Ok(Finding {
         title,

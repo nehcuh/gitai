@@ -548,7 +548,7 @@ impl DependencyGraph {
 
         visited
     }
-    
+
     /// 计算 PageRank 分数
     /// 使用经典的 PageRank 算法，考虑节点的入度和出度
     pub fn calculate_pagerank(
@@ -561,30 +561,32 @@ impl DependencyGraph {
         if n == 0.0 {
             return HashMap::new();
         }
-        
+
         // 初始化 PageRank 分数
         let mut pagerank: HashMap<String, f32> = HashMap::new();
         for node_id in self.nodes.keys() {
             pagerank.insert(node_id.clone(), 1.0 / n);
         }
-        
+
         // 预计算每个节点的出度
         let mut out_degree: HashMap<String, usize> = HashMap::new();
         for node_id in self.nodes.keys() {
-            let degree = self.adjacency_list.get(node_id)
+            let degree = self
+                .adjacency_list
+                .get(node_id)
                 .map(|neighbors| neighbors.len())
                 .unwrap_or(0);
             out_degree.insert(node_id.clone(), degree);
         }
-        
+
         // 迭代计算 PageRank
         for iteration in 0..max_iterations {
             let mut new_pagerank: HashMap<String, f32> = HashMap::new();
             let mut total_change = 0.0;
-            
+
             for node_id in self.nodes.keys() {
                 let mut rank = (1.0 - damping_factor) / n;
-                
+
                 // 从所有指向该节点的节点收集 PageRank 贡献
                 if let Some(incoming) = self.reverse_adjacency_list.get(node_id) {
                     for source in incoming {
@@ -592,14 +594,16 @@ impl DependencyGraph {
                             if let Some(&out_deg) = out_degree.get(source) {
                                 if out_deg > 0 {
                                     // 考虑边的权重
-                                    let edge_weight = self.get_edge_weight(source, node_id).unwrap_or(1.0);
-                                    rank += damping_factor * source_rank * edge_weight / out_deg as f32;
+                                    let edge_weight =
+                                        self.get_edge_weight(source, node_id).unwrap_or(1.0);
+                                    rank +=
+                                        damping_factor * source_rank * edge_weight / out_deg as f32;
                                 }
                             }
                         }
                     }
                 }
-                
+
                 // 处理没有出边的节点（dangling nodes）
                 for (source_id, &source_rank) in &pagerank {
                     if let Some(&out_deg) = out_degree.get(source_id) {
@@ -608,38 +612,39 @@ impl DependencyGraph {
                         }
                     }
                 }
-                
+
                 let old_rank = pagerank.get(node_id).copied().unwrap_or(0.0);
                 total_change += (rank - old_rank).abs();
                 new_pagerank.insert(node_id.clone(), rank);
             }
-            
+
             pagerank = new_pagerank;
-            
+
             // 检查收敛
             if iteration > 0 && total_change < tolerance {
                 log::debug!("PageRank 在第 {} 次迭代后收敛", iteration + 1);
                 break;
             }
         }
-        
+
         // 更新节点的 importance_score
         for (node_id, &score) in &pagerank {
             if let Some(node) = self.nodes.get_mut(node_id) {
                 node.importance_score = score;
             }
         }
-        
+
         pagerank
     }
-    
+
     /// 获取边的权重
     fn get_edge_weight(&self, from: &str, to: &str) -> Option<f32> {
-        self.edges.iter()
+        self.edges
+            .iter()
             .find(|e| e.from == from && e.to == to)
             .map(|e| e.weight)
     }
-    
+
     /// 计算加权影响传播
     /// 使用 PageRank 分数和边权重来计算影响传播
     pub fn calculate_weighted_impact(
@@ -651,24 +656,27 @@ impl DependencyGraph {
     ) -> HashMap<String, f32> {
         let mut impact_scores: HashMap<String, f32> = HashMap::new();
         let mut queue = VecDeque::new();
-        
+
         // 初始节点的影响力
         queue.push_back((start_node.to_string(), impact_strength));
         impact_scores.insert(start_node.to_string(), impact_strength);
-        
+
         while let Some((node_id, current_impact)) = queue.pop_front() {
             // 传播影响到依赖节点
             if let Some(neighbors) = self.reverse_adjacency_list.get(&node_id) {
                 for neighbor in neighbors {
                     // 计算传播的影响力
                     let edge_weight = self.get_edge_weight(&node_id, neighbor).unwrap_or(1.0);
-                    let neighbor_importance = self.nodes.get(neighbor)
+                    let neighbor_importance = self
+                        .nodes
+                        .get(neighbor)
                         .map(|n| n.importance_score)
                         .unwrap_or(0.5);
-                    
+
                     // 影响力 = 当前影响 * 边权重 * 节点重要性 * 衰减因子
-                    let propagated_impact = current_impact * edge_weight * neighbor_importance * decay_factor;
-                    
+                    let propagated_impact =
+                        current_impact * edge_weight * neighbor_importance * decay_factor;
+
                     if propagated_impact >= min_impact {
                         let existing_impact = impact_scores.get(neighbor).copied().unwrap_or(0.0);
                         if propagated_impact > existing_impact {
@@ -679,20 +687,22 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         impact_scores
     }
-    
+
     /// 识别关键路径（基于 PageRank 分数）
     pub fn find_critical_paths(&self, top_n: usize) -> Vec<Vec<String>> {
         let mut critical_paths = Vec::new();
-        
+
         // 获取 PageRank 分数最高的节点
-        let mut nodes_by_importance: Vec<_> = self.nodes.iter()
+        let mut nodes_by_importance: Vec<_> = self
+            .nodes
+            .iter()
             .map(|(id, node)| (id.clone(), node.importance_score))
             .collect();
         nodes_by_importance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        
+
         // 对每个重要节点，找到其关键依赖路径
         for (node_id, _) in nodes_by_importance.iter().take(top_n) {
             let paths = self.find_dependency_paths(node_id, 3);
@@ -702,10 +712,10 @@ impl DependencyGraph {
                 }
             }
         }
-        
+
         critical_paths
     }
-    
+
     /// 查找从指定节点开始的依赖路径
     fn find_dependency_paths(&self, start: &str, max_depth: usize) -> Vec<Vec<String>> {
         let mut paths = Vec::new();
@@ -713,7 +723,7 @@ impl DependencyGraph {
         self.dfs_paths(start, &mut current_path, &mut paths, max_depth);
         paths
     }
-    
+
     /// 深度优先搜索依赖路径
     fn dfs_paths(
         &self,
@@ -726,7 +736,7 @@ impl DependencyGraph {
             all_paths.push(current_path.clone());
             return;
         }
-        
+
         if let Some(neighbors) = self.adjacency_list.get(node) {
             if neighbors.is_empty() {
                 all_paths.push(current_path.clone());

@@ -469,11 +469,28 @@ impl DependencyService {
     ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
         let mut code_files = Vec::new();
 
+        // 获取是否排除测试代码的配置
+        let exclude_test_code = if let Some(mcp_config) = &self.config.mcp {
+            if let Some(dependency_config) = mcp_config.services.dependency.as_ref() {
+                dependency_config.exclude_test_code
+            } else {
+                true // 默认排除测试代码
+            }
+        } else {
+            true // 默认排除测试代码
+        };
+
         for entry in std::fs::read_dir(dir_path)? {
             let entry = entry?;
             let path = entry.path();
 
             if path.is_file() {
+                // 检查是否为测试文件
+                if exclude_test_code && Self::is_test_file(&path) {
+                    debug!("🚫 跳过测试文件: {}", path.display());
+                    continue;
+                }
+
                 if let Some(extension) = path.extension() {
                     if let Some(ext_str) = extension.to_str() {
                         if Self::is_supported_code_file(ext_str) {
@@ -482,6 +499,12 @@ impl DependencyService {
                     }
                 }
             } else if path.is_dir() {
+                // 检查是否为测试目录
+                if exclude_test_code && Self::is_test_directory(&path) {
+                    debug!("🚫 跳过测试目录: {}", path.display());
+                    continue;
+                }
+
                 // 递归搜索子目录
                 let sub_files = self.find_code_files(&path)?;
                 code_files.extend(sub_files);
@@ -497,6 +520,62 @@ impl DependencyService {
             extension.to_lowercase().as_str(),
             "rs" | "java" | "py" | "js" | "ts" | "go" | "c" | "cpp" | "h" | "hpp"
         )
+    }
+
+    /// 检查是否为测试文件
+    fn is_test_file(path: &Path) -> bool {
+        if let Some(file_name) = path.file_name() {
+            if let Some(name_str) = file_name.to_str() {
+                let name_lower = name_str.to_lowercase();
+                // 检查常见的测试文件命名模式
+                return name_lower.ends_with("_test.rs")
+                    || name_lower.ends_with("_tests.rs")
+                    || name_lower.starts_with("test_")
+                    || name_lower.ends_with("_test.go")
+                    || name_lower.ends_with("_test.py")
+                    || name_lower.ends_with("_test.js")
+                    || name_lower.ends_with("_test.ts")
+                    || name_lower.ends_with(".test.js")
+                    || name_lower.ends_with(".test.ts")
+                    || name_lower.ends_with(".spec.js")
+                    || name_lower.ends_with(".spec.ts")
+                    || name_lower.ends_with("_test.java")
+                    || name_lower == "test.rs"
+                    || name_lower == "tests.rs";
+            }
+        }
+
+        // 检查路径中是否包含 tests 目录
+        if let Some(path_str) = path.to_str() {
+            return path_str.contains("/tests/")
+                || path_str.contains("/test/")
+                || path_str.contains("/__tests__/")
+                || path_str.contains("/test_")
+                || path_str.contains("/tests_");
+        }
+
+        false
+    }
+
+    /// 检查是否为测试目录
+    fn is_test_directory(path: &Path) -> bool {
+        if let Some(dir_name) = path.file_name() {
+            if let Some(name_str) = dir_name.to_str() {
+                let name_lower = name_str.to_lowercase();
+                // 检查常见的测试目录名称
+                return name_lower == "tests"
+                    || name_lower == "test"
+                    || name_lower == "__tests__"
+                    || name_lower == "test_data"
+                    || name_lower == "testdata"
+                    || name_lower == "testing"
+                    || name_lower.starts_with("test_")
+                    || name_lower.starts_with("tests_")
+                    || name_lower.ends_with("_test")
+                    || name_lower.ends_with("_tests");
+            }
+        }
+        false
     }
 
     /// 从文件路径推断语言
@@ -608,7 +687,8 @@ impl DependencyService {
         out.push_str("# Dependency Graph (ASCII)\n");
         out.push_str(&format!(
             "nodes: {}, edges: {}\n",
-            graph.nodes.len(), graph.edges.len()
+            graph.nodes.len(),
+            graph.edges.len()
         ));
         let stats = graph.get_statistics();
         out.push_str(&format!(
@@ -618,8 +698,10 @@ impl DependencyService {
 
         // 打印节点映射
         out.push_str("[Nodes]\n");
-        let mut nodes_sorted: Vec<(&String, &crate::architectural_impact::dependency_graph::Node)> =
-            graph.nodes.iter().collect();
+        let mut nodes_sorted: Vec<(
+            &String,
+            &crate::architectural_impact::dependency_graph::Node,
+        )> = graph.nodes.iter().collect();
         nodes_sorted.sort_by(|a, b| a.0.cmp(b.0));
         for (id, node) in nodes_sorted {
             let short = id_map.get(id).cloned().unwrap_or_else(|| id.clone());
@@ -646,10 +728,17 @@ impl DependencyService {
         let mut edges_sorted = graph.edges.clone();
         edges_sorted.sort_by(|a, b| {
             let c = a.from.cmp(&b.from);
-            if c == std::cmp::Ordering::Equal { a.to.cmp(&b.to) } else { c }
+            if c == std::cmp::Ordering::Equal {
+                a.to.cmp(&b.to)
+            } else {
+                c
+            }
         });
         for e in edges_sorted {
-            let from_s = id_map.get(&e.from).cloned().unwrap_or_else(|| e.from.clone());
+            let from_s = id_map
+                .get(&e.from)
+                .cloned()
+                .unwrap_or_else(|| e.from.clone());
             let to_s = id_map.get(&e.to).cloned().unwrap_or_else(|| e.to.clone());
             let etype = match e.edge_type {
                 EdgeType::Calls => "CALLS",
@@ -665,9 +754,17 @@ impl DependencyService {
             if verbosity >= 2 {
                 let mut meta = String::new();
                 if let Some(m) = &e.metadata {
-                    if let Some(ref notes) = m.notes { if !notes.is_empty() { meta.push_str(&format!(" notes={}", notes)); } }
-                    if let Some(cc) = m.call_count { meta.push_str(&format!(" calls={}", cc)); }
-                    if m.is_strong_dependency { meta.push_str(" strong"); }
+                    if let Some(ref notes) = m.notes {
+                        if !notes.is_empty() {
+                            meta.push_str(&format!(" notes={}", notes));
+                        }
+                    }
+                    if let Some(cc) = m.call_count {
+                        meta.push_str(&format!(" calls={}", cc));
+                    }
+                    if m.is_strong_dependency {
+                        meta.push_str(" strong");
+                    }
                 }
                 out.push_str(&format!(
                     "  {from} -[{etype} w={:.2}]{meta}-> {to}\n",
@@ -676,7 +773,11 @@ impl DependencyService {
                     to = to_s
                 ));
             } else {
-                out.push_str(&format!("  {from} -[{etype}]-> {to}\n", from = from_s, to = to_s));
+                out.push_str(&format!(
+                    "  {from} -[{etype}]-> {to}\n",
+                    from = from_s,
+                    to = to_s
+                ));
             }
         }
 
@@ -758,19 +859,20 @@ impl DependencyService {
 
         // 创建临时 DOT 文件
         let temp_dir = std::env::temp_dir();
-        let temp_dot_file = temp_dir.join(format!("gitai_graph_{}.dot", 
+        let temp_dot_file = temp_dir.join(format!(
+            "gitai_graph_{}.dot",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs()
         ));
-        
+
         std::fs::write(&temp_dot_file, &dot_content)
             .map_err(|e| format!("无法写入临时 DOT 文件: {}", e))?;
 
         // 使用 Graphviz 转换
         let engine = params.engine.unwrap_or_else(|| "dot".to_string());
-        
+
         // 构建 Graphviz 命令
         let output = std::process::Command::new(&engine)
             .arg("-T")
@@ -945,8 +1047,8 @@ impl GitAiMcpService for DependencyService {
                 serde_json::to_value(&result).map_err(|e| serialize_error("dependency", e))
             }
             "convert_graph_to_image" => {
-                let params: ConvertGraphParams =
-                    serde_json::from_value(arguments).map_err(|e| parse_error("convert_graph", e))?;
+                let params: ConvertGraphParams = serde_json::from_value(arguments)
+                    .map_err(|e| parse_error("convert_graph", e))?;
 
                 let result = self
                     .convert_graph_to_image(params)
