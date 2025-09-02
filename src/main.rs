@@ -1270,8 +1270,8 @@ async fn download_tree_sitter_resources() -> Result<()> {
                 Ok(())
             }
             Err(e) => {
-                log::warn!("Tree-sitter 资源初始化失败: {}", e);
-                Err(format!("Tree-sitter 资源下载失败: {}", e).into())
+                log::warn!("Tree-sitter 资源初始化失败: {e}");
+                Err(format!("Tree-sitter 资源下载失败: {e}").into())
             }
         }
     }
