@@ -174,6 +174,9 @@ pub enum Command {
         /// 开发模式（使用项目内资源）
         #[arg(long)]
         dev: bool,
+        /// 同时下载所有资源（OpenGrep规则和Tree-sitter queries）
+        #[arg(long)]
+        download_resources: bool,
     },
     /// 配置管理
     Config {
