@@ -177,10 +177,10 @@ config_url = "https://raw.githubusercontent.com/nehcuh/gitai/main/assets/config.
 
 # OpenGrep 规则库下载地址
 # 默认使用官方仓库，可以替换为内部镜像或私有仓库
-rules_url = "https://github.com/nehcuh/gitai-rules.git"
+rules_url = "https://github.com/opengrep/opengrep-rules.git"
 
 # Tree-sitter 语法文件下载地址
-tree_sitter_url = "https://github.com/nehcuh/gitai-tree-sitter.git"
+tree_sitter_url = "https://github.com/nvim-treesitter/nvim-treesitter.git"
 
 # 备用下载源（主源不可用时自动切换）
 # 适合在网络受限环境中配置内部镜像

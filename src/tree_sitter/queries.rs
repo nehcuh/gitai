@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use crate::tree_sitter::SupportedLanguage;
 
-const NVIM_TREESITTER_BASE: &str =
+// Default Tree-sitter queries URL (fallback when config is not available)
+const DEFAULT_NVIM_TREESITTER_BASE: &str =
     "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/master/queries";
 const QUERY_FILES: &[&str] = &[
     "highlights.scm",
@@ -18,6 +19,7 @@ const QUERY_FILES: &[&str] = &[
 pub struct QueriesManager {
     cache_dir: PathBuf,
     queries: HashMap<SupportedLanguage, LanguageQueries>,
+    tree_sitter_base_url: String,
 }
 
 /// 单个语言的查询集合
@@ -33,14 +35,37 @@ pub struct LanguageQueries {
 impl QueriesManager {
     /// 创建新的查询管理器
     pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::with_base_url(None)
+    }
+
+    /// 创建带自定义基础URL的查询管理器
+    pub fn with_base_url(base_url: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let cache_dir = dirs::cache_dir()
             .unwrap_or_else(|| dirs::home_dir().unwrap().join(".cache"))
             .join("gitai")
             .join("tree-sitter-queries");
 
+        // 从配置文件中读取 tree_sitter_url，如果无法读取则使用默认值或传入的 base_url
+        let tree_sitter_base_url = base_url
+            .or_else(|| Self::load_tree_sitter_url_from_config())
+            .unwrap_or_else(|| DEFAULT_NVIM_TREESITTER_BASE.to_string());
+
+        // 如果来自配置的是git仓库URL，转换为raw URL
+        let tree_sitter_base_url = if tree_sitter_base_url.contains("github.com") && tree_sitter_base_url.ends_with(".git") {
+            tree_sitter_base_url
+                .replace(".git", "")
+                .replace("github.com/", "raw.githubusercontent.com/")
+                + "/master/queries"
+        } else if tree_sitter_base_url.contains("github.com") && !tree_sitter_base_url.contains("raw.githubusercontent.com") {
+            tree_sitter_base_url.replace("github.com/", "raw.githubusercontent.com/") + "/master/queries"
+        } else {
+            tree_sitter_base_url
+        };
+
         log::debug!(
-            "创建 Tree-sitter 查询管理器，缓存目录: {}",
-            cache_dir.display()
+            "创建 Tree-sitter 查询管理器，缓存目录: {}，基础URL: {}",
+            cache_dir.display(),
+            tree_sitter_base_url
         );
 
         std::fs::create_dir_all(&cache_dir).map_err(|e| {
@@ -57,7 +82,29 @@ impl QueriesManager {
         Ok(Self {
             cache_dir,
             queries: HashMap::new(),
+            tree_sitter_base_url,
         })
+    }
+
+    /// 从配置文件中加载 tree_sitter_url
+    fn load_tree_sitter_url_from_config() -> Option<String> {
+        let config_path = dirs::home_dir()?
+            .join(".config")
+            .join("gitai")
+            .join("config.toml");
+
+        if !config_path.exists() {
+            return None;
+        }
+
+        let content = std::fs::read_to_string(&config_path).ok()?;
+        let config: toml::Value = toml::from_str(&content).ok()?;
+        
+        config
+            .get("sources")?
+            .get("tree_sitter_url")?
+            .as_str()
+            .map(|s| s.to_string())
     }
 
     /// 确保所有支持的语言的queries已下载
@@ -92,7 +139,7 @@ impl QueriesManager {
         for query_file in QUERY_FILES {
             let url = format!(
                 "{}/{}/{}",
-                NVIM_TREESITTER_BASE,
+                self.tree_sitter_base_url,
                 language.name(),
                 query_file
             );

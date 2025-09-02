@@ -430,11 +430,11 @@ pub fn load_resource_config(config_path: &Path) -> Result<ResourceConfig> {
         );
         table.insert(
             "rules_url".to_string(),
-            toml::Value::String("https://github.com/nehcuh/gitai-rules.git".to_string()),
+            toml::Value::String("https://github.com/opengrep/opengrep-rules.git".to_string()),
         );
         table.insert(
             "tree_sitter_url".to_string(),
-            toml::Value::String("https://github.com/nehcuh/gitai-tree-sitter.git".to_string()),
+            toml::Value::String("https://github.com/nvim-treesitter/nvim-treesitter.git".to_string()),
         );
         table.insert("fallback_sources".to_string(), toml::Value::Array(vec![]));
         table.insert(
