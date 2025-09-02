@@ -169,17 +169,119 @@ default_include_imports = true
 exclude_test_code = true
 
 # ============================================================================
-# 高级配置（通常不需要修改）
+# 资源下载配置（可自定义下载源）
+# ============================================================================
+[sources]
+# 配置文件下载地址
+config_url = "https://raw.githubusercontent.com/nehcuh/gitai/main/assets/config.enhanced.toml"
+
+# OpenGrep 规则库下载地址
+# 默认使用官方仓库，可以替换为内部镜像或私有仓库
+rules_url = "https://github.com/nehcuh/gitai-rules.git"
+
+# Tree-sitter 语法文件下载地址
+tree_sitter_url = "https://github.com/nehcuh/gitai-tree-sitter.git"
+
+# 备用下载源（主源不可用时自动切换）
+# 适合在网络受限环境中配置内部镜像
+fallback_sources = [
+    "https://gitee.com/nehcuh/gitai-mirror",
+    # 添加你的内部镜像：
+    # "https://internal.company.com/gitai-resources",
+]
+
+# 更新检查间隔（秒）
+# 86400 = 24小时
+update_check_interval = 86400
+
+# 自动更新资源
+auto_update = false
+
+# ============================================================================
+# 网络配置
+# ============================================================================
+[network]
+# HTTP/HTTPS 代理设置
+# 例如: "http://proxy.company.com:8080" 或 "socks5://127.0.0.1:1080"
+proxy = ""
+
+# 网络请求超时时间（秒）
+timeout = 30
+
+# 失败重试次数
+retry_times = 3
+
+# 离线模式（不进行任何网络请求）
+offline_mode = false
+
+# ============================================================================
+# 缓存配置
+# ============================================================================
+[cache]
+# 启用缓存
+enabled = true
+
+# 缓存目录
+path = "~/.cache/gitai"
+
+# 最大缓存大小
+max_size = "1GB"
+
+# 缓存有效期（秒）
+# 604800 = 7天
+ttl = 604800
+
+# ============================================================================
+# Tree-sitter 配置（实验性功能）
+# ============================================================================
+[tree_sitter]
+# 启用 Tree-sitter 分析
+enabled = true
+
+# 语法文件存储路径
+grammar_path = "~/.cache/gitai/tree-sitter"
+
+# 支持的编程语言
+supported_languages = ["rust", "python", "javascript", "typescript", "go", "java", "c", "cpp"]
+
+# ============================================================================
+# 日志配置
+# ============================================================================
+[logging]
+# 日志级别: debug, info, warn, error
+level = "info"
+
+# 日志文件路径
+file = "~/.cache/gitai/gitai.log"
+
+# 单个日志文件最大大小
+max_size = "10MB"
+
+# 保留的日志备份数量
+max_backups = 3
+
+# 启用彩色输出
+color = true
+
+# ============================================================================
+# 提示词模板配置
+# ============================================================================
+[prompts]
+# 自定义提示词目录
+path = "~/.config/gitai/prompts"
+
+# 当自定义提示词不存在时，使用内置提示词
+use_builtin = true
+
+# ============================================================================
+# 其他高级配置
 # ============================================================================
 
 # 语言偏好设置（可选）
 # language = "zh-CN"
 
-# 日志级别（可选）
-# log_level = "info"
+# OpenGrep 自动安装
+# auto_install_opengrep = true
 
-# 缓存目录（可选）
-# cache_dir = "~/.cache/gitai"
-
-# 配置目录（可选）
-# config_dir = "~/.config/gitai"
+# 规则存储路径
+# rules_path = "~/.cache/gitai/rules"
