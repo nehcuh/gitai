@@ -373,14 +373,10 @@ impl ResourceManager {
             warn!("Failed to update rules: {}", e);
         }
 
-        // Update grammars for supported languages
-        let languages = vec!["rust", "python", "javascript", "go", "java"];
-        for lang in languages {
-            if let Err(e) = self.download_grammars(lang).await {
-                warn!("Failed to update grammar for {}: {}", lang, e);
-            }
-        }
-
+        // NOTE: Tree-sitter queries are handled separately by tree_sitter::queries::QueriesManager
+        // The download_grammars method here is deprecated and should not be used
+        // Tree-sitter grammar libraries are compiled into the binary via Cargo features
+        
         info!("Resource update complete");
         Ok(())
     }
