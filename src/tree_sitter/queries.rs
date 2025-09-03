@@ -42,8 +42,10 @@ impl QueriesManager {
     pub fn with_base_url(
         base_url: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap().join(".cache"))
+        // 强制使用 ~/.cache/gitai 作为统一缓存目录
+        let cache_dir = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".cache")
             .join("gitai")
             .join("tree-sitter-queries");
 

@@ -111,8 +111,10 @@ impl TreeSitterCache {
         capacity: usize,
         max_age_seconds: u64,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let base_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from(".cache"))
+        // 强制使用 ~/.cache/gitai 作为统一缓存目录
+        let base_dir = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".cache")
             .join("gitai")
             .join("tree_sitter_cache");
 
