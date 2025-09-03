@@ -119,6 +119,9 @@ default_tree_sitter = true
 # 默认启用安全扫描
 default_security_scan = false
 
+# 是否优先显示多语言统计
+prefer_multi_language_stats = true
+
 # --- 智能提交服务配置 ---
 [mcp.services.commit]
 # 默认添加所有文件
@@ -143,6 +146,10 @@ default_timeout = 300
 # 默认输出详细程度 (0-2)
 # 0: 最少信息，1: 标准信息，2: 详细信息
 verbosity = 1
+# 默认输出格式
+default_format = "json"
+# 多语言项目的最大文件数量
+max_files_per_analysis = 1000
 
 # --- 依赖图服务配置 ---
 [mcp.services.dependency]

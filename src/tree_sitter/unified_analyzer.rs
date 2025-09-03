@@ -164,6 +164,7 @@ impl UnifiedAnalyzer {
 
         let mut summary = StructuralSummary {
             language: self.language.name().to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: Vec::new(),
             classes: Vec::new(),
             imports: Vec::new(),

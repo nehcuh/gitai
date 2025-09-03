@@ -344,6 +344,7 @@ mod tests {
 
         StructuralSummary {
             language: "rust".to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: vec![function],
             classes: vec![],
             imports: vec![],

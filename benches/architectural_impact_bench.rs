@@ -35,6 +35,7 @@ fn create_large_summary(function_count: usize, class_count: usize) -> Structural
 
     StructuralSummary {
         language: "rust".to_string(),
+        language_summaries: std::collections::HashMap::new(),
         functions,
         classes,
         comments: vec![],

@@ -375,6 +375,7 @@ mod tests {
     fn test_cache_entry_expiration() {
         let summary = StructuralSummary {
             language: "rust".to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: vec![],
             classes: vec![],
             imports: vec![],
@@ -413,6 +414,7 @@ mod tests {
         let key = CacheKey::from_content("test code", "rust");
         let summary = StructuralSummary {
             language: "rust".to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: vec![],
             classes: vec![],
             imports: vec![],

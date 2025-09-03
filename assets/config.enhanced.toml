@@ -78,6 +78,7 @@ enabled = ["review", "commit", "scan", "analysis"]
 default_format = "text"
 default_tree_sitter = false  # Currently experimental
 default_security_scan = true
+prefer_multi_language_stats = true
 
 [mcp.services.commit]
 # Commit service configuration
@@ -93,6 +94,8 @@ default_timeout = 300
 [mcp.services.analysis]
 # Analysis service configuration
 verbosity = 1  # Output verbosity (0-2)
+default_format = "json"
+max_files_per_analysis = 1000
 
 [logging]
 # Logging configuration

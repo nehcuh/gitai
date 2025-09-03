@@ -92,14 +92,65 @@ impl ReviewService {
             review_config.format = format;
         }
 
+        // 保存 tree_sitter 配置，因为 review_config 会被移动
+        let tree_sitter_enabled = review_config.tree_sitter;
+
         // 执行评审
         let review_result = review::execute_review_with_result(&self.config, review_config).await?;
 
         // 转换为 MCP 使用的 ReviewResult 格式
+        let mut details = review_result.details;
+        
+        // 检查是否有 Tree-sitter 多语言分析结果
+        if tree_sitter_enabled {
+            // 检查 details 中是否有多语言相关信息
+            if let Some(tree_sitter_flag) = details.get("tree_sitter") {
+                if tree_sitter_flag == "true" {
+                    // 尝试推断是否为多语言项目
+                    let has_multiple_langs = details.keys()
+                        .any(|k| k.contains("_functions") || k.contains("_classes"))
+                        && details.keys().filter(|k| k.ends_with("_functions")).count() > 1;
+                    
+                    if has_multiple_langs {
+                        details.insert("analysis_mode".to_string(), "multi-language".to_string());
+                        
+                        // 提取语言列表
+                        let languages: Vec<String> = details.keys()
+                            .filter_map(|k| {
+                                if k.ends_with("_functions") {
+                                    Some(k.trim_end_matches("_functions").to_string())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        
+                        if !languages.is_empty() {
+                            details.insert("detected_languages".to_string(), languages.join(", "));
+                            details.insert("language_count".to_string(), languages.len().to_string());
+                        }
+                    } else {
+                        details.insert("analysis_mode".to_string(), "single-language".to_string());
+                    }
+                }
+            }
+        }
+        
+        // 增强消息以体现多语言分析
+        let enhanced_message = if details.get("analysis_mode") == Some(&"multi-language".to_string()) {
+            if let Some(langs) = details.get("detected_languages") {
+                format!("{} (多语言项目：{})", review_result.message, langs)
+            } else {
+                format!("{} (多语言项目)", review_result.message)
+            }
+        } else {
+            review_result.message
+        };
+
         Ok(ReviewResult {
             success: review_result.success,
-            message: review_result.message,
-            details: review_result.details,
+            message: enhanced_message,
+            details,
             findings: review_result
                 .findings
                 .into_iter()
@@ -133,20 +184,20 @@ impl crate::mcp::GitAiMcpService for ReviewService {
     }
 
     fn description(&self) -> &str {
-        "执行代码评审，支持 Tree-sitter 结构分析、安全扫描和 Issue 关联"
+        "执行代码评审，支持多语言 Tree-sitter 结构分析、安全扫描和 Issue 关联"
     }
 
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
             name: "execute_review".to_string().into(),
-            description: self.description().to_string().into(),
+            description: "执行代码评审，支持多语言项目（Rust、Java、Python、JavaScript、TypeScript、Go、C、C++）的 Tree-sitter 结构分析、安全扫描和 Issue 关联".to_string().into(),
             input_schema: Arc::new(
                 serde_json::json!({
                     "type": "object",
                     "properties": {
                         "tree_sitter": {
                             "type": "boolean",
-                            "description": "是否启用 Tree-sitter 结构分析 (可选，默认 false)"
+                            "description": "是否启用 Tree-sitter 多语言结构分析 (可选，默认 false)。支持自动检测和分析多种编程语言"
                         },
                         "security_scan": {
                             "type": "boolean",

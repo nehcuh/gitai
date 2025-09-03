@@ -409,6 +409,7 @@ impl StructureAnalyzer {
 
         let mut summary = StructuralSummary {
             language: self.language.name().to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: Vec::new(),
             classes: Vec::new(),
             imports: Vec::new(),
@@ -746,6 +747,7 @@ mod tests {
         // 创建测试用的summary
         let mut summary = StructuralSummary {
             language: "java".to_string(),
+            language_summaries: std::collections::HashMap::new(),
             functions: vec![
                 FunctionInfo {
                     name: "shortFunction".to_string(),

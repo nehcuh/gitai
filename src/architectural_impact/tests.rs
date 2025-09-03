@@ -3,51 +3,49 @@ mod tests {
     use super::super::*;
     use crate::tree_sitter::{StructuralSummary, FunctionInfo, ClassInfo};
     
-    /// 创建测试用的 StructuralSummary
     fn create_test_summary() -> StructuralSummary {
-        StructuralSummary {
-            functions: vec![
-                FunctionInfo {
-                    name: "test_function".to_string(),
-                    visibility: "public".to_string(),
-                    is_async: false,
-                    parameters: vec!["String".to_string()],
-                    return_type: Some("i32".to_string()),
-                    start_line: 10,
-                    end_line: 20,
-                    complexity: 5,
-                    calls_count: 3,
-                },
-                FunctionInfo {
-                    name: "helper_function".to_string(),
-                    visibility: "private".to_string(),
-                    is_async: true,
-                    parameters: vec!["u64".to_string(), "bool".to_string()],
-                    return_type: Some("Result<String>".to_string()),
-                    start_line: 25,
-                    end_line: 35,
-                    complexity: 3,
-                    calls_count: 1,
-                },
-            ],
-            classes: vec![
-                ClassInfo {
-                    name: "TestClass".to_string(),
-                    visibility: "public".to_string(),
-                    methods_count: 5,
-                    fields_count: 3,
-                    is_abstract: false,
-                    has_tests: true,
-                    start_line: 40,
-                    end_line: 100,
-                },
-            ],
-            comments: vec![],
-            imports: vec![],
-            complexity_metrics: Default::default(),
-            code_quality_metrics: Default::default(),
-        }
+    StructuralSummary {
+        language: "test".to_string(),
+        language_summaries: std::collections::HashMap::new(),
+        functions: vec![
+            FunctionInfo {
+                name: "test_function".to_string(),
+                visibility: Some("public".to_string()),
+                is_async: false,
+                parameters: vec!["String".to_string()],
+                return_type: Some("i32".to_string()),
+                line_start: 10,
+                line_end: 20,
+            },
+            FunctionInfo {
+                name: "helper_function".to_string(),
+                visibility: Some("private".to_string()),
+                is_async: true,
+                parameters: vec!["u64".to_string(), "bool".to_string()],
+                return_type: Some("Result<String>".to_string()),
+                line_start: 25,
+                line_end: 35,
+            },
+        ],
+        classes: vec![
+            ClassInfo {
+                name: "TestClass".to_string(),
+                methods: vec![],
+                fields: vec![],
+                line_start: 40,
+                line_end: 100,
+                is_abstract: false,
+                extends: None,
+                implements: vec![],
+            },
+        ],
+        imports: vec![],
+        exports: vec![],
+        comments: vec![],
+        complexity_hints: vec![],
+        calls: vec![],
     }
+}
     
     /// 测试函数签名变更检测
     #[test]

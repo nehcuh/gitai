@@ -340,62 +340,123 @@ impl AnalysisService {
         verbosity: u32,
     ) -> AnalysisResult {
         let mut details = HashMap::new();
-        details.insert("language".to_string(), summary.language.clone());
-        details.insert(
-            "functions_count".to_string(),
-            summary.functions.len().to_string(),
-        );
-        details.insert(
-            "classes_count".to_string(),
-            summary.classes.len().to_string(),
-        );
-        details.insert(
-            "imports_count".to_string(),
-            summary.imports.len().to_string(),
-        );
-        details.insert(
-            "comments_count".to_string(),
-            summary.comments.len().to_string(),
-        );
+        
+        // 检查是否为多语言模式
+        if summary.is_multi_language() {
+            // 多语言模式
+            details.insert("mode".to_string(), "multi-language".to_string());
+            details.insert("languages".to_string(), 
+                          summary.detected_languages().join(", "));
+            details.insert("language_count".to_string(), 
+                          summary.language_summaries.len().to_string());
+            
+            // 各语言统计
+            for (lang, lang_summary) in &summary.language_summaries {
+                details.insert(
+                    format!("{}_functions", lang),
+                    lang_summary.functions.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_classes", lang),
+                    lang_summary.classes.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_comments", lang),
+                    lang_summary.comments.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_files", lang),
+                    lang_summary.file_count.to_string(),
+                );
+            }
+            
+            // 高详细程度时包含结构信息
+            if verbosity > 1 {
+                for (lang, lang_summary) in &summary.language_summaries {
+                    details.insert(
+                        format!("{}_functions_detail", lang),
+                        serde_json::to_string(&lang_summary.functions).unwrap_or_default(),
+                    );
+                    details.insert(
+                        format!("{}_classes_detail", lang),
+                        serde_json::to_string(&lang_summary.classes).unwrap_or_default(),
+                    );
+                }
+            }
+        } else {
+            // 单语言模式（向后兼容）
+            details.insert("mode".to_string(), "single-language".to_string());
+            details.insert("language".to_string(), summary.language.clone());
+            details.insert(
+                "functions_count".to_string(),
+                summary.functions.len().to_string(),
+            );
+            details.insert(
+                "classes_count".to_string(),
+                summary.classes.len().to_string(),
+            );
+            details.insert(
+                "imports_count".to_string(),
+                summary.imports.len().to_string(),
+            );
+            details.insert(
+                "comments_count".to_string(),
+                summary.comments.len().to_string(),
+            );
 
-        if verbosity > 1 {
-            details.insert(
-                "functions".to_string(),
-                serde_json::to_string(&summary.functions).unwrap_or_default(),
-            );
-            details.insert(
-                "classes".to_string(),
-                serde_json::to_string(&summary.classes).unwrap_or_default(),
-            );
-            details.insert(
-                "imports".to_string(),
-                serde_json::to_string(&summary.imports).unwrap_or_default(),
-            );
-            details.insert(
-                "comments".to_string(),
-                serde_json::to_string(&summary.comments).unwrap_or_default(),
-            );
+            if verbosity > 1 {
+                details.insert(
+                    "functions".to_string(),
+                    serde_json::to_string(&summary.functions).unwrap_or_default(),
+                );
+                details.insert(
+                    "classes".to_string(),
+                    serde_json::to_string(&summary.classes).unwrap_or_default(),
+                );
+                details.insert(
+                    "imports".to_string(),
+                    serde_json::to_string(&summary.imports).unwrap_or_default(),
+                );
+                details.insert(
+                    "comments".to_string(),
+                    serde_json::to_string(&summary.comments).unwrap_or_default(),
+                );
+            }
         }
 
-        // 计算一些指标
+        // 计算总体指标
         let total_lines = 100; // 简化计算
         let comment_lines = summary.comments.len();
         let complexity_score = summary.complexity_hints.len() as u32;
+        
+        // 根据模式生成不同的消息
+        let message = if summary.is_multi_language() {
+            let lang_list = summary.detected_languages().join(", ");
+            format!("多语言代码分析完成：{} (共{}种语言)", lang_list, summary.language_summaries.len())
+        } else {
+            format!("代码分析完成：{}", summary.language)
+        };
+        
+        let language_display = if summary.is_multi_language() {
+            "multi-language".to_string()
+        } else {
+            summary.language.clone()
+        };
 
         AnalysisResult {
             success: true,
-            message: "代码分析完成".to_string(),
-            language: summary.language,
+            message,
+            language: language_display,
             summary: CodeSummary {
                 total_lines,
-                code_lines: total_lines - comment_lines,
+                code_lines: if total_lines > comment_lines { total_lines - comment_lines } else { 0 },
                 comment_lines,
                 blank_lines: 0,
                 complexity_score,
             },
             structures: CodeStructures {
-                functions: vec![], // 需要转换 FunctionInfo
-                classes: vec![],   // 需要转换 ClassInfo
+                functions: vec![], // TODO: 转换 FunctionInfo
+                classes: vec![],   // TODO: 转换 ClassInfo
                 imports: summary.imports,
             },
             metrics: CodeMetrics {
@@ -425,14 +486,14 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
     }
 
     fn description(&self) -> &str {
-        "执行代码结构分析，提供详细的代码度量和结构信息"
+        "执行多语言代码结构分析，支持 8 种编程语言，提供详细的代码度量和结构信息"
     }
 
     fn tools(&self) -> Vec<Tool> {
         vec![
             Tool {
                 name: "execute_analysis".to_string().into(),
-                description: "执行代码结构分析，支持单个文件或整个目录的分析，提供详细的代码度量和结构信息".to_string().into(),
+                description: "执行多语言代码结构分析，支持单个文件或整个目录的分析。能够自动检测和分析 Rust、Java、Python、JavaScript、TypeScript、Go、C、C++ 等多种语言，提供详细的代码度量和结构信息".to_string().into(),
                 input_schema: Arc::new(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -443,13 +504,13 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                         "language": {
                             "type": "string",
                             "enum": ["rust", "java", "c", "cpp", "python", "go", "javascript", "typescript"],
-                            "description": "编程语言过滤器 (可选，默认自动检测所有支持的语言)"
+                            "description": "编程语言过滤器 (可选)。若不指定，将自动检测和分析所有支持的语言。对于多语言项目，可以同时分析多种语言文件"
                         },
                         "verbosity": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 2,
-                            "description": "输出详细程度 (0-2，默认 1)。0：基础统计，1：标准信息，2：详细结构信息"
+                            "description": "输出详细程度 (0-2，默认 1)。在多语言模式下：0-基础统计，1-各语言统计，2-详细结构信息和语言特定的分析"
                         }
                     },
                     "required": ["path"]

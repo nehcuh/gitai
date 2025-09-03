@@ -273,6 +273,10 @@ pub struct McpReviewConfig {
     pub default_security_scan: bool,
     /// 默认输出格式
     pub default_format: String,
+    /// 支持的语言列表（可选，空表示支持所有）
+    pub supported_languages: Option<Vec<String>>,
+    /// 是否优先显示多语言统计
+    pub prefer_multi_language_stats: bool,
 }
 
 impl McpReviewConfig {
@@ -286,6 +290,18 @@ impl McpReviewConfig {
                 format = self.default_format
             )
             .into());
+        }
+        
+        // 验证支持的语言列表
+        if let Some(ref languages) = self.supported_languages {
+            let valid_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"];
+            for lang in languages {
+                if !valid_languages.contains(&lang.as_str()) {
+                    return Err(format!(
+                        "不支持的编程语言: {lang}，支持的语言: {valid_languages:?}"
+                    ).into());
+                }
+            }
         }
 
         Ok(())
@@ -346,6 +362,12 @@ impl McpScanConfig {
 pub struct McpAnalysisConfig {
     /// 默认输出详细程度
     pub verbosity: u32,
+    /// 默认输出格式
+    pub default_format: String,
+    /// 支持的语言列表（可选，空表示支持所有）
+    pub supported_languages: Option<Vec<String>>,
+    /// 多语言项目的最大文件数量
+    pub max_files_per_analysis: u32,
 }
 
 impl McpAnalysisConfig {
@@ -354,6 +376,36 @@ impl McpAnalysisConfig {
         // 验证详细程度
         if self.verbosity > 2 {
             return Err("输出详细程度不能超过 2".into());
+        }
+        
+        // 验证输出格式
+        let valid_formats = ["json", "text", "yaml"];
+        if !valid_formats.contains(&self.default_format.as_str()) {
+            return Err(format!(
+                "不支持的输出格式: {}，支持的格式: {:?}",
+                self.default_format, valid_formats
+            ).into());
+        }
+        
+        // 验证支持的语言列表
+        if let Some(ref languages) = self.supported_languages {
+            let valid_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"];
+            for lang in languages {
+                if !valid_languages.contains(&lang.as_str()) {
+                    return Err(format!(
+                        "不支持的编程语言: {lang}，支持的语言: {valid_languages:?}"
+                    ).into());
+                }
+            }
+        }
+        
+        // 验证最大文件数量
+        if self.max_files_per_analysis == 0 {
+            return Err("最大文件数量不能为 0".into());
+        }
+        
+        if self.max_files_per_analysis > 10000 {
+            return Err("最大文件数量不能超过 10000".into());
         }
 
         Ok(())
@@ -437,9 +489,11 @@ impl Default for Config {
                         "dependency".to_string(),
                     ],
                     review: Some(McpReviewConfig {
-                        default_tree_sitter: false,
-                        default_security_scan: false,
                         default_format: "text".to_string(),
+                        default_tree_sitter: false,
+                        default_security_scan: true,
+                        supported_languages: None, // 支持所有语言
+                        prefer_multi_language_stats: true,
                     }),
                     commit: Some(McpCommitConfig {
                         default_review: false,
@@ -450,7 +504,12 @@ impl Default for Config {
                         default_tool: "opengrep".to_string(),
                         default_timeout: 300,
                     }),
-                    analysis: Some(McpAnalysisConfig { verbosity: 1 }),
+                    analysis: Some(McpAnalysisConfig { 
+                        verbosity: 1,
+                        default_format: "json".to_string(),
+                        supported_languages: None, // 支持所有语言
+                        max_files_per_analysis: 1000,
+                    }),
                     dependency: Some(McpDependencyConfig {
                         default_format: "ascii".to_string(),
                         verbosity: 1,

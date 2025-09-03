@@ -240,6 +240,23 @@ impl TreeSitterManager {
 /// 代码结构摘要
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct StructuralSummary {
+    /// 单语言模式的语言标识（保持向后兼容）
+    pub language: String,
+    /// 多语言模式的分析结果
+    pub language_summaries: std::collections::HashMap<String, LanguageSummary>,
+    /// 单语言模式的分析结果（保持向后兼容）
+    pub functions: Vec<FunctionInfo>,
+    pub classes: Vec<ClassInfo>,
+    pub imports: Vec<String>,
+    pub exports: Vec<String>,
+    pub comments: Vec<CommentInfo>,
+    pub complexity_hints: Vec<String>,
+    pub calls: Vec<FunctionCallInfo>,
+}
+
+/// 单个语言的分析结果
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct LanguageSummary {
     pub language: String,
     pub functions: Vec<FunctionInfo>,
     pub classes: Vec<ClassInfo>,
@@ -248,6 +265,80 @@ pub struct StructuralSummary {
     pub comments: Vec<CommentInfo>,
     pub complexity_hints: Vec<String>,
     pub calls: Vec<FunctionCallInfo>,
+    /// 该语言涉及的文件数量
+    pub file_count: usize,
+}
+
+impl StructuralSummary {
+    /// 创建单语言模式的结构摘要
+    pub fn single_language(language: String, summary: LanguageSummary) -> Self {
+        let mut result = Self {
+            language: language.clone(),
+            language_summaries: std::collections::HashMap::new(),
+            functions: summary.functions.clone(),
+            classes: summary.classes.clone(),
+            imports: summary.imports.clone(),
+            exports: summary.exports.clone(),
+            comments: summary.comments.clone(),
+            complexity_hints: summary.complexity_hints.clone(),
+            calls: summary.calls.clone(),
+        };
+        result.language_summaries.insert(language, summary);
+        result
+    }
+
+    /// 创建多语言模式的结构摘要
+    pub fn multi_language(language_summaries: std::collections::HashMap<String, LanguageSummary>) -> Self {
+        let mut result = Self {
+            language: "multi-language".to_string(),
+            language_summaries,
+            ..Default::default()
+        };
+        
+        // 合并所有语言的结果以保持向后兼容
+        for summary in result.language_summaries.values() {
+            result.functions.extend(summary.functions.clone());
+            result.classes.extend(summary.classes.clone());
+            result.imports.extend(summary.imports.clone());
+            result.exports.extend(summary.exports.clone());
+            result.comments.extend(summary.comments.clone());
+            result.complexity_hints.extend(summary.complexity_hints.clone());
+            result.calls.extend(summary.calls.clone());
+        }
+        
+        result
+    }
+
+    /// 获取所有检测到的语言
+    pub fn detected_languages(&self) -> Vec<&str> {
+        if self.language_summaries.is_empty() {
+            vec![&self.language]
+        } else {
+            self.language_summaries.keys().map(|s| s.as_str()).collect()
+        }
+    }
+
+    /// 检查是否为多语言模式
+    pub fn is_multi_language(&self) -> bool {
+        self.language_summaries.len() > 1
+    }
+}
+
+impl LanguageSummary {
+    /// 从旧的 StructuralSummary 转换
+    pub fn from_structural_summary(summary: &StructuralSummary) -> Self {
+        Self {
+            language: summary.language.clone(),
+            functions: summary.functions.clone(),
+            classes: summary.classes.clone(),
+            imports: summary.imports.clone(),
+            exports: summary.exports.clone(),
+            comments: summary.comments.clone(),
+            complexity_hints: summary.complexity_hints.clone(),
+            calls: summary.calls.clone(),
+            file_count: 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

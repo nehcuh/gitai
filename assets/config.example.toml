@@ -48,11 +48,17 @@ enabled = ["review", "commit", "scan", "analysis"]
 # 默认输出格式
 default_format = "text"
 
-# 默认启用 Tree-sitter 分析
+# 默认启用 Tree-sitter 多语言分析
 default_tree_sitter = true
 
 # 默认启用安全扫描
 default_security_scan = true
+
+# 支持的语言列表 (空表示支持所有语言)
+# supported_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"]
+
+# 是否优先显示多语言统计
+prefer_multi_language_stats = true
 
 [mcp.services.commit]
 # 默认添加所有文件
@@ -74,3 +80,9 @@ default_timeout = 300
 [mcp.services.analysis]
 # 默认输出详细程度 (0-2)
 verbosity = 1
+# 默认输出格式
+default_format = "json"
+# 支持的语言列表 (空表示支持所有语言)
+# supported_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"]
+# 多语言项目的最大文件数量
+max_files_per_analysis = 1000

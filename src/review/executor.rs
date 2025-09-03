@@ -127,8 +127,30 @@ pub async fn execute_review_with_result(
         println!("🌳 使用 Tree-sitter 进行结构分析...");
         structural_summary =
             super::analyzer::perform_structural_analysis(&diff, &review_config.language).await?;
-        if structural_summary.is_some() {
-            println!("  ✅ 结构分析完成");
+        
+        if let Some(ref summary) = structural_summary {
+            // 根据是否为多语言模式显示不同的统计信息
+            if summary.is_multi_language() {
+                println!("  ✅ 多语言结构分析完成");
+                for (lang, lang_summary) in &summary.language_summaries {
+                    println!(
+                        "    🗺️ {}: {} 函数, {} 类, {} 注释",
+                        lang,
+                        lang_summary.functions.len(),
+                        lang_summary.classes.len(),
+                        lang_summary.comments.len()
+                    );
+                }
+            } else {
+                println!("  ✅ 结构分析完成");
+                println!(
+                    "    📋 {}: {} 函数, {} 类, {} 注释",
+                    summary.language,
+                    summary.functions.len(),
+                    summary.classes.len(),
+                    summary.comments.len()
+                );
+            }
         }
     }
 
