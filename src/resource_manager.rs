@@ -376,7 +376,7 @@ impl ResourceManager {
         // NOTE: Tree-sitter queries are handled separately by tree_sitter::queries::QueriesManager
         // The download_grammars method here is deprecated and should not be used
         // Tree-sitter grammar libraries are compiled into the binary via Cargo features
-        
+
         info!("Resource update complete");
         Ok(())
     }
