@@ -42,12 +42,8 @@ impl QueriesManager {
     pub fn with_base_url(
         base_url: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        // 强制使用 ~/.cache/gitai 作为统一缓存目录
-        let cache_dir = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".cache")
-            .join("gitai")
-            .join("tree-sitter-queries");
+        // 使用统一的路径解析方案
+        let cache_dir = crate::utils::paths::tree_sitter_queries_dir();
 
         // 从配置文件中读取 tree_sitter_url，如果无法读取则使用默认值或传入的 base_url
         let tree_sitter_base_url = base_url
@@ -97,10 +93,7 @@ impl QueriesManager {
 
     /// 从配置文件中加载 tree_sitter_url
     fn load_tree_sitter_url_from_config() -> Option<String> {
-        let config_path = dirs::home_dir()?
-            .join(".config")
-            .join("gitai")
-            .join("config.toml");
+        let config_path = crate::utils::paths::default_config_file();
 
         if !config_path.exists() {
             return None;

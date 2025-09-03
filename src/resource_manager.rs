@@ -58,7 +58,13 @@ pub struct CacheConfig {
 impl ResourceManager {
     /// Create a new ResourceManager
     pub fn new(config: ResourceConfig) -> Result<Self> {
-        let cache_dir = PathBuf::from(shellexpand::tilde(&config.cache.path).to_string());
+        let cache_dir = crate::utils::paths::resolve_config_path(&config.cache.path);
+
+        log::debug!(
+            "ResourceManager cache directory resolved: {} (source: {})",
+            cache_dir.display(),
+            crate::utils::paths::get_path_source(&cache_dir)
+        );
 
         let mut client_builder = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(config.network.timeout));

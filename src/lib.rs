@@ -17,6 +17,7 @@ pub mod prompts;
 pub mod resource_manager;
 pub mod review;
 pub mod tree_sitter;
+pub mod utils;
 
 // 条件编译模块
 #[cfg(feature = "ai")]
