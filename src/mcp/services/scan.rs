@@ -115,7 +115,13 @@ impl ScanService {
         }
 
         // 使用真实的扫描逻辑
-        let scan_result = match tool.as_str() {
+        // 将 'security' 映射为 'opengrep' 以保持向后兼容性
+        let normalized_tool = match tool.as_str() {
+            "security" => "opengrep",
+            other => other,
+        };
+        
+        let scan_result = match normalized_tool {
             "opengrep" => {
                 debug!("🛡️  使用 OpenGrep 扫描工具");
                 let lang = params.lang.as_deref();
@@ -326,8 +332,8 @@ impl crate::mcp::GitAiMcpService for ScanService {
                         },
                         "tool": {
                             "type": "string",
-                            "enum": ["opengrep"],
-                            "description": "扫描工具 (可选，默认 opengrep)"
+                            "enum": ["opengrep", "security"],
+                            "description": "扫描工具 (可选，默认 opengrep；security 等同于 opengrep)"
                         },
                         "lang": {
                             "type": "string",

@@ -404,7 +404,13 @@ async fn handle_scan(
     }
 
     // 确保扫描工具已安装
-    if (tool == "opengrep" || tool == "auto") && !scan::is_opengrep_installed() {
+    // 将 'security' 映射为 'opengrep' 以保持向后兼容性
+    let normalized_tool = match tool {
+        "security" => "opengrep",
+        other => other,
+    };
+    
+    if (normalized_tool == "opengrep" || normalized_tool == "auto") && !scan::is_opengrep_installed() {
         if _auto_install {
             if show_progress {
                 println!("🔧 未检测到 OpenGrep，正在自动安装...");
@@ -436,11 +442,11 @@ async fn handle_scan(
     }
 
     // 执行扫描
-    let result = if tool == "opengrep" || tool == "auto" {
+    let result = if normalized_tool == "opengrep" || normalized_tool == "auto" {
         let include_version = show_progress && !benchmark;
         scan::run_opengrep_scan(config, path, lang, timeout, include_version)?
     } else {
-        return Err(format!("不支持的扫描工具: {}", tool).into());
+        return Err(format!("不支持的扫描工具: {} (支持的工具: opengrep, security, auto)", tool).into());
     };
 
     // 保存扫描历史（无论输出格式）
