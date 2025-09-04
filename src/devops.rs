@@ -26,6 +26,19 @@ pub struct DevOpsClient {
 }
 
 impl DevOpsClient {
+    /// Creates a new DevOpsClient using the provided configuration.
+    ///
+    /// The function builds an underlying `reqwest::Client` with its request timeout set
+    /// from `config.timeout` (in seconds). If building the HTTP client fails, a
+    /// default `reqwest::Client` is used as a fallback.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `DevOpsConfig` implements `Default` for examples/tests.
+    /// let cfg = DevOpsConfig::default();
+    /// let client = DevOpsClient::new(cfg);
+    /// ```
     pub fn new(config: DevOpsConfig) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(config.timeout))
@@ -35,7 +48,25 @@ impl DevOpsClient {
         Self { config, client }
     }
 
-    /// 获取单个Issue（自动根据配置平台选择实现）
+    /// Fetch a single Issue using the client's configured platform and space.
+    ///
+    /// This is a convenience wrapper that delegates to `get_issue_with_space`, using the
+    /// client's configured `space_id`. A leading `#` in `issue_id` (e.g. `#123`) is ignored.
+    ///
+    /// # Returns
+    ///
+    /// Returns the unified `Issue` representation for the requested issue, or an error if the
+    /// underlying platform request fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn _example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = DevOpsClient::new(/* config */);
+    /// let issue = client.get_issue("123").await?;
+    /// println!("{}", issue.title);
+    /// # Ok(()) }
+    /// ```
     pub async fn get_issue(
         &self,
         issue_id: &str,
@@ -44,7 +75,32 @@ impl DevOpsClient {
             .await
     }
 
-    /// 获取单个Issue，允许传入 space 覆盖配置
+    /// Fetches a single issue by ID, optionally overriding the configured Coding space.
+    ///
+    /// The function normalizes an incoming `issue_id` by trimming a leading `#` and dispatches
+    /// the request to the platform-specific fetcher based on the client's configured platform:
+    /// - "coding": calls the Coding-specific loader and uses `space_override` if provided, otherwise the client's configured space_id.
+    /// - "github": calls the GitHub-specific loader (ignores `space_override`).
+    /// Returns an `Err` when the client's platform is not supported.
+    ///
+    /// # Parameters
+    ///
+    /// - `issue_id`: The issue identifier (may start with `#`).
+    /// - `space_override`: Optional Coding space ID to use instead of the client's configured space.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the resolved `Issue` on success or a boxed error on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn _example(client: &crate::DevOpsClient) -> Result<(), Box<dyn std::error::Error>> {
+    /// let issue = client.get_issue_with_space("#123", None).await?;
+    /// println!("{}", issue.title);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn get_issue_with_space(
         &self,
         issue_id: &str,
@@ -61,7 +117,22 @@ impl DevOpsClient {
         }
     }
 
-    /// 获取多个Issues
+    /// Fetches multiple issues by their IDs using the client's configured space.
+    ///
+    /// This is a convenience wrapper that delegates to `get_issues_with_space`, passing
+    /// the client's configured `space_id`. It returns a vector of successfully
+    /// retrieved `Issue` objects; individual fetch failures are handled by the
+    /// underlying implementation (they may be logged and skipped).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run_example(client: &crate::DevOpsClient) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// let ids = vec!["123".to_string(), "456".to_string()];
+    /// let issues = client.get_issues(&ids).await?;
+    /// assert!(issues.len() <= ids.len());
+    /// # Ok(()) }
+    /// ```
     pub async fn get_issues(
         &self,
         ids: &[String],
@@ -69,7 +140,32 @@ impl DevOpsClient {
         self.get_issues_with_space(ids, self.config.space_id).await
     }
 
-    /// 获取多个Issues，允许传入 space 覆盖配置
+    /// Fetches multiple issues by their IDs, optionally overriding the configured Coding space ID.
+    ///
+    /// This attempts to fetch each issue using `get_issue_with_space` with the provided `space_override`.
+    /// Successful fetches are collected and returned; individual failures are logged as warnings and do not
+    /// abort the operation.
+    ///
+    /// # Parameters
+    ///
+    /// - `space_override`: when `Some`, that space ID is used for platforms that require a space (e.g., Coding);
+    ///   when `None`, the client's configured space is used.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<Issue>` containing all successfully retrieved issues. The call itself only fails on unexpected
+    /// errors that prevent performing the batch operation (individual issue errors are suppressed).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn doc() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// let client = DevOpsClient::new(/* config */);
+    /// let ids = vec!["123".to_string(), "456".to_string()];
+    /// let issues = client.get_issues_with_space(&ids, Some(42)).await?;
+    /// assert!(issues.iter().all(|i| !i.id.is_empty()));
+    /// # Ok(()) }
+    /// ```
     pub async fn get_issues_with_space(
         &self,
         ids: &[String],
@@ -85,7 +181,31 @@ impl DevOpsClient {
         Ok(issues)
     }
 
-    /// 获取Coding平台的Issue（使用 external/collaboration API）
+    /// Fetches a Coding-platform issue (using the external/collaboration API) and maps it into the unified `Issue` model.
+    ///
+    /// This performs an HTTP GET to the Coding external/collaboration endpoint for the given project (space) and issue code,
+    /// validates the API response, extracts relevant fields, converts the creation timestamp to RFC3339 (when present),
+    /// and synthesizes a human-readable AI context summary placed in `Issue.ai_context`.
+    ///
+    /// Errors:
+    /// - Returns an error if `space_id` is `None`.
+    /// - Returns an error for non-success HTTP responses or when the Coding API returns a non-zero `code`.
+    /// - Returns an error on JSON deserialization or other request failures.
+    ///
+    /// Parameters:
+    /// - `issue_code`: issue code/number as used by Coding (leading `#` should be removed beforehand if present).
+    /// - `space_id`: Coding project (space) ID to query; required for this API.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// let client = DevOpsClient::new(/* config */);
+    /// let issue = client.get_coding_issue("ISSUE-123", Some(42)).await?;
+    /// println!("Title: {}", issue.title);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn get_coding_issue(
         &self,
         issue_code: &str,
@@ -226,7 +346,23 @@ impl DevOpsClient {
         })
     }
 
-    /// 获取GitHub的Issue
+    /// Fetches a GitHub issue by number and converts it into the unified `Issue` model.
+    ///
+    /// The function calls the GitHub Issues API for the repository configured in `self.config.project`
+    /// (falls back to `"owner/repo"` if unset) and maps the response into an `Issue`. The returned
+    /// `Issue` contains core fields (id, title, description, status, assignee, timestamps, labels, url).
+    /// The `ai_context` field is left as `None` for GitHub issues.
+    ///
+    /// Errors are returned for non-success HTTP responses, request failures, or JSON deserialization errors.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run_example(client: &crate::DevOpsClient) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    /// let issue = client.get_github_issue("123").await?;
+    /// println!("Fetched issue {}: {}", issue.id, issue.title);
+    /// # Ok(()) }
+    /// ```
     async fn get_github_issue(
         &self,
         issue_id: &str,

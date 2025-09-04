@@ -15,7 +15,21 @@ pub struct CommitService {
 }
 
 impl CommitService {
-    /// 创建新的 Commit 服务
+    /// Creates a new CommitService initialized from the given configuration.
+    ///
+    /// If `config.mcp.services.commit` is present, its default flags (`default_add_all`,
+    /// `default_review`, `default_tree_sitter`) are used to build the service's default
+    /// `commit::CommitConfig`. Otherwise a baseline default configuration is used.
+    /// The resulting service contains the provided `config` and a `default_config`
+    /// with `space_id` set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Construct a Config (application-specific) and create the service.
+    /// let cfg = Config::default(); // replace with real construction
+    /// let svc = CommitService::new(cfg).expect("failed to create CommitService");
+    /// ```
     pub fn new(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let default_config = if let Some(mcp_config) = &config.mcp {
             if let Some(commit_config) = &mcp_config.services.commit {
@@ -41,6 +55,29 @@ impl CommitService {
         })
     }
 
+    /// Returns a default `commit::CommitConfig` with all fields set to their initial values.
+    ///
+    /// The produced config has:
+    /// - `message: None`
+    /// - `issue_ids: []`
+    /// - `space_id: None`
+    /// - `add_all: false`
+    /// - `review: false`
+    /// - `tree_sitter: false`
+    /// - `dry_run: false`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = default_commit_config();
+    /// assert!(cfg.message.is_none());
+    /// assert!(cfg.issue_ids.is_empty());
+    /// assert!(cfg.space_id.is_none());
+    /// assert_eq!(cfg.add_all, false);
+    /// assert_eq!(cfg.review, false);
+    /// assert_eq!(cfg.tree_sitter, false);
+    /// assert_eq!(cfg.dry_run, false);
+    /// ```
     fn default_commit_config() -> commit::CommitConfig {
         commit::CommitConfig {
             message: None,

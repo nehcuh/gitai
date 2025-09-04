@@ -236,7 +236,20 @@ impl ConfigInitializer {
         Ok(())
     }
 
-    /// Initialize prompt templates
+    /// Ensure the "prompts" directory exists under the config directory and populate it with
+    /// the default prompt templates (commit.md and review.md) if the directory did not already exist.
+    ///
+    /// This writes embedded assets to disk only when the prompts directory is missing; it does nothing
+    /// if the directory is already present.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let init = ConfigInitializer::new();
+    /// // Creates config_dir/prompts and writes commit.md and review.md when missing.
+    /// init.initialize_prompts().unwrap();
+    /// assert!(init.config_dir().join("prompts").exists());
+    /// ```
     fn initialize_prompts(&self) -> Result<()> {
         let prompts_dir = self.config_dir.join("prompts");
 

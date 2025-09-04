@@ -282,7 +282,30 @@ pub struct McpReviewConfig {
 }
 
 impl McpReviewConfig {
-    /// 验证 MCP Review 服务配置
+    /// Validate the MCP Review service configuration.
+    ///
+    /// Checks that `default_format` is one of "text", "json", or "markdown", and that every
+    /// entry in `supported_languages` (if present) is one of the accepted languages:
+    /// "rust", "java", "python", "javascript", "typescript", "go", "c", "cpp".
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the configuration is valid. Returns an `Err` containing a boxed
+    /// error with a human-readable message if an invalid `default_format` or an unsupported
+    /// language is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = McpReviewConfig {
+    ///     default_tree_sitter: true,
+    ///     default_security_scan: false,
+    ///     default_format: "json".to_string(),
+    ///     supported_languages: Some(vec!["rust".to_string(), "python".to_string()]),
+    ///     prefer_multi_language_stats: false,
+    /// };
+    /// assert!(cfg.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证输出格式
         let valid_formats = ["text", "json", "markdown"];
@@ -383,7 +406,27 @@ pub struct McpAnalysisConfig {
 }
 
 impl McpAnalysisConfig {
-    /// 验证 MCP Analysis 服务配置
+    /// Validate the MCP Analysis service configuration.
+    ///
+    /// Performs the following checks and returns an `Err` describing the first violation encountered:
+    /// - `verbosity` must be <= 2.
+    /// - `default_format` must be one of `"json"`, `"text"`, or `"yaml"`.
+    /// - If `supported_languages` is `Some`, each language must be one of:
+    ///   `"rust"`, `"java"`, `"python"`, `"javascript"`, `"typescript"`, `"go"`, `"c"`, `"cpp"`.
+    /// - `max_files_per_analysis` must be > 0 and <= 10000.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = crate::McpAnalysisConfig {
+    ///     verbosity: 1,
+    ///     default_format: "json".to_string(),
+    ///     supported_languages: Some(vec!["rust".to_string(), "python".to_string()]),
+    ///     max_files_per_analysis: 100,
+    /// };
+    ///
+    /// assert!(cfg.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 验证详细程度
         if self.verbosity > 2 {
@@ -479,6 +522,20 @@ impl McpDependencyConfig {
 }
 
 impl Default for Config {
+    /// Returns the application's default configuration.
+    ///
+    /// The returned `Config` is a fully populated instance with sensible defaults for
+    /// AI, scan, and MCP subsystems. Use this when no user configuration file is
+    /// present or for tests.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = Config::default();
+    /// // defaults include MCP present but disabled
+    /// assert_eq!(cfg.mcp.as_ref().map(|m| m.enabled), Some(false));
+    /// assert_eq!(cfg.ai.temperature, 0.3);
+    /// ```
     fn default() -> Self {
         Self {
             ai: AiConfig {

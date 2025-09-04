@@ -270,7 +270,31 @@ pub struct LanguageSummary {
 }
 
 impl StructuralSummary {
-    /// 创建单语言模式的结构摘要
+    /// Create a StructuralSummary for a single language.
+    ///
+    /// The provided `summary` is stored under `language` in `language_summaries`,
+    /// and its top-level fields (functions, classes, imports, exports, comments,
+    /// complexity_hints, calls) are copied into the top-level `StructuralSummary`
+    /// for backward compatibility with single-language consumers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let summary = LanguageSummary {
+    ///     language: "rust".into(),
+    ///     functions: vec![],
+    ///     classes: vec![],
+    ///     imports: vec![],
+    ///     exports: vec![],
+    ///     comments: vec![],
+    ///     complexity_hints: vec![],
+    ///     calls: vec![],
+    ///     file_count: 1,
+    /// };
+    /// let res = StructuralSummary::single_language("rust".into(), summary.clone());
+    /// assert_eq!(res.language, "rust");
+    /// assert_eq!(res.language_summaries.get("rust").unwrap().file_count, 1);
+    /// ```
     pub fn single_language(language: String, summary: LanguageSummary) -> Self {
         let mut result = Self {
             language: language.clone(),
@@ -287,7 +311,24 @@ impl StructuralSummary {
         result
     }
 
-    /// 创建多语言模式的结构摘要
+    /// Creates a structural summary representing multiple languages.
+    ///
+    /// This constructs a `StructuralSummary` whose `language` field is set to
+    /// `"multi-language"` and whose `language_summaries` contains the provided
+    /// per-language `LanguageSummary` entries. To preserve backward compatibility,
+    /// the function also merges each language's functions, classes, imports,
+    /// exports, comments, complexity hints, and calls into the top-level fields.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    ///
+    /// // Build an empty map of language summaries (or populate with actual summaries)
+    /// let map: HashMap<String, crate::tree_sitter::LanguageSummary> = HashMap::new();
+    /// let summary = crate::tree_sitter::StructuralSummary::multi_language(map);
+    /// assert_eq!(summary.language, "multi-language");
+    /// ```
     pub fn multi_language(
         language_summaries: std::collections::HashMap<String, LanguageSummary>,
     ) -> Self {

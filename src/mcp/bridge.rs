@@ -75,7 +75,33 @@ impl GitAiMcpServer {
 //     }
 // }
 
-/// 启动 MCP 服务器
+/// Start the MCP (Micro-Client-Protocol) server over stdio and process MCP JSON-RPC messages.
+///
+/// This function initializes a shared `GitAiMcpManager` from the provided `Config` and
+/// enters a loop reading JSON lines from stdin. It understands a small set of MCP methods:
+/// - `initialize` — responds with protocol version, capabilities, and server info.
+/// - `tools/list` — returns the list of available tools and their input schemas.
+/// - `tools/call` — dispatches a tool call to the manager and returns the tool result or a mapped JSON-RPC error.
+/// Unknown methods produce a JSON-RPC `-32601` Method Not Found error. Responses are written to stdout as single-line JSON values.
+///
+/// The server logs human-readable status messages to stderr. It returns when stdin reaches EOF
+/// or when a read error occurs.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use tokio::runtime::Runtime;
+/// # fn main() {
+/// let rt = Runtime::new().unwrap();
+/// rt.block_on(async {
+///     // Construct a Config suitable for your environment.
+///     // Calling start_mcp_server will read from the process stdin/stdout,
+///     // so in normal use this runs as the main process handling MCP requests.
+///     let config = crate::mcp::Config::default();
+///     let _ = crate::mcp::start_mcp_server(config).await;
+/// });
+/// # }
+/// ```
 pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     use serde_json::{json, Value};
     use std::io::{self, Write};

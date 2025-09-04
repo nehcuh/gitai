@@ -96,7 +96,41 @@ pub struct ReviewConfig {
 }
 
 impl ReviewConfig {
-    #[allow(clippy::too_many_arguments)]
+    /// Build a ReviewConfig from raw CLI-like arguments.
+    ///
+    /// Parses `issue_id` as a comma-separated list, enables `security_scan` automatically if
+    /// `scan_tool` is provided, and sets `deviation_analysis` to true when any issue IDs are present.
+    ///
+    /// # Parameters
+    ///
+    /// - `issue_id`: Optional comma-separated issue IDs (e.g. `"ISSUE-1,ISSUE-2"`). When present this
+    ///   is split and trimmed into `issue_ids`.
+    /// - `space_id`: Optional numeric coding space (project) identifier; preferred source is the
+    ///   command line when provided.
+    ///
+    /// # Returns
+    ///
+    /// A configured `ReviewConfig` with fields populated from the provided arguments.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = ReviewConfig::from_args(
+    ///     Some("rust".to_string()), // language
+    ///     "json".to_string(),       // format
+    ///     None,                     // output
+    ///     true,                     // tree_sitter
+    ///     false,                    // security_scan
+    ///     Some("myscanner".to_string()), // scan_tool
+    ///     true,                     // block_on_critical
+    ///     Some("ISSUE-1,ISSUE-2".to_string()), // issue_id
+    ///     Some(42),                 // space_id
+    ///     false,                    // full
+    /// );
+    /// assert!(cfg.security_scan); // enabled because scan_tool was provided
+    /// assert_eq!(cfg.issue_ids.len(), 2);
+    /// assert!(cfg.deviation_analysis);
+    /// ```
     pub fn from_args(
         language: Option<String>,
         format: String,
