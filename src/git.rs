@@ -37,7 +37,6 @@ pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
 
 /// 获取所有变更（包括工作区、暂存区和未推送的提交）
 pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // 使用 --diff-filter 排除已删除的文件，这样会自然忽略 .gitignore 中的文件
     // Git 的 diff 命令会自动排除未跟踪且在 .gitignore 中的文件
     let staged_diff = run_git(&["diff".to_string(), "--cached".to_string()]).unwrap_or_default();
     let unstaged_diff = run_git(&["diff".to_string()]).unwrap_or_default();
@@ -65,15 +64,10 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
         all_diff.push_str(&unstaged_diff);
     }
 
+    // 如果没有任何变更，不要自动返回最后一次提交
+    // 让调用方决定如何处理这种情况
     if all_diff.trim().is_empty() {
-        // 如果没有变更，尝试获取最后一次提交的 diff
-        // 这样 MCP 调用时即使没有新的变更也可以分析最近的提交
-        match get_last_commit_diff() {
-            Ok(last_diff) if !last_diff.trim().is_empty() => {
-                return Ok(format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff));
-            }
-            _ => return Err("没有检测到任何变更".into()),
-        }
+        return Err("没有检测到任何变更".into());
     }
 
     Ok(all_diff)
@@ -221,6 +215,23 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
                     }
                 }
                 Err(e) => Err(format!("无法获取当前分支: {e}").into()),
+            }
+        }
+    }
+}
+
+/// 获取所有变更（包括最后一次提交）- 用于 MCP 调用
+pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // 首先尝试获取当前的变更
+    match get_all_diff() {
+        Ok(diff) => Ok(diff),
+        Err(_) => {
+            // 如果没有当前变更，尝试获取最后一次提交的 diff
+            match get_last_commit_diff() {
+                Ok(last_diff) if !last_diff.trim().is_empty() => {
+                    Ok(format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff))
+                }
+                _ => Err("没有检测到任何变更".into()),
             }
         }
     }

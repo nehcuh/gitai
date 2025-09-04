@@ -69,7 +69,13 @@ pub async fn execute_review_with_result(
     review_config: ReviewConfig,
 ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
     // 获取代码变更
-    let diff = crate::git::get_all_diff()?;
+    // 优先获取当前变更，如果没有则尝试获取最后一次提交
+    // 这样 MCP 调用时即使没有新变更也可以分析最近的提交
+    let diff = crate::git::get_all_diff().or_else(|_| {
+        // 如果没有当前变更，尝试获取最后一次提交
+        crate::git::get_last_commit_diff()
+            .map(|last_diff| format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff))
+    })?;
 
     // 如果没有变更，返回空结果
     if diff.trim().is_empty() {
