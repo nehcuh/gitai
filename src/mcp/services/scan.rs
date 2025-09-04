@@ -120,7 +120,7 @@ impl ScanService {
             "security" => "opengrep",
             other => other,
         };
-        
+
         let scan_result = match normalized_tool {
             "opengrep" => {
                 debug!("🛡️  使用 OpenGrep 扫描工具");

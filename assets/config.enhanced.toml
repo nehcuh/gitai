@@ -97,6 +97,22 @@ verbosity = 1  # Output verbosity (0-2)
 default_format = "json"
 max_files_per_analysis = 1000
 
+[devops]
+# DevOps integration (Coding.net example)
+platform = "coding"
+# For Coding external API, base_url should be the site root; the client will call
+# {base_url}/external/collaboration/api/project/{space_id}/issues/{issue_code}
+base_url = "https://coding.net"
+# Personal access token
+token = "your_devops_token"
+# Optional compatibility field for other platforms (e.g., "owner/repo")
+project = "your-team/your-project"
+# Coding space (project) ID
+space_id = 0
+# Networking
+timeout = 30
+retry_count = 3
+
 [logging]
 # Logging configuration
 level = "info"  # Log level: debug, info, warn, error

@@ -113,12 +113,14 @@ impl ScanConfig {
 pub struct DevOpsConfig {
     /// 平台类型 (coding, github, gitlab)
     pub platform: String,
-    /// API基础URL
+    /// API基础URL（例如： https://coding.net 或 https://your-org.coding.net）
     pub base_url: String,
     /// 认证令牌
     pub token: String,
-    /// 项目标识
+    /// 兼容字段：某些平台需要 "owner/repo" 或项目路径
     pub project: Option<String>,
+    /// Coding 平台的空间（项目）ID，用于 external/collaboration API
+    pub space_id: Option<u64>,
     /// 超时时间（秒）
     pub timeout: u64,
     /// 重试次数
@@ -291,15 +293,25 @@ impl McpReviewConfig {
             )
             .into());
         }
-        
+
         // 验证支持的语言列表
         if let Some(ref languages) = self.supported_languages {
-            let valid_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"];
+            let valid_languages = [
+                "rust",
+                "java",
+                "python",
+                "javascript",
+                "typescript",
+                "go",
+                "c",
+                "cpp",
+            ];
             for lang in languages {
                 if !valid_languages.contains(&lang.as_str()) {
                     return Err(format!(
                         "不支持的编程语言: {lang}，支持的语言: {valid_languages:?}"
-                    ).into());
+                    )
+                    .into());
                 }
             }
         }
@@ -377,33 +389,44 @@ impl McpAnalysisConfig {
         if self.verbosity > 2 {
             return Err("输出详细程度不能超过 2".into());
         }
-        
+
         // 验证输出格式
         let valid_formats = ["json", "text", "yaml"];
         if !valid_formats.contains(&self.default_format.as_str()) {
             return Err(format!(
                 "不支持的输出格式: {}，支持的格式: {:?}",
                 self.default_format, valid_formats
-            ).into());
+            )
+            .into());
         }
-        
+
         // 验证支持的语言列表
         if let Some(ref languages) = self.supported_languages {
-            let valid_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"];
+            let valid_languages = [
+                "rust",
+                "java",
+                "python",
+                "javascript",
+                "typescript",
+                "go",
+                "c",
+                "cpp",
+            ];
             for lang in languages {
                 if !valid_languages.contains(&lang.as_str()) {
                     return Err(format!(
                         "不支持的编程语言: {lang}，支持的语言: {valid_languages:?}"
-                    ).into());
+                    )
+                    .into());
                 }
             }
         }
-        
+
         // 验证最大文件数量
         if self.max_files_per_analysis == 0 {
             return Err("最大文件数量不能为 0".into());
         }
-        
+
         if self.max_files_per_analysis > 10000 {
             return Err("最大文件数量不能超过 10000".into());
         }
@@ -504,7 +527,7 @@ impl Default for Config {
                         default_tool: "opengrep".to_string(),
                         default_timeout: 300,
                     }),
-                    analysis: Some(McpAnalysisConfig { 
+                    analysis: Some(McpAnalysisConfig {
                         verbosity: 1,
                         default_format: "json".to_string(),
                         supported_languages: None, // 支持所有语言

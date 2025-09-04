@@ -59,6 +59,8 @@ fn parse_issue_ids(issue_id: Option<String>) -> Vec<String> {
 pub struct CommitConfig {
     pub message: Option<String>,
     pub issue_ids: Vec<String>,
+    /// Coding 空间（项目）ID，优先使用命令行传入，其次使用配置
+    pub space_id: Option<u64>,
     pub add_all: bool,
     pub review: bool,
     pub tree_sitter: bool,
@@ -69,6 +71,7 @@ impl CommitConfig {
     pub fn from_args(
         message: Option<String>,
         issue_id: Option<String>,
+        space_id: Option<u64>,
         add_all: bool,
         review: bool,
         tree_sitter: bool,
@@ -77,6 +80,7 @@ impl CommitConfig {
         Self {
             message,
             issue_ids: parse_issue_ids(issue_id),
+            space_id,
             add_all,
             review,
             tree_sitter,
@@ -128,7 +132,8 @@ pub async fn execute_commit_with_result(
         });
     }
 
-    let issues = get_issue_context(config, &commit_config.issue_ids).await?;
+    let issues =
+        get_issue_context(config, &commit_config.issue_ids, commit_config.space_id).await?;
     let commit_message = generate_commit_message(config, &diff, &issues, &commit_config).await?;
 
     let mut review_results = None;
@@ -178,17 +183,23 @@ fn get_changes() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
 async fn get_issue_context(
     config: &Config,
     issue_ids: &[String],
+    space_id: Option<u64>,
 ) -> Result<Vec<Issue>, Box<dyn std::error::Error + Send + Sync>> {
     let _ = config; // silence unused when devops feature is disabled
     if issue_ids.is_empty() {
         return Ok(Vec::new());
     }
 
+    // 避免在未启用 devops 特性时的未使用告警
+    let _ = space_id;
+
     #[cfg(feature = "devops")]
     {
         if let Some(ref devops_config) = config.devops {
             let client = crate::devops::DevOpsClient::new(devops_config.clone());
-            return client.get_issues(issue_ids).await;
+            return client
+                .get_issues_with_space(issue_ids, space_id.or(devops_config.space_id))
+                .await;
         }
     }
 
@@ -451,8 +462,9 @@ async fn perform_review_with_result(
         scan_tool: None,
         block_on_critical: false,
         issue_ids: issues.iter().map(|i| i.id.clone()).collect(),
+        space_id: config.devops.as_ref().and_then(|d| d.space_id),
         full: false,
-        deviation_analysis: true,
+        deviation_analysis: !issues.is_empty(),
     };
 
     // 执行评审 - 现在使用静态函数！

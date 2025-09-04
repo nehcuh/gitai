@@ -20,6 +20,7 @@ pub struct Issue {
     pub status: String,
     pub priority: Option<String>,
     pub url: String,
+    pub ai_context: Option<String>,
 }
 
 /// 统一操作上下文 - Linus式数据结构优先设计

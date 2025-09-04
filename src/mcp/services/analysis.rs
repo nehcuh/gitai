@@ -340,16 +340,20 @@ impl AnalysisService {
         verbosity: u32,
     ) -> AnalysisResult {
         let mut details = HashMap::new();
-        
+
         // 检查是否为多语言模式
         if summary.is_multi_language() {
             // 多语言模式
             details.insert("mode".to_string(), "multi-language".to_string());
-            details.insert("languages".to_string(), 
-                          summary.detected_languages().join(", "));
-            details.insert("language_count".to_string(), 
-                          summary.language_summaries.len().to_string());
-            
+            details.insert(
+                "languages".to_string(),
+                summary.detected_languages().join(", "),
+            );
+            details.insert(
+                "language_count".to_string(),
+                summary.language_summaries.len().to_string(),
+            );
+
             // 各语言统计
             for (lang, lang_summary) in &summary.language_summaries {
                 details.insert(
@@ -369,7 +373,7 @@ impl AnalysisService {
                     lang_summary.file_count.to_string(),
                 );
             }
-            
+
             // 高详细程度时包含结构信息
             if verbosity > 1 {
                 for (lang, lang_summary) in &summary.language_summaries {
@@ -428,15 +432,19 @@ impl AnalysisService {
         let total_lines = 100; // 简化计算
         let comment_lines = summary.comments.len();
         let complexity_score = summary.complexity_hints.len() as u32;
-        
+
         // 根据模式生成不同的消息
         let message = if summary.is_multi_language() {
             let lang_list = summary.detected_languages().join(", ");
-            format!("多语言代码分析完成：{} (共{}种语言)", lang_list, summary.language_summaries.len())
+            format!(
+                "多语言代码分析完成：{} (共{}种语言)",
+                lang_list,
+                summary.language_summaries.len()
+            )
         } else {
             format!("代码分析完成：{}", summary.language)
         };
-        
+
         let language_display = if summary.is_multi_language() {
             "multi-language".to_string()
         } else {
@@ -449,7 +457,11 @@ impl AnalysisService {
             language: language_display,
             summary: CodeSummary {
                 total_lines,
-                code_lines: if total_lines > comment_lines { total_lines - comment_lines } else { 0 },
+                code_lines: if total_lines > comment_lines {
+                    total_lines - comment_lines
+                } else {
+                    0
+                },
                 comment_lines,
                 blank_lines: 0,
                 complexity_score,

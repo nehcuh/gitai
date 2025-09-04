@@ -28,6 +28,7 @@ impl ReviewService {
                     scan_tool: None,
                     block_on_critical: false,
                     issue_ids: Vec::new(),
+                    space_id: None,
                     deviation_analysis: false,
                     full: false,
                 }
@@ -54,6 +55,7 @@ impl ReviewService {
             scan_tool: None,
             block_on_critical: false,
             issue_ids: Vec::new(),
+            space_id: None,
             deviation_analysis: false,
             full: false,
         }
@@ -100,22 +102,24 @@ impl ReviewService {
 
         // 转换为 MCP 使用的 ReviewResult 格式
         let mut details = review_result.details;
-        
+
         // 检查是否有 Tree-sitter 多语言分析结果
         if tree_sitter_enabled {
             // 检查 details 中是否有多语言相关信息
             if let Some(tree_sitter_flag) = details.get("tree_sitter") {
                 if tree_sitter_flag == "true" {
                     // 尝试推断是否为多语言项目
-                    let has_multiple_langs = details.keys()
+                    let has_multiple_langs = details
+                        .keys()
                         .any(|k| k.contains("_functions") || k.contains("_classes"))
                         && details.keys().filter(|k| k.ends_with("_functions")).count() > 1;
-                    
+
                     if has_multiple_langs {
                         details.insert("analysis_mode".to_string(), "multi-language".to_string());
-                        
+
                         // 提取语言列表
-                        let languages: Vec<String> = details.keys()
+                        let languages: Vec<String> = details
+                            .keys()
                             .filter_map(|k| {
                                 if k.ends_with("_functions") {
                                     Some(k.trim_end_matches("_functions").to_string())
@@ -124,10 +128,11 @@ impl ReviewService {
                                 }
                             })
                             .collect();
-                        
+
                         if !languages.is_empty() {
                             details.insert("detected_languages".to_string(), languages.join(", "));
-                            details.insert("language_count".to_string(), languages.len().to_string());
+                            details
+                                .insert("language_count".to_string(), languages.len().to_string());
                         }
                     } else {
                         details.insert("analysis_mode".to_string(), "single-language".to_string());
@@ -135,17 +140,18 @@ impl ReviewService {
                 }
             }
         }
-        
+
         // 增强消息以体现多语言分析
-        let enhanced_message = if details.get("analysis_mode") == Some(&"multi-language".to_string()) {
-            if let Some(langs) = details.get("detected_languages") {
-                format!("{} (多语言项目：{})", review_result.message, langs)
+        let enhanced_message =
+            if details.get("analysis_mode") == Some(&"multi-language".to_string()) {
+                if let Some(langs) = details.get("detected_languages") {
+                    format!("{} (多语言项目：{})", review_result.message, langs)
+                } else {
+                    format!("{} (多语言项目)", review_result.message)
+                }
             } else {
-                format!("{} (多语言项目)", review_result.message)
-            }
-        } else {
-            review_result.message
-        };
+                review_result.message
+            };
 
         Ok(ReviewResult {
             success: review_result.success,
