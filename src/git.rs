@@ -35,18 +35,52 @@ pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     run_git(&["diff".to_string(), "--cached".to_string()])
 }
 
-/// 获取所有变更（包括工作区、暂存区和未推送的提交）
+/// 获取所有变更（包括工作区、暂存区、未跟踪文件和未推送的提交）
 pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Git 的 diff 命令会自动排除未跟踪且在 .gitignore 中的文件
+    // Git 的 diff 命令不会包含未跟踪文件；我们将专门收集未跟踪（且未被 .gitignore 忽略）的文件
     let staged_diff = run_git(&["diff".to_string(), "--cached".to_string()]).unwrap_or_default();
     let unstaged_diff = run_git(&["diff".to_string()]).unwrap_or_default();
 
     // 检查未推送的提交
     let unpushed_diff = get_unpushed_diff().unwrap_or_default();
 
+    // 收集未跟踪文件并为其生成 diff
+    let mut untracked_section = String::new();
+    if let Ok(untracked) = get_untracked_files() {
+        if !untracked.is_empty() {
+            let mut combined = String::new();
+            for p in &untracked {
+                if let Ok((code, stdout, _stderr)) = run_git_capture(&[
+                    "diff".to_string(),
+                    "--no-index".to_string(),
+                    "--".to_string(),
+                    "/dev/null".to_string(),
+                    p.clone(),
+                ]) {
+                    // exit code 1 表示存在差异，这是预期情况
+                    if code.is_none() || code == Some(1) || code == Some(0) {
+                        if !stdout.trim().is_empty() {
+                            combined.push_str(&stdout);
+                            if !combined.ends_with('\n') {
+                                combined.push('\n');
+                            }
+                        }
+                    }
+                }
+            }
+            if !combined.trim().is_empty() {
+                untracked_section.push_str("## 未跟踪的新文件 (Untracked Files):\n");
+                untracked_section.push_str(&combined);
+                if !untracked_section.ends_with('\n') {
+                    untracked_section.push('\n');
+                }
+            }
+        }
+    }
+
     let mut all_diff = String::new();
 
-    // 优先级：未推送的提交 > 已暂存的变更 > 未暂存的变更
+    // 优先级：未推送的提交 > 已暂存的变更 > 未暂存的变更 > 未跟踪文件
     if !unpushed_diff.trim().is_empty() {
         all_diff.push_str("## 未推送的提交变更 (Unpushed Commits):\n");
         all_diff.push_str(&unpushed_diff);
@@ -62,6 +96,11 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
     if !unstaged_diff.trim().is_empty() {
         all_diff.push_str("## 未暂存的变更 (Unstaged Changes):\n");
         all_diff.push_str(&unstaged_diff);
+        if !all_diff.ends_with('\n') { all_diff.push('\n'); }
+    }
+
+    if !untracked_section.trim().is_empty() {
+        all_diff.push_str(&untracked_section);
     }
 
     // 如果没有任何变更，不要自动返回最后一次提交
@@ -280,6 +319,35 @@ pub fn get_tracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Se
     // git ls-files 只会列出被跟踪的文件，自动排除 .gitignore 中的文件
     let output = run_git(&["ls-files".to_string()])?;
     Ok(output.lines().map(|s| s.to_string()).collect())
+}
+
+/// 获取未跟踪文件（自动排除 .gitignore 中的文件）
+pub fn get_untracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let output = run_git(&[
+        "ls-files".to_string(),
+        "--others".to_string(),
+        "--exclude-standard".to_string(),
+    ])?;
+    let files: Vec<String> = output
+        .lines()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+    Ok(files)
+}
+
+/// 是否存在未跟踪变更（新增文件）
+pub fn has_untracked_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(!get_untracked_files()?.is_empty())
+}
+
+/// 是否存在任何提交
+pub fn has_any_commit() -> bool {
+    if let Ok((code, _out, _err)) = run_git_capture(&["rev-parse".to_string(), "--verify".to_string(), "HEAD".to_string()]) {
+        return code == Some(0);
+    }
+    false
 }
 
 /// 检查文件是否被 .gitignore 忽略

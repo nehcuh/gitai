@@ -141,24 +141,40 @@ pub async fn execute_review_with_result(
         });
     }
 
-    // 检查暂存状态
+    // 检查暂存状态与未跟踪文件、提交基线
     let has_unstaged = crate::git::has_unstaged_changes().unwrap_or(false);
     let has_staged = crate::git::has_staged_changes().unwrap_or(false);
+    let has_untracked = crate::git::has_untracked_changes().unwrap_or(false);
+    let has_commits = crate::git::has_any_commit();
 
-    if has_unstaged {
-        println!("💡 提示：检测到未暂存的代码变更");
-        println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
+    if has_unstaged || has_untracked {
+        if has_unstaged {
+            println!("💡 提示：检测到未暂存的代码变更");
+            println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
+        }
+        if has_untracked {
+            println!("💡 提示：检测到未跟踪的新文件");
+            println!("   使用 `git add <file>` 开始跟踪这些文件");
+        }
         if has_staged {
             println!("   当前已暂存的变更也会被评审");
         }
-        println!("   📝 GitAI将分析所有变更（已暂存 + 未暂存）");
+        if !has_commits {
+            println!("   ⚠️ 当前仓库还没有任何提交（建议尽快 `git commit -m \"<msg>\"`）");
+        }
+        println!("   📝 GitAI将分析所有变更（已暂存 + 未暂存 + 未跟踪）");
         println!();
     } else if has_staged {
         println!("✅ 已暂存的代码准备就绪");
         println!("   📝 GitAI将分析已暂存的变更");
     } else {
-        println!("🔍 检查未推送的提交...");
-        println!("   📝 GitAI将分析最近的提交变更");
+        if !has_commits {
+            println!("💡 提示：仓库没有任何提交。请先进行一次提交以建立基线：");
+            println!("   git add -A && git commit -m \"init\"");
+        } else {
+            println!("🔍 检查未推送的提交...");
+            println!("   📝 GitAI将分析最近的提交变更");
+        }
     }
 
     // 如果启用了 tree-sitter 分析
