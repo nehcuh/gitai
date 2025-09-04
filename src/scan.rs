@@ -416,6 +416,32 @@ pub fn is_opengrep_installed() -> bool {
         .unwrap_or(false)
 }
 
+/// Read and cache metadata for a rules directory.
+///
+/// Attempts to read a `.rules.meta` JSON file inside `rules_dir` and parse known fields
+/// (`sources`, `total_rules`, `updated_at`). If the metadata file is missing or malformed,
+/// returns a minimal `RulesInfo` containing only the directory path and empty/default fields.
+/// The resulting `RulesInfo` is stored in the global `RULES_CACHE` keyed by the directory path
+/// and returned.
+///
+/// Note: the function returns an `Option<RulesInfo>` for historical reasons; in current
+/// implementation it always returns `Some(RulesInfo)`.
+///
+/// # Examples
+///
+/// ```
+/// use std::fs;
+/// use std::path::Path;
+/// // create a temporary rules dir
+/// let dir = tempfile::tempdir().unwrap();
+/// let meta_path = dir.path().join(".rules.meta");
+/// fs::write(&meta_path, r#"{"sources":["official"], "total_rules": 42, "updated_at": "2025-01-01"}"#).unwrap();
+///
+/// let info = crate::rules::read_rules_info(dir.path()).unwrap();
+/// assert_eq!(info.dir, dir.path().display().to_string());
+/// assert_eq!(info.total_rules, 42);
+/// assert_eq!(info.sources, vec!["official".to_string()]);
+/// ```
 pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
     use std::fs;
 
@@ -474,7 +500,22 @@ pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
     rules_info
 }
 
-/// 安装OpenGrep（优先使用 cargo；若不可用则给出明确指引）
+/// Install OpenGrep, preferring `cargo install opengrep`; if `cargo` is not available or installation fails, returns a descriptive error with explicit next steps.
+///
+/// On success this may still recommend adding Cargo's bin directory to PATH if the binary is not immediately discoverable.
+///
+/// # Returns
+///
+/// Ok(()) if installation completes (or is detected) successfully; Err with a user-facing guidance message if `cargo` is unavailable or the `cargo install` command fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// # fn try_install() -> Result<(), Box<dyn std::error::Error>> {
+/// crate::install_opengrep()?;
+/// # Ok(())
+/// # }
+/// ```
 pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     println!("🔧 正在安装OpenGrep...");
 

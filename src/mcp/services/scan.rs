@@ -40,7 +40,49 @@ impl ScanService {
         })
     }
 
-    /// 执行扫描
+    /// Execute a security scan for the given path and return a normalized ScanResult.
+    ///
+    /// This method performs a full scan flow:
+    /// - Resolve the provided `params.path` with multiple strategies (absolute path accepted; for relative paths it tries: current working directory, `~/Projects`, `~/Projects/gitai` for `../...`-style paths; falls back to the original path).
+    /// - Validate that the resolved path exists; returns an error if it does not.
+    /// - Determine the scan tool and timeout (uses service defaults when `params.tool` or `params.timeout` are not provided).
+    /// - Normalize tool aliases: `"security"` is treated as `"opengrep"` for backward compatibility.
+    /// - Dispatch to the implementation for the supported tool(s). For `opengrep`:
+    ///   - Verifies OpenGrep is installed; returns an error recommending installation if missing.
+    ///   - Runs the scan with the same call shape as the CLI (does not auto-update rules in this context).
+    ///   - Converts the internal scan result into the public `ScanResult`.
+    ///
+    /// Errors returned (wrapped in a boxed `std::error::Error`) include, but are not limited to:
+    /// - Resolved scan path does not exist.
+    /// - Unsupported scan tool requested.
+    /// - Required tool not installed (e.g., OpenGrep).
+    /// - Underlying scan execution failures.
+    ///
+    /// Parameters:
+    /// - `params`: scan parameters (path required; optional `tool`, `lang`, `timeout`). If `tool` is omitted the service default is used; if `timeout` is omitted the service default timeout is used.
+    ///
+    /// Returns:
+    /// - `Ok(ScanResult)` when the scan completed and was converted to the public representation.
+    /// - `Err(...)` when path validation, tool availability, or the scan execution fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(service: &crate::ScanService) -> Result<(), Box<dyn std::error::Error>> {
+    /// use crate::mcp::services::scan::ScanParams;
+    ///
+    /// let params = ScanParams {
+    ///     path: "./my_project".to_string(),
+    ///     tool: None,           // use service default (e.g., "opengrep")
+    ///     lang: None,           // auto-detect languages
+    ///     timeout: Some(300),   // seconds
+    /// };
+    ///
+    /// let result = service.execute_scan(params).await?;
+    /// assert!(result.summary.execution_time >= 0.0);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn execute_scan(
         &self,
         params: ScanParams,
@@ -318,6 +360,24 @@ impl crate::mcp::GitAiMcpService for ScanService {
         "执行安全扫描，支持多语言自动检测与可选语言过滤"
     }
 
+    /// Returns the list of MCP tools this service exposes (currently a single `execute_scan` tool).
+    ///
+    /// The `execute_scan` tool's input schema requires:
+    /// - `path` (string, required): path to scan.
+    /// - `tool` (string, optional): scanning tool; allowed values are `"opengrep"` and the backward-compatible alias `"security"` (treated as `"opengrep"`).
+    /// - `lang` (string, optional): language filter; if omitted the service attempts multi-language auto-detection.
+    /// - `timeout` (integer, optional): timeout in seconds (default 300).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # // `config` and ScanService construction are assumed to exist in the surrounding crate.
+    /// let svc = ScanService::new(config).unwrap();
+    /// let tools = svc.tools();
+    /// assert_eq!(tools.len(), 1);
+    /// assert_eq!(tools[0].name.as_str(), "execute_scan");
+    /// ```
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
             name: "execute_scan".to_string().into(),

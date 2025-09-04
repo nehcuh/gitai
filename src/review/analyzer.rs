@@ -5,7 +5,50 @@ use crate::architectural_impact::{ArchitecturalImpact, GitStateAnalyzer};
 use crate::project_insights::InsightsGenerator;
 use crate::tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
 
-/// 执行结构分析
+/// Perform structural analysis on a git diff using Tree-sitter.
+///
+/// This function orchestrates language detection, code extraction, and delegation
+/// to either single-language or multi-language analysis backends:
+/// - If `language` is Some, attempts to map it to a supported language; returns
+///   `Ok(None)` if the name is unsupported.
+/// - If `language` is None, infers all languages present in `diff` by file
+///   extensions.
+/// - If no supported languages are detected or no analyzable code is extracted,
+///   returns `Ok(None)`.
+/// - For a single detected language it invokes `perform_single_language_analysis`.
+/// - For multiple detected languages it invokes `perform_multi_language_analysis`.
+///
+/// Parameters:
+/// - `diff`: a git-style unified diff string containing the changes to analyze.
+/// - `language`: optional user-specified language name (case-insensitive, e.g. "rust", "python").
+///   When provided, analysis is restricted to that language; when omitted, all
+///   detectable supported languages in the diff are analyzed.
+///
+/// Returns:
+/// - `Ok(Some(StructuralSummary))` on successful analysis with a populated summary.
+/// - `Ok(None)` when analysis cannot be performed (unsupported language,
+///   no supported languages present, or no analyzable code in the diff).
+/// - `Err(...)` for unexpected internal errors.
+///
+/// # Examples
+///
+/// ```
+/// # async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
+/// let diff = r#"
+/// diff --git a/src/main.rs b/src/main.rs
+/// index 0000000..1111111 100644
+/// --- a/src/main.rs
+/// +++ b/src/main.rs
+/// @@ -0,0 +1,4 @@
+/// +fn main() {
+/// +    println!("hello");
+/// +}
+/// "#;
+/// let summary = perform_structural_analysis(diff, &None).await?;
+/// assert!(summary.is_some());
+/// # Ok(())
+/// # }
+/// ```
 pub async fn perform_structural_analysis(
     diff: &str,
     language: &Option<String>,
@@ -57,7 +100,40 @@ pub async fn perform_structural_analysis(
     }
 }
 
-/// 执行多语言结构分析
+/// Performs structural analysis across multiple programming languages using Tree-sitter.
+///
+/// Given a map from language name -> concatenated source text and a list of detected
+/// languages, attempts to analyze each language's code with a Tree-sitter manager
+/// and aggregates per-language summaries into a multi-language `StructuralSummary`.
+///
+/// - language_code_map: keys are language names (as returned by `SupportedLanguage::name()`),
+///   values are the source content to analyze for that language. Empty or whitespace-only
+///   values are skipped.
+/// - detected_languages: the set of languages to attempt; languages not present in
+///   `language_code_map` are ignored.
+///
+/// Returns `Ok(Some(StructuralSummary))` when at least one language was successfully
+/// analyzed; returns `Ok(None)` if Tree-sitter initialization fails or if all analyses
+/// failed/produced no summaries. Errors are returned only for unexpected failures.
+///
+/// # Examples
+///
+/// ```
+/// # tokio_test::block_on(async {
+/// use std::collections::HashMap;
+/// // prepare minimal inputs
+/// let mut map = HashMap::new();
+/// map.insert("rust".to_string(), "fn hello() {}".to_string());
+/// let langs = vec![crate::SupportedLanguage::Rust];
+///
+/// let result = crate::review::perform_multi_language_analysis(map, langs).await;
+/// assert!(result.is_ok());
+/// if let Ok(Some(summary)) = result {
+///     // expect at least one language summary
+///     assert!(summary.language_summaries().len() >= 1);
+/// }
+/// # });
+/// ```
 async fn perform_multi_language_analysis(
     language_code_map: std::collections::HashMap<String, String>,
     detected_languages: Vec<SupportedLanguage>,
@@ -141,7 +217,40 @@ async fn perform_multi_language_analysis(
     Ok(Some(StructuralSummary::multi_language(language_summaries)))
 }
 
-/// 执行单语言结构分析（保持向后兼容）
+/// Perform structural analysis for a single language (backwards compatible).
+///
+/// This function looks up source code for `language` in `language_code_map` (keyed by the language's
+/// canonical name). If no entry exists for the requested language and `language_code_map` contains
+/// exactly one entry, that single entry is used as a fallback. If no code is found or the found
+/// code is empty, the function returns `Ok(None)`.
+///
+/// When code is available, the function attempts to initialize the Tree-sitter manager and run a
+/// structural analysis for the specified language. On successful analysis it generates architectural
+/// insights and returns `Ok(Some(StructuralSummary::single_language(...)))`. If Tree-sitter cannot
+/// be initialized or the analysis fails, the function returns `Ok(None)`.
+///
+/// Notes:
+/// - Side effects: prints brief progress/insight summaries to stdout and emits debug logs for
+///   Tree-sitter failures.
+/// - The function never panics; errors are propagated inside the `Result` wrapper only for
+///   unexpected failures in the control flow (the common failure modes return `Ok(None)`).
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// // Prepare a map from language name to source code.
+/// let mut map = HashMap::new();
+/// map.insert("rust".to_string(), "fn main() { println!(\"hi\"); }".to_string());
+///
+/// // `SupportedLanguage::Rust` is assumed to be available in scope.
+/// let summary = tokio::runtime::Runtime::new()
+///     .unwrap()
+///     .block_on(async { perform_single_language_analysis(map, SupportedLanguage::Rust).await })
+///     .unwrap();
+///
+/// // `summary` is `Ok(Some(...))` on success, `Ok(None)` when analysis wasn't possible.
+/// ```
 async fn perform_single_language_analysis(
     language_code_map: std::collections::HashMap<String, String>,
     language: SupportedLanguage,
@@ -220,7 +329,33 @@ async fn perform_single_language_analysis(
     }
 }
 
-/// 执行架构影响分析  
+/// Analyze a git diff and produce an architectural impact report.
+///
+/// This function runs an asynchronous analysis of the provided unified git diff text
+/// and returns an ArchitecturalImpact describing detected changes (functions, structs,
+/// interfaces) and affected modules.
+///
+/// Parameters:
+/// - `diff`: the unified git diff content to analyze (as produced by `git diff`).
+///
+/// Returns:
+/// - `Ok(Some(ArchitecturalImpact))` when analysis completes successfully.
+/// - `Ok(None)` when analysis fails or cannot be performed (analysis errors are logged).
+/// - `Err(...)` only if an unexpected internal error occurs.
+///
+/// # Examples
+///
+/// ```
+/// # use review_analyzer::analysis::perform_architectural_impact_analysis;
+/// # use review_analyzer::impact::ArchitecturalImpact;
+/// #[tokio::test]
+/// async fn example_architectural_impact() {
+///     let diff = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n+pub fn new_api() {}\n";
+///     let result = perform_architectural_impact_analysis(diff).await;
+///     // result is Ok(Some(...)) on successful analysis, Ok(None) on analysis failure
+///     assert!(matches!(result, Ok(_) ));
+/// }
+/// ```
 pub async fn perform_architectural_impact_analysis(
     diff: &str,
 ) -> Result<Option<ArchitecturalImpact>, Box<dyn std::error::Error + Send + Sync>> {
@@ -265,7 +400,42 @@ pub async fn perform_architectural_impact_analysis(
     }
 }
 
-/// 按语言分离 diff 中的代码变更
+/// Partition a git-style diff into per-language code snippets.
+///
+/// Scans a unified git diff and groups added and context code lines by the inferred
+/// programming language of the affected files. Language detection is performed
+/// from diff headers and `+++` file path lines using `detect_language_from_file_path`.
+///
+/// Behavior notes:
+/// - Only files whose language can be mapped to a supported language are included.
+/// - Added lines (those starting with `+`) and context lines (non-`-` lines that are not empty)
+///   are collected; removed lines (starting with `-`) are ignored.
+/// - Language -> code is returned as a HashMap<String, String> where the String value
+///   is the collected lines joined with `\n`.
+/// - Empty lines that occur while inside a file section are treated as the end of that file's section.
+///
+/// Returns a map from the language name (as returned by `SupportedLanguage::name()`) to the
+/// concatenated code fragment for that language.
+///
+/// # Examples
+///
+/// ```
+/// let diff = "\
+/// diff --git a/src/main.rs b/src/main.rs
+/// index 123..456 100644
+/// --- a/src/main.rs
+/// +++ b/src/main.rs
+/// @@ -1,3 +1,4 @@
+///  fn used() {}
+/// +fn added() {}
+/// ";
+///
+/// let map = extract_code_by_language(diff);
+/// assert!(map.contains_key("rust"));
+/// let rust_code = &map["rust"];
+/// assert!(rust_code.contains("fn used() {}"));
+/// assert!(rust_code.contains("fn added() {}"));
+/// ```
 fn extract_code_by_language(diff: &str) -> std::collections::HashMap<String, String> {
     use std::collections::HashMap;
     let mut language_code_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -333,7 +503,20 @@ fn extract_code_by_language(diff: &str) -> std::collections::HashMap<String, Str
         .collect()
 }
 
-/// 从 diff 行中提取文件路径
+/// Extracts the file path from a git diff header line (e.g., `diff --git a/path b/path`).
+///
+/// Returns the second path token (the `b/...` path) with a leading `b/` stripped if present.
+/// Returns `None` if the line does not start with `diff --git ` or does not contain a second path token.
+///
+/// # Examples
+///
+/// ```
+/// let line = "diff --git a/src/main.rs b/src/main.rs";
+/// assert_eq!(extract_file_path_from_diff_line(line), Some("src/main.rs".to_string()));
+///
+/// let no_diff = "index 83db48f..bf3e3aa 100644";
+/// assert_eq!(extract_file_path_from_diff_line(no_diff), None);
+/// ```
 fn extract_file_path_from_diff_line(line: &str) -> Option<String> {
     // diff --git a/src/main.rs b/src/main.rs
     if let Some(rest) = line.strip_prefix("diff --git ") {
@@ -357,7 +540,28 @@ fn detect_language_from_file_path(file_path: &str) -> Option<SupportedLanguage> 
     None
 }
 
-/// 检测支持的语言
+/// Map a user-provided language name or common alias to a SupportedLanguage.
+///
+/// Performs case-insensitive matching for common names and aliases. Recognized inputs include:
+/// - "java"
+/// - "rust"
+/// - "c"
+/// - "cpp", "c++"
+/// - "python"
+/// - "go"
+/// - "javascript", "js"
+/// - "typescript", "ts"
+///
+/// Returns `Some(SupportedLanguage)` when a match is found, or `None` for unrecognized names.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(detect_supported_language("Rust"), Some(SupportedLanguage::Rust));
+/// assert_eq!(detect_supported_language("c++"), Some(SupportedLanguage::Cpp));
+/// assert_eq!(detect_supported_language("TS"), Some(SupportedLanguage::TypeScript));
+/// assert_eq!(detect_supported_language("unknown"), None);
+/// ```
 fn detect_supported_language(language: &str) -> Option<SupportedLanguage> {
     match language.to_lowercase().as_str() {
         "java" => Some(SupportedLanguage::Java),
@@ -372,7 +576,29 @@ fn detect_supported_language(language: &str) -> Option<SupportedLanguage> {
     }
 }
 
-/// 从diff推断所有语言
+/// Infers all programming languages present in a git-style diff by file extension.
+///
+/// Scans diff header and file indicator lines (e.g., those starting with `diff --git`, `+++`, or `---`)
+/// and collects any supported languages detected from common file extensions. Returns a vector of
+/// unique `SupportedLanguage` entries (order is unspecified).
+///
+/// # Examples
+///
+/// ```
+/// let diff = r#"
+/// diff --git a/src/main.rs b/src/main.rs
+/// index 83db48f..f735c13 100644
+/// --- a/src/main.rs
+/// +++ b/src/main.rs
+/// diff --git a/app.py b/app.py
+/// --- a/app.py
+/// +++ b/app.py
+/// "#;
+///
+/// let langs = infer_all_languages_from_diff(diff);
+/// assert!(langs.contains(&SupportedLanguage::Rust));
+/// assert!(langs.contains(&SupportedLanguage::Python));
+/// ```
 fn infer_all_languages_from_diff(diff: &str) -> Vec<SupportedLanguage> {
     use std::collections::HashSet;
     let mut detected_languages = HashSet::new();

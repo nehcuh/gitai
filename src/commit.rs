@@ -68,6 +68,30 @@ pub struct CommitConfig {
 }
 
 impl CommitConfig {
+    /// Creates a CommitConfig from command-line-style arguments.
+    ///
+    /// The provided `issue_id` string (comma-separated) is parsed into `issue_ids`
+    /// (deduplicated and normalized) via `parse_issue_ids`. The returned struct
+    /// carries flags controlling the commit behavior (add all, review, tree-sitter
+    /// analysis, and dry run) and an optional `space_id` to scope issue lookup/review.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = CommitConfig::from_args(
+    ///     Some("Fix bug".to_string()),
+    ///     Some("#123,#124".to_string()),
+    ///     Some(42),
+    ///     true,
+    ///     false,
+    ///     true,
+    ///     false,
+    /// );
+    /// assert_eq!(cfg.message.unwrap(), "Fix bug");
+    /// assert!(cfg.issue_ids.contains(&"#123".to_string()));
+    /// assert_eq!(cfg.space_id, Some(42));
+    /// assert!(cfg.add_all);
+    /// ```
     pub fn from_args(
         message: Option<String>,
         issue_id: Option<String>,
@@ -115,7 +139,42 @@ pub async fn execute_commit(
     Ok(())
 }
 
-/// 执行提交流程并返回结构化结果  
+/// Execute the commit workflow and return a structured CommitResult.
+///
+/// This function:
+/// - Collects the current diff and returns early with a successful result if there are no changes.
+/// - Optionally fetches issue context (uses `commit_config.space_id` when resolving issues).
+/// - Generates a commit message (may use structural analysis or AI templates depending on features).
+/// - Optionally runs a code review when `commit_config.review` is true.
+/// - Performs Git operations (honors `dry_run` and `add_all`) and obtains the commit hash.
+/// - Counts changed lines and assembles a `CommitResult` containing metadata and optional review results.
+///
+/// Errors from any underlying operation (diff retrieval, issue lookup, message generation,
+/// review, git operations, or change counting) are propagated as `Err`.
+///
+/// # Examples
+///
+/// ```
+/// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// use crate::commit::{execute_commit_with_result, CommitConfig};
+/// use crate::config::Config;
+///
+/// let config = Config::default();
+/// let commit_cfg = CommitConfig {
+///     message: None,
+///     issue_ids: vec![],
+///     space_id: None,
+///     add_all: true,
+///     review: false,
+///     tree_sitter: false,
+///     dry_run: true,
+/// };
+///
+/// let result = execute_commit_with_result(&config, commit_cfg).await?;
+/// assert!(result.success);
+/// # Ok(())
+/// # }
+/// ```
 pub async fn execute_commit_with_result(
     config: &Config,
     commit_config: CommitConfig,
@@ -446,7 +505,55 @@ fn format_structure_info(summary: &StructuralSummary) -> String {
     info.join("\n")
 }
 
-/// 执行评审并返回结构化结果
+/// Run a code review and return structured review results.
+
+///
+
+/// Attempts to run a review via `crate::review::execute_review_with_result`. On success
+
+/// returns `Some(ReviewResults)` containing the total findings count, the count of
+
+/// critical findings (severity `Error`), and the textual report. If the review fails,
+
+/// it does not propagate an error and instead returns `Ok(None)` so the calling flow
+
+/// can continue without review results.
+
+///
+
+/// The `issues` slice is used to populate the review's `issue_ids` and to enable
+
+/// deviation analysis when non-empty. The `_diff` parameter is currently unused but
+
+/// kept for future use (e.g., passing diff context to the reviewer).
+
+///
+
+/// # Returns
+
+///
+
+/// `Ok(Some(ReviewResults))` when the review completes successfully.
+
+/// `Ok(None)` when the review step fails (errors are suppressed).
+
+///
+
+/// # Examples
+
+///
+
+/// ```
+
+/// // Example usage (illustrative):
+
+/// // let cfg = Config::default();
+
+/// // let issues = vec![Issue { id: "#123".to_string(), ..Default::default() }];
+
+/// // let result = futures::executor::block_on(perform_review_with_result(&cfg, "", &issues));
+
+/// ```
 async fn perform_review_with_result(
     config: &Config,
     _diff: &str,

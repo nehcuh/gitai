@@ -193,7 +193,37 @@ impl DependencyService {
             .await
     }
 
-    /// 分析目录中所有文件的依赖关系
+    /// 分析指定目录下的所有代码文件并生成合并后的依赖图输出。
+    ///
+    /// 查找目录中的受支持代码文件，逐文件构建单文件依赖图并合并成一个汇总的 DependencyGraph，
+    /// 最后根据 params 中的输出格式生成相应的结果（JSON、DOT、Mermaid、ASCII 等）。
+    ///
+    /// 要点：
+    /// - 如果目录中没有可分析的代码文件，会返回一个 success=false 的 DependencyResult，details 中包含目录信息和消息。
+    /// - 对超大型项目有保护：当待分析文件数超过 1500 时，必须在 params.confirm 中显式传入 true 才会继续；否则立即返回 Err，提示使用 summarize_graph 或传入 confirm=true。
+    /// - 单个文件分析失败会被记录并跳过（不会使整个分析失败）；仅无法继续（如未确认的大型项目）会导致 Err 返回。
+    ///
+    /// Parameters:
+    /// - dir_path: 要分析的目录路径。
+    /// - params: 影响分析与输出的参数；注意 params.confirm（Option<bool>）用于在文件数量非常多时显式确认是否继续导出完整图。
+    ///
+    /// Returns:
+    /// - Ok(DependencyResult) 在成功生成（或在无文件时返回带失败信息的 DependencyResult）时返回。
+    /// - Err(...) 当遇到不可继续的错误（例如未确认的大型项目或底层 I/O/解析错误）时返回。
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::path::Path;
+    /// # use tokio; // assuming async runtime
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // let service = DependencyService::new(config);
+    /// // let params = DependencyParams { path: None, format: Some("json".into()), confirm: Some(true), ..Default::default() };
+    /// // let result = service.analyze_directory_dependencies(Path::new("./src"), &params).await?;
+    /// // println!("success: {}", result.success);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn analyze_directory_dependencies(
         &self,
         dir_path: &Path,
@@ -961,6 +991,22 @@ impl GitAiMcpService for DependencyService {
         "生成和分析代码依赖图，支持多种编程语言和输出格式"
     }
 
+    /// Returns the list of tools exposed by this service (name, description and input schema).
+    ///
+    /// The returned vector contains tool descriptors used by the external MCP layer:
+    /// - "execute_dependency_graph": generates a code dependency graph (default ASCII). Note: producing a full graph for very large projects can create extremely large output; prefer `summarize_graph` or set `confirm` before exporting a full graph.
+    /// - "convert_graph_to_image": converts DOT or Mermaid graph content into an image file (PNG, SVG, PDF).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// // Constructing a full DependencyService is shown illustratively; adjust to actual constructor in your code.
+    /// let config = crate::config::Config::default();
+    /// let svc = crate::mcp::services::dependency::DependencyService::new(config);
+    /// let tools = svc.tools();
+    /// assert!(tools.iter().any(|t| t.name == "execute_dependency_graph"));
+    /// assert!(tools.iter().any(|t| t.name == "convert_graph_to_image"));
+    /// ```
     fn tools(&self) -> Vec<Tool> {
         let schema = std::sync::Arc::new(
             serde_json::json!({
@@ -1035,6 +1081,25 @@ impl GitAiMcpService for DependencyService {
         ]
     }
 
+    /// Dispatches a tool call to the dependency service, parsing JSON arguments and returning the tool's JSON result.
+    ///
+    /// Supported tool names:
+    /// - `"execute_dependency_graph"`: expects arguments deserializable to `DependencyParams`, invokes `execute_dependency_graph` and returns its `DependencyResult` as JSON.
+    /// - `"convert_graph_to_image"`: expects arguments deserializable to `ConvertGraphParams`, invokes `convert_graph_to_image` and returns its `ConvertGraphResult` as JSON.
+    ///
+    /// Returns an error if argument parsing/serialization fails, the invoked operation fails, or if an unknown tool name is provided.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # use futures::executor::block_on;
+    /// # // Assume `svc` is an instance of DependencyService already constructed.
+    /// # let svc = /* DependencyService::new(config) */ panic!();
+    /// let args = json!({ "path": "src", "format": "ascii" });
+    /// // call is async; run it with a runtime
+    /// let _res = block_on(svc.handle_tool_call("execute_dependency_graph", args));
+    /// ```
     async fn handle_tool_call(
         &self,
         tool_name: &str,

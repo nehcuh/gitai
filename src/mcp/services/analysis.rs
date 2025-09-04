@@ -334,6 +334,26 @@ impl AnalysisService {
             .ok_or_else(|| format!("不支持的文件扩展名: {}", extension).into())
     }
 
+    /// Convert a Tree-sitter structural summary into an AnalysisResult.
+    ///
+    /// This builds a high-level AnalysisResult containing a CodeSummary, aggregated
+    /// CodeStructures (imports preserved; functions/classes not expanded), CodeMetrics,
+    /// and a details map that encodes either per-language aggregates (multi-language mode)
+    /// or single-language counters and optional detailed JSON dumps when `verbosity > 1`.
+    ///
+    /// Parameters:
+    /// - `summary`: a `tree_sitter::StructuralSummary` produced by the parser; its
+    ///   `is_multi_language()` and contained `language_summaries` drive the shape of `details`.
+    /// - `verbosity`: output detail level; when greater than 1 the function includes
+    ///   JSON-serialized function/class details per language (or for the single language).
+    ///
+    /// Return:
+    /// - An `AnalysisResult` with `success = true`, a human-readable `message`,
+    ///   `language` set to `"multi-language"` or the single language identifier,
+    ///   a coarse `CodeSummary` (total_lines fixed to 100 in this implementation),
+    ///   an empty `structures.functions` / `structures.classes` (TODO: convert to
+    ///   FunctionInfo/ClassInfo), `structures.imports` copied from `summary.imports`,
+    ///   computed `CodeMetrics`, and a `details` map with counts and optional JSON detail entries.
     fn convert_analysis_result(
         &self,
         summary: tree_sitter::StructuralSummary,
@@ -501,6 +521,22 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
         "执行多语言代码结构分析，支持 8 种编程语言，提供详细的代码度量和结构信息"
     }
 
+    /// Returns the list of Tool descriptors exposed by this service.
+    ///
+    /// The returned vector contains the service's public tool definitions used by the MCP host:
+    /// - "execute_analysis": analyze a file or directory (single- or multi-language) and produce structural and metric results.
+    /// - "query_call_chain": query upstream/downstream function call chains with depth and path limits.
+    /// - "summarize_graph": produce a graph summary with optional community compression and budgeted trimming.
+    ///
+    /// Each Tool includes a JSON input schema describing required and optional parameters (e.g., `path`, `language`, `verbosity`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Given an `AnalysisService` instance `svc`, retrieve the available tools:
+    /// let tools = svc.tools();
+    /// assert!(tools.iter().any(|t| t.name == "execute_analysis"));
+    /// ```
     fn tools(&self) -> Vec<Tool> {
         vec![
             Tool {
@@ -570,6 +606,36 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
         ]
     }
 
+    /// Handle a tool call by name, dispatching to one of the AnalysisService tools and returning a JSON result.
+    ///
+    /// Supported tool names and expected `arguments` (serde_json::Value):
+    /// - "execute_analysis": accepts the AnalysisParams JSON (keys: `path` required, optional `language`, optional `verbosity`). If `verbosity` is omitted it defaults to the service's configured verbosity. Returns the serialized AnalysisResult.
+    /// - "query_call_chain": keys: `start` (required string), optional `path` (string, default "."), `end` (string), `direction` (string, "downstream"|"upstream", default "downstream"), `max_depth` (integer, default 8), `max_paths` (integer, default 20). Returns { "chains": ..., "message": "ok" } on success. Missing `start` yields an invalid-parameters error.
+    /// - "summarize_graph": keys include `path` (string, default "."), `radius` (int, default 1), `top_k` (int, default 200), `seeds_from_diff` (bool, default false), `format` ("json" or other, default "json"), `budget_tokens`, `community`, `comm_alg`, `max_communities`, `max_nodes_per_community`, `with_paths`, `path_samples`, `path_max_hops`. Returns either parsed JSON (when `format == "json"` and parsing succeeds) or an object containing the raw summary string and format.
+    ///
+    /// Returns a serde_json::Value on success or an Mcp error result when input parsing, execution, or serialization fails. Unknown tool names produce an invalid-parameters error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use serde_json::json;
+    /// # async fn run_example(service: &crate::analysis::AnalysisService) -> Result<(), Box<dyn std::error::Error>> {
+    /// // execute_analysis
+    /// let args = json!({"path": "./src", "verbosity": 1});
+    /// let res = service.handle_tool_call("execute_analysis", args).await?;
+    /// println!("{}", res);
+    ///
+    /// // query_call_chain
+    /// let args = json!({"start": "crate::foo::bar"});
+    /// let res = service.handle_tool_call("query_call_chain", args).await?;
+    /// assert!(res.get("chains").is_some());
+    ///
+    /// // summarize_graph (JSON)
+    /// let args = json!({"path": ".", "format": "json"});
+    /// let res = service.handle_tool_call("summarize_graph", args).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn handle_tool_call(
         &self,
         name: &str,

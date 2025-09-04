@@ -63,7 +63,55 @@ pub async fn execute_review(
     Ok(())
 }
 
-/// 执行评审流程并返回结构化结果
+/// Execute a full code review workflow and return a structured ReviewResult.
+///
+/// This asynchronous function performs end-to-end review steps for the current repository:
+/// - obtains the change diff from Git and returns early if there are no changes;
+/// - uses a cache key derived from the diff and review configuration to return cached results when available;
+/// - optionally runs Tree-sitter structural analysis (controlled by `review_config.tree_sitter`);
+/// - runs architectural impact analysis and, when `review_config.full` or `review_config.deviation_analysis` is set,
+///   builds a global dependency graph, computes PageRank/centrality, maps changes to the graph and produces dependency insights;
+/// - optionally performs a security scan when the `security` feature is enabled and `review_config.security_scan` is true;
+/// - injects DevOps Issue context into the AI prompt when the `devops` feature is enabled and issue context or deviation analysis is relevant;
+/// - calls the AI service (when compiled with the `ai` feature) or falls back to a heuristic summary, then consolidates findings, details and a numeric score;
+/// - applies score adjustments for security findings and dependency-impact penalties, persists the result to cache, and returns the assembled ReviewResult.
+///
+/// Parameters:
+/// - `config`: runtime configuration (contains clients and feature-specific settings such as DevOps configuration).
+/// - `review_config`: per-review options that control analysis modes (e.g. `tree_sitter`, `full`, `deviation_analysis`, `security_scan`, `issue_ids`, `space_id`, and `language`).
+///
+/// Returns:
+/// - `Ok(ReviewResult)` on success with populated fields: `summary` contains the AI (or fallback) response, `details` aggregates analysis metadata, `findings` contains discovered issues, and `score` is the computed score.
+/// - Propagates errors from underlying operations (git, analysis, cache, AI, security scan) via the returned `Box<dyn std::error::Error + Send + Sync>`.
+///
+/// Notes:
+/// - The function prints progress and warnings to stdout/stderr for user visibility.
+/// - Caching behavior: a cached result returns a summarized ReviewResult with a default score of 85.
+/// - Scoring: the implementation first attempts to extract an explicit score from the AI response and applies penalties for high/critical security findings and dependency-critical impacts.
+///
+/// # Examples
+///
+/// ```
+/// # async fn run_example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// use crate::config::Config;
+/// use crate::types::ReviewConfig;
+///
+/// let config = Config::default(); // construct appropriate runtime configuration
+/// let review_cfg = ReviewConfig {
+///     tree_sitter: true,
+///     full: false,
+///     deviation_analysis: false,
+///     security_scan: false,
+///     issue_ids: Vec::new(),
+///     space_id: None,
+///     language: "rust".to_string(),
+///     ..Default::default()
+/// };
+///
+/// let result = crate::review::executor::execute_review_with_result(&config, review_cfg).await?;
+/// assert!(result.success);
+/// # Ok(()) }
+/// ```
 pub async fn execute_review_with_result(
     config: &Config,
     review_config: ReviewConfig,

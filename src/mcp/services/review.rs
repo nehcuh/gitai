@@ -15,7 +15,21 @@ pub struct ReviewService {
 }
 
 impl ReviewService {
-    /// 创建新的 Review 服务
+    /// Create a new ReviewService from the given configuration.
+    ///
+    /// This initializes the service's default review configuration using values found
+    /// under `config.mcp.services.review` when available; otherwise it falls back to
+    /// the built-in defaults returned by `Self::default_review_config()`. The
+    /// returned `ReviewService` contains the original `Config` and the resolved
+    /// default review configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Construct a Config (using your project's config builder/loader) and then:
+    /// // let config = Config::load(...);
+    /// // let svc = ReviewService::new(config).unwrap();
+    /// ```
     pub fn new(config: Config) -> Result<Self, Box<dyn std::error::Error>> {
         let default_config = if let Some(mcp_config) = &config.mcp {
             if let Some(review_config) = &mcp_config.services.review {
@@ -45,6 +59,24 @@ impl ReviewService {
         })
     }
 
+    /// Create a default ReviewConfig with safe defaults for MCP review execution.
+    ///
+    /// The returned `review::ReviewConfig` has conservative defaults:
+    /// - `language` and `output` unset (`None`)
+    /// - `format` set to `"text"`
+    /// - `tree_sitter`, `security_scan`, `block_on_critical`, `deviation_analysis`, and `full` set to `false`
+    /// - `scan_tool` and `space_id` unset (`None`)
+    /// - `issue_ids` initialized empty
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = default_review_config();
+    /// assert_eq!(cfg.format, "text");
+    /// assert!(cfg.language.is_none());
+    /// assert!(!cfg.tree_sitter);
+    /// assert!(cfg.issue_ids.is_empty());
+    /// ```
     fn default_review_config() -> review::ReviewConfig {
         review::ReviewConfig {
             language: None,
@@ -61,7 +93,41 @@ impl ReviewService {
         }
     }
 
-    /// 执行代码评审
+    /// Execute a code review using the service's default configuration, applying any overrides from `params`.
+    ///
+    /// The method clones the service's default review configuration, applies optional overrides from
+    /// `params` (tree-sitter, security scan, issue IDs, scan tool, deviation analysis, format), and
+    /// invokes the internal review engine. If tree-sitter analysis is enabled and the returned details
+    /// indicate tree-sitter results, the function attempts to detect multi-language projects by looking
+    /// for keys ending with `_functions` or `_classes`. When multiple languages are detected, the
+    /// returned `details` will include:
+    /// - `analysis_mode = "multi-language"`
+    /// - `detected_languages` (comma-separated names)
+    /// - `language_count`
+    ///
+    /// The public `ReviewResult.message` is enhanced to append detected multi-language info when present.
+    /// Findings from the internal result are mapped into the public `Finding` type and severities are
+    /// converted to the service's `Severity`.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the MCP `ReviewResult` on success or an error if the internal review call fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use crate::{ReviewService, ReviewParams};
+    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// let svc = ReviewService::new(Default::default()).await?; // construct service appropriately
+    /// let params = ReviewParams {
+    ///     tree_sitter: Some(true),
+    ///     ..Default::default()
+    /// };
+    /// let result = svc.execute_review(params).await?;
+    /// assert!(result.message.len() > 0);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn execute_review(
         &self,
         params: ReviewParams,

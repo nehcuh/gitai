@@ -69,6 +69,18 @@ fn get_cache_dir() -> Result<PathBuf> {
     Ok(cache_dir)
 }
 
+/// Async CLI entrypoint for the gitai application.
+///
+/// Initializes logging, parses CLI arguments, loads configuration (unless handling `init`),
+/// and dispatches the selected subcommand to the corresponding handler. Returns an error if
+/// configuration loading fails or if a requested feature-gated command is not available.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Run the compiled binary from the shell:
+/// // $ gitai review --help
+/// ```
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger();
@@ -379,6 +391,37 @@ async fn handle_graph_summary(
 }
 
 // 扫描相关处理函数
+/// Run a security scan on a path using the selected tool (opengrep/security/auto).
+///
+/// Performs these behaviors:
+/// - Treats the tool name "security" as an alias for "opengrep" for backward compatibility.
+/// - If the selected tool is `opengrep` or `auto` and OpenGrep is missing, will auto-install when `_auto_install` is true; otherwise returns an error.
+/// - Optionally updates scan rules when `update_rules` is true (only if the `update-notifier` feature is enabled).
+/// - Executes the scan and, unless `no_history` or `benchmark` is set, saves a JSON snapshot into the cache's `scan_history` directory.
+/// - Supports JSON output when `_format == "json"` (writes to `output` if provided) or a human-readable summary otherwise.
+///
+/// Parameters with non-obvious behavior:
+/// - update_rules: when true, attempts to refresh scan rules (requires `update-notifier` feature).
+/// - output: optional filesystem path to write JSON output when `_format == "json"`.
+/// - no_history: when true, the scan is not recorded to scan history.
+/// - benchmark: when true, suppresses history recording and may omit version details in progress output.
+/// - lang, timeout: forwarded to the underlying scanner to control language-specific scanning and timeout.
+///
+/// # Errors
+/// Returns an error if:
+/// - A required tool is not installed and automatic installation is not enabled.
+/// - The selected tool is unsupported.
+/// - IO or serialization operations fail while writing output or history.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Run a JSON scan, auto-installing OpenGrep if missing, and write results to ./out.json
+/// let cfg = /* load or construct config::Config */ todo!();
+/// tokio::spawn(async move {
+///     handle_scan(&cfg, std::path::Path::new("."), "auto", false, false, true, "json", Some(std::path::PathBuf::from("out.json")), false, true, None, false, Some(60), false).await.unwrap();
+/// });
+/// ```
 #[cfg(feature = "security")]
 async fn handle_scan(
     config: &config::Config,
@@ -635,6 +678,37 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
     Ok(())
 }
 
+/// Manage prompt templates (init, list, show, update) stored under the user's
+/// config prompts directory (~/.config/gitai/prompts).
+///
+/// - Init: creates the prompts directory and writes default templates (`commit.md`,
+///   `review.md`) if they do not already exist.
+/// - List: lists available `.md` templates in the prompts directory (prints a
+///   friendly list). If the directory does not exist, instructs to run `gitai prompts init`.
+/// - Show { name, .. }: prints the contents of the named template (`{name}.md`) if present.
+/// - Update: currently not implemented (prints a message).
+///
+/// The `config` parameter is accepted for API/consistency but is not used by this function.
+/// Returns Ok(()) on success; I/O errors from filesystem operations are propagated via the Result.
+///
+/// # Examples
+///
+/// ```no_run
+/// use gitai::args::PromptAction;
+/// // assume `cfg` is a loaded config::Config
+/// # async fn run_example(cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
+/// tokio::runtime::Runtime::new()?.block_on(async {
+///     // Initialize prompts directory and default templates
+///     handle_prompts_action(cfg, &PromptAction::Init).await?;
+///
+///     // List available templates
+///     handle_prompts_action(cfg, &PromptAction::List).await?;
+///
+///     // Show a specific template named "commit"
+///     handle_prompts_action(cfg, &PromptAction::Show { name: "commit".into(), language: None }).await?;
+///     Ok::<(), Box<dyn std::error::Error>>(())
+/// }) }
+/// ```
 async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) -> Result<()> {
     match action {
         PromptAction::Init => {
@@ -957,7 +1031,40 @@ async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Res
     Ok(())
 }
 
-#[cfg(feature = "metrics")]
+/// Handle the "metrics" CLI subcommands (record, analyze, report, list, compare, clean, export).
+///
+/// This async function dispatches the given MetricsAction to perform quality-tracking operations:
+/// - Record: optionally checks git status, collects code files, analyzes structure with Tree-sitter,
+///   generates insights, and records a snapshot (may write to persistent storage).
+/// - Analyze: computes trend analysis across snapshots and outputs JSON, Markdown/HTML, or plain text;
+///   result may be written to a file if an output path is provided.
+/// - Report: generates a quality report (HTML or plain) and may write it to a file.
+/// - List: lists recent snapshots in JSON or a formatted table.
+/// - Compare: compares two snapshots (by "latest", index, or commit prefix) and prints differences.
+/// - Clean: removes old snapshots older than a specified number of days (requires confirmation).
+/// - Export: exports snapshots to CSV or JSON and writes to the provided output path.
+///
+/// Side effects and errors:
+/// - May invoke `git` to read repository status and commit metadata.
+/// - Reads source files from disk and uses Tree-sitter to analyze structure.
+/// - May read and write snapshot, report, and export files; I/O failures and analysis errors are
+///   propagated via the returned `Result`.
+/// - Returns early without recording on Record if no code changes are detected unless `--force` is used.
+///
+/// Note: this function is compiled only when the `metrics` feature is enabled.
+///
+/// # Examples
+///
+/// ```no_run
+/// use gitai::args::MetricsAction;
+/// # async fn _example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Call from an async context (e.g., tokio). `_config` is the loaded application config.
+/// let _config = gitai::config::Config::default();
+/// // Example: list snapshots (non-running example; requires the metrics feature and runtime)
+/// let action = MetricsAction::List { limit: 10, branch: None, format: "table".into() };
+/// // await handle_metrics(&_config, &action).await?;
+/// # Ok(()) }
+/// ```
 async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Result<()> {
     use gitai::metrics::QualityTracker;
     use gitai::project_insights::InsightsGenerator;
