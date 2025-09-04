@@ -71,11 +71,45 @@ pub async fn execute_review_with_result(
     // 获取代码变更
     // 优先获取当前变更，如果没有则尝试获取最后一次提交
     // 这样 MCP 调用时即使没有新变更也可以分析最近的提交
-    let diff = crate::git::get_all_diff().or_else(|_| {
-        // 如果没有当前变更，尝试获取最后一次提交
-        crate::git::get_last_commit_diff()
-            .map(|last_diff| format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff))
-    })?;
+    let diff = match crate::git::get_all_diff() {
+        Ok(d) => d,
+        Err(_) => {
+            // 如果没有当前变更，尝试获取最后一次提交
+            match crate::git::get_last_commit_diff() {
+                Ok(last_diff) if !last_diff.trim().is_empty() => {
+                    format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff)
+                }
+                Ok(_) => {
+                    // 最后一次提交为空
+                    return Ok(ReviewResult {
+                        success: true,
+                        message: "没有检测到代码变更".to_string(),
+                        summary: "没有需要评审的代码变更".to_string(),
+                        details: std::collections::HashMap::new(),
+                        findings: Vec::new(),
+                        score: Some(100),
+                        recommendations: Vec::new(),
+                    });
+                }
+                Err(e) => {
+                    // 无法获取任何 diff，可能是新仓库或空仓库
+                    log::warn!("无法获取代码变更: {}", e);
+                    return Ok(ReviewResult {
+                        success: true,
+                        message: "无法获取代码变更，可能是新仓库或空仓库".to_string(),
+                        summary: "没有可用的代码变更进行评审".to_string(),
+                        details: std::collections::HashMap::new(),
+                        findings: Vec::new(),
+                        score: None,
+                        recommendations: vec![
+                            "请确保仓库中至少有一个提交".to_string(),
+                            "或者添加一些代码变更后再进行评审".to_string(),
+                        ],
+                    });
+                }
+            }
+        }
+    };
 
     // 如果没有变更，返回空结果
     if diff.trim().is_empty() {

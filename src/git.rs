@@ -169,12 +169,32 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
 
 /// 获取最后一次提交的 diff
 pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // 获取最后一次提交的 diff
-    run_git(&[
-        "diff".to_string(),
-        "HEAD~1".to_string(),
+    // 先检查是否有多个提交
+    let log_output = run_git(&[
+        "rev-list".to_string(),
+        "--count".to_string(),
         "HEAD".to_string(),
-    ])
+    ])?;
+    
+    let commit_count: usize = log_output.trim().parse().unwrap_or(0);
+    
+    if commit_count == 0 {
+        return Err("仓库中没有任何提交".into());
+    } else if commit_count == 1 {
+        // 只有一个提交，显示第一次提交的内容
+        run_git(&[
+            "show".to_string(),
+            "HEAD".to_string(),
+            "--format=format:".to_string(),
+        ])
+    } else {
+        // 有多个提交，显示最后一次提交与前一次的差异
+        run_git(&[
+            "diff".to_string(),
+            "HEAD~1".to_string(),
+            "HEAD".to_string(),
+        ])
+    }
 }
 
 /// 获取当前分支的上游分支
