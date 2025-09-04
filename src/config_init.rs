@@ -243,14 +243,12 @@ impl ConfigInitializer {
         if !prompts_dir.exists() {
             fs::create_dir_all(&prompts_dir)?;
 
-            // Copy default prompts from assets
+            // Copy default prompts from assets (only commit.md and review.md are used)
             let commit_prompt = include_str!("../assets/prompts/commit.md");
             let review_prompt = include_str!("../assets/prompts/review.md");
-            let deviation_prompt = include_str!("../assets/prompts/deviation.md");
 
             fs::write(prompts_dir.join("commit.md"), commit_prompt)?;
             fs::write(prompts_dir.join("review.md"), review_prompt)?;
-            fs::write(prompts_dir.join("deviation.md"), deviation_prompt)?;
 
             info!("Initialized default prompt templates");
         }

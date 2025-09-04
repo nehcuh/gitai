@@ -35,6 +35,9 @@ pub struct DependencyParams {
     pub include_imports: Option<bool>,
     /// 详细程度 (0-3)
     pub verbosity: Option<u32>,
+    /// 确认生成完整依赖图（大项目会非常大）。
+    /// 未确认时将建议优先使用 summarize_graph。
+    pub confirm: Option<bool>,
 }
 
 /// 图格式转换参数
@@ -200,6 +203,18 @@ impl DependencyService {
 
         // 查找所有代码文件
         let code_files = self.find_code_files(dir_path)?;
+
+        // 对超大项目做保护，提示优先使用 summarize_graph
+        const LARGE_FILE_THRESHOLD: usize = 1500;
+        let is_large = code_files.len() > LARGE_FILE_THRESHOLD;
+        let confirmed = params.confirm.unwrap_or(false);
+        if is_large && !confirmed {
+            warn!(
+                "⚠️ 检测到大型项目 (files={})，建议优先使用 summarize_graph",
+                code_files.len()
+            );
+            return Err("大型项目依赖图可能非常庞大。建议先使用 summarize_graph 获取摘要；若确需导出完整图，请在调用时传入 confirm=true".into());
+        }
 
         if code_files.is_empty() {
             warn!("⚠️ 目录中未找到可分析的代码文件");
@@ -957,7 +972,8 @@ impl GitAiMcpService for DependencyService {
                     "depth": {"type": "integer", "description": "分析深度（可选，默认为无限制）"},
                     "include_calls": {"type": "boolean", "description": "是否包含函数调用关系（默认为 true）"},
                     "include_imports": {"type": "boolean", "description": "是否包含导入关系（默认为 true）"},
-                    "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "详细程度，0-3（可选，默认为 1）"}
+                    "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "详细程度，0-3（可选，默认为 1）"},
+                    "confirm": {"type": "boolean", "description": "大型项目下确认生成完整依赖图（建议先使用 summarize_graph）"}
                 },
                 "required": ["path"]
             })
@@ -1004,18 +1020,10 @@ impl GitAiMcpService for DependencyService {
         vec![
             Tool {
                 name: "execute_dependency_graph".to_string().into(),
-                description: "生成代码依赖图（默认 ASCII），支持 JSON、DOT、SVG、Mermaid 和 ASCII 文本格式输出"
+                description: "生成代码依赖图（默认 ASCII）。注意：在大型项目上输出可能非常庞大，建议优先使用 summarize_graph，仅在必要时并经确认后再导出完整图。"
                     .to_string()
                     .into(),
                 input_schema: schema.clone(),
-            },
-            Tool {
-                // 别名：兼容客户端使用 export_dependency_graph 的习惯
-                name: "export_dependency_graph".to_string().into(),
-                description: "导出依赖图（默认 ASCII），支持 JSON、DOT、SVG、Mermaid 和 ASCII 文本格式输出"
-                    .to_string()
-                    .into(),
-                input_schema: schema,
             },
             Tool {
                 name: "convert_graph_to_image".to_string().into(),
@@ -1035,7 +1043,7 @@ impl GitAiMcpService for DependencyService {
         debug!("🔧 Dependency 服务处理工具调用: {}", tool_name);
 
         match tool_name {
-            "execute_dependency_graph" | "export_dependency_graph" => {
+            "execute_dependency_graph" => {
                 let params: DependencyParams =
                     serde_json::from_value(arguments).map_err(|e| parse_error("dependency", e))?;
 

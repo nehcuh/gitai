@@ -86,3 +86,18 @@ default_format = "json"
 # supported_languages = ["rust", "java", "python", "javascript", "typescript", "go", "c", "cpp"]
 # 多语言项目的最大文件数量
 max_files_per_analysis = 1000
+
+[devops]
+# DevOps 平台配置（Coding.net 示例）
+platform = "coding"
+# 客户端会调用：{base_url}/external/collaboration/api/project/{space_id}/issues/{issue_code}
+base_url = "https://coding.net"
+# 认证令牌
+token = "your_devops_token"
+# 兼容字段（其他平台可能使用）：例如 GitHub 的 "owner/repo"
+project = "your-team/your-project"
+# Coding 空间（项目）ID
+space_id = 0
+# 网络设置
+timeout = 30
+retry_count = 3

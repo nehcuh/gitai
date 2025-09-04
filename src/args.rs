@@ -52,12 +52,12 @@ pub enum Command {
         /// 阻止严重问题
         #[arg(long)]
         block_on_critical: bool,
-        /// 关联的Issue ID
+        /// 关联的Issue ID（逗号分隔，Coding 为 issue 编号 code，例如 5；可带 # 前缀）
         #[arg(long)]
         issue_id: Option<String>,
-        /// 启用偏离度分析
+        /// 指定 Coding 空间（项目）ID，覆盖配置中的 space_id
         #[arg(long)]
-        deviation_analysis: bool,
+        space_id: Option<u64>,
         /// 启用完整深度分析（架构影响、危险改动、依赖分析等）
         #[arg(long)]
         full: bool,
@@ -126,6 +126,9 @@ pub enum Command {
         /// 关联的Issue ID
         #[arg(long)]
         issue_id: Option<String>,
+        /// 指定 Coding 空间（项目）ID，覆盖配置中的 space_id
+        #[arg(long)]
+        space_id: Option<u64>,
         /// 添加所有变更文件
         #[arg(short, long)]
         all: bool,

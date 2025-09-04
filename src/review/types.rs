@@ -87,6 +87,8 @@ pub struct ReviewConfig {
     pub scan_tool: Option<String>,
     pub block_on_critical: bool,
     pub issue_ids: Vec<String>,
+    /// Coding 空间（项目）ID，优先使用命令行传入，其次使用配置
+    pub space_id: Option<u64>,
     /// 是否启用“完整模式”（包含依赖图、PageRank等深入分析与更丰富的AI上下文）
     pub full: bool,
     /// 是否启用“偏离度分析”（DevOps 需求级偏离分析，保留该命名供 Issue 相关分析使用）
@@ -104,15 +106,18 @@ impl ReviewConfig {
         scan_tool: Option<String>,
         block_on_critical: bool,
         issue_id: Option<String>,
+        space_id: Option<u64>,
         full: bool,
-        deviation_analysis: bool,
     ) -> Self {
-        let issue_ids = issue_id
+        let issue_ids: Vec<String> = issue_id
             .map(|ids| ids.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default();
 
         // 当指定了 scan_tool 时自动启用 security_scan
         let security_scan = security_scan || scan_tool.is_some();
+
+        // 偏离度分析隐式启用：当存在 Issue ID 时自动启用，否则禁用
+        let deviation_analysis = !issue_ids.is_empty();
 
         Self {
             language,
@@ -123,6 +128,7 @@ impl ReviewConfig {
             scan_tool,
             block_on_critical,
             issue_ids,
+            space_id,
             full,
             deviation_analysis,
         }

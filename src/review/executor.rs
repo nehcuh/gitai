@@ -127,7 +127,7 @@ pub async fn execute_review_with_result(
         println!("🌳 使用 Tree-sitter 进行结构分析...");
         structural_summary =
             super::analyzer::perform_structural_analysis(&diff, &review_config.language).await?;
-        
+
         if let Some(ref summary) = structural_summary {
             // 根据是否为多语言模式显示不同的统计信息
             if summary.is_multi_language() {
@@ -365,34 +365,45 @@ pub async fn execute_review_with_result(
     prompt.push_str("3. 改进建议\n");
     prompt.push_str("4. 总体评分（1-100）\n");
 
-    // 在 full 模式或存在偏差分析时，尝试加入 DevOps Issue 上下文
+    // 在存在 Issue 或启用偏离度分析时，注入 DevOps Issue 上下文
     let devops_issue_context = {
         #[cfg(feature = "devops")]
         {
             let mut s = String::new();
-            if review_config.full && !review_config.issue_ids.is_empty() {
+            if (!review_config.issue_ids.is_empty()) || review_config.deviation_analysis {
                 if let Some(ref devops_cfg) = config.devops {
                     let client = crate::devops::DevOpsClient::new(devops_cfg.clone());
-                    match client.get_issues(&review_config.issue_ids).await {
+                    match client
+                        .get_issues_with_space(
+                            &review_config.issue_ids,
+                            review_config.space_id.or(devops_cfg.space_id),
+                        )
+                        .await
+                    {
                         Ok(issues) => {
                             if !issues.is_empty() {
                                 use std::fmt::Write as _;
                                 for issue in &issues {
-                                    let _ = write!(
-                                        &mut s,
-                                        "#{} [{}] {}\n优先级: {}\n指派: {}\n标签: {}\n链接: {}\n\n",
-                                        issue.id,
-                                        issue.status,
-                                        issue.title,
-                                        issue.priority.as_deref().unwrap_or("未设置"),
-                                        issue.assignee.as_deref().unwrap_or("未指派"),
-                                        if issue.labels.is_empty() {
-                                            "无".to_string()
-                                        } else {
-                                            issue.labels.join(", ")
-                                        },
-                                        issue.url
-                                    );
+                                    if let Some(ref ctx) = issue.ai_context {
+                                        // 优先使用为 AI 准备的上下文摘要
+                                        let _ = writeln!(&mut s, "{}\n", ctx);
+                                    } else {
+                                        let _ = write!(
+                                            &mut s,
+                                            "#{} [{}] {}\n优先级: {}\n指派: {}\n标签: {}\n链接: {}\n\n",
+                                            issue.id,
+                                            issue.status,
+                                            issue.title,
+                                            issue.priority.as_deref().unwrap_or("未设置"),
+                                            issue.assignee.as_deref().unwrap_or("未指派"),
+                                            if issue.labels.is_empty() {
+                                                "无".to_string()
+                                            } else {
+                                                issue.labels.join(", ")
+                                            },
+                                            issue.url
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -415,6 +426,11 @@ pub async fn execute_review_with_result(
         prompt.push_str("\n相关 Issue 上下文：\n");
         prompt.push_str(&devops_issue_context);
         prompt.push('\n');
+        // 当存在 Issue 上下文时，追加偏离度分析指引
+        prompt.push_str("\n请基于上述 Issue 上下文，对以下方面进行偏离度分析：\n");
+        prompt.push_str("1. 代码变更是否覆盖 Issue 中的关键任务点与验收标准；\n");
+        prompt.push_str("2. 是否存在与 Issue 无关的改动或偏离预期的实现；\n");
+        prompt.push_str("3. 给出偏离项清单与建议收敛方案；\n");
     }
 
     let ai_response = {

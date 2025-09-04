@@ -22,6 +22,7 @@ impl CommitService {
                 commit::CommitConfig {
                     message: None,
                     issue_ids: Vec::new(),
+                    space_id: None,
                     add_all: commit_config.default_add_all,
                     review: commit_config.default_review,
                     tree_sitter: commit_config.default_tree_sitter,
@@ -44,6 +45,7 @@ impl CommitService {
         commit::CommitConfig {
             message: None,
             issue_ids: Vec::new(),
+            space_id: None,
             add_all: false,
             review: false,
             tree_sitter: false,

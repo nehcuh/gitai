@@ -288,13 +288,15 @@ impl StructuralSummary {
     }
 
     /// 创建多语言模式的结构摘要
-    pub fn multi_language(language_summaries: std::collections::HashMap<String, LanguageSummary>) -> Self {
+    pub fn multi_language(
+        language_summaries: std::collections::HashMap<String, LanguageSummary>,
+    ) -> Self {
         let mut result = Self {
             language: "multi-language".to_string(),
             language_summaries,
             ..Default::default()
         };
-        
+
         // 合并所有语言的结果以保持向后兼容
         for summary in result.language_summaries.values() {
             result.functions.extend(summary.functions.clone());
@@ -302,10 +304,12 @@ impl StructuralSummary {
             result.imports.extend(summary.imports.clone());
             result.exports.extend(summary.exports.clone());
             result.comments.extend(summary.comments.clone());
-            result.complexity_hints.extend(summary.complexity_hints.clone());
+            result
+                .complexity_hints
+                .extend(summary.complexity_hints.clone());
             result.calls.extend(summary.calls.clone());
         }
-        
+
         result
     }
 

@@ -43,11 +43,17 @@ pub async fn perform_structural_analysis(
 
     // 检查是否为多语言项目
     if detected_languages.len() > 1 {
-        println!("  🌐 检测到多语言项目：{:?}", detected_languages.iter().map(|l| l.name()).collect::<Vec<_>>());
-        return perform_multi_language_analysis(language_code_map, detected_languages).await;
+        println!(
+            "  🌐 检测到多语言项目：{:?}",
+            detected_languages
+                .iter()
+                .map(|l| l.name())
+                .collect::<Vec<_>>()
+        );
+        perform_multi_language_analysis(language_code_map, detected_languages).await
     } else {
         println!("  📏 检测到语言: {:?}", detected_languages[0]);
-        return perform_single_language_analysis(language_code_map, detected_languages[0]).await;
+        perform_single_language_analysis(language_code_map, detected_languages[0]).await
     }
 }
 
@@ -57,7 +63,7 @@ async fn perform_multi_language_analysis(
     detected_languages: Vec<SupportedLanguage>,
 ) -> Result<Option<StructuralSummary>, Box<dyn std::error::Error + Send + Sync>> {
     use crate::tree_sitter::{LanguageSummary, StructuralSummary};
-    
+
     // 创建 Tree-sitter 管理器
     let mut manager = match TreeSitterManager::new().await {
         Ok(manager) => manager,
@@ -75,14 +81,14 @@ async fn perform_multi_language_analysis(
 
     for lang in detected_languages {
         let lang_name = lang.name();
-        
+
         if let Some(code) = language_code_map.get(lang_name) {
             if code.trim().is_empty() {
                 continue;
             }
 
             println!("  🔍 分析 {lang_name} 代码...");
-            
+
             match manager.analyze_structure(code, lang) {
                 Ok(single_summary) => {
                     let lang_summary = LanguageSummary {
@@ -96,18 +102,18 @@ async fn perform_multi_language_analysis(
                         calls: single_summary.calls.clone(),
                         file_count: 1, // 简化处理，实际需要统计文件数量
                     };
-                    
+
                     total_functions += lang_summary.functions.len();
                     total_classes += lang_summary.classes.len();
                     total_files += 1;
-                    
+
                     println!(
                         "    ✅ {lang_name}: {} 函数, {} 类, {} 注释",
                         lang_summary.functions.len(),
                         lang_summary.classes.len(),
                         lang_summary.comments.len()
                     );
-                    
+
                     language_summaries.insert(lang_name.to_string(), lang_summary);
                 }
                 Err(e) => {
@@ -124,8 +130,13 @@ async fn perform_multi_language_analysis(
     }
 
     println!("  ✅ 多语言结构分析完成");
-    println!("     📊 总计: {} 种语言, {} 函数, {} 类, {} 文件", 
-             language_summaries.len(), total_functions, total_classes, total_files);
+    println!(
+        "     📊 总计: {} 种语言, {} 函数, {} 类, {} 文件",
+        language_summaries.len(),
+        total_functions,
+        total_classes,
+        total_files
+    );
 
     Ok(Some(StructuralSummary::multi_language(language_summaries)))
 }
@@ -136,9 +147,10 @@ async fn perform_single_language_analysis(
     language: SupportedLanguage,
 ) -> Result<Option<StructuralSummary>, Box<dyn std::error::Error + Send + Sync>> {
     use crate::tree_sitter::{LanguageSummary, StructuralSummary};
-    
+
     let lang_name = language.name();
-    let code = language_code_map.get(lang_name)
+    let code = language_code_map
+        .get(lang_name)
         .or_else(|| {
             // 如果没有找到对应语言的代码，尝试合并所有代码
             if language_code_map.len() == 1 {
@@ -188,7 +200,10 @@ async fn perform_single_language_analysis(
 
                     // 返回单语言模式的结果（保持向后兼容）
                     let lang_summary = LanguageSummary::from_structural_summary(&summary);
-                    Ok(Some(StructuralSummary::single_language(lang_name.to_string(), lang_summary)))
+                    Ok(Some(StructuralSummary::single_language(
+                        lang_name.to_string(),
+                        lang_summary,
+                    )))
                 }
                 Err(e) => {
                     println!("  ⚠️  结构分析失败，将使用传统文本分析模式");
@@ -250,21 +265,6 @@ pub async fn perform_architectural_impact_analysis(
     }
 }
 
-/// 从 diff 中提取代码内容（单语言模式，保持向后兼容）
-fn extract_code_from_diff(diff: &str) -> String {
-    let language_code_map = extract_code_by_language(diff);
-    
-    // 合并所有语言的代码
-    let mut all_code = Vec::new();
-    for (language, code) in language_code_map {
-        if !code.trim().is_empty() {
-            all_code.push(format!("// === {} ===\n{}", language, code));
-        }
-    }
-    
-    all_code.join("\n\n")
-}
-
 /// 按语言分离 diff 中的代码变更
 fn extract_code_by_language(diff: &str) -> std::collections::HashMap<String, String> {
     use std::collections::HashMap;
@@ -285,17 +285,17 @@ fn extract_code_by_language(diff: &str) -> std::collections::HashMap<String, Str
 
         // 从 +++ 行中提取文件路径（更准确）
         if line.starts_with("+++") {
-            if let Some(file_path) = line.strip_prefix("+++ ").or_else(|| line.strip_prefix("+++ b/")) {
+            if let Some(file_path) = line
+                .strip_prefix("+++ ")
+                .or_else(|| line.strip_prefix("+++ b/"))
+            {
                 current_file_language = detect_language_from_file_path(file_path);
             }
             continue;
         }
 
         // 跳过其他diff元数据行
-        if line.starts_with("index")
-            || line.starts_with("---")
-            || line.starts_with("@@")
-        {
+        if line.starts_with("index") || line.starts_with("---") || line.starts_with("@@") {
             continue;
         }
 
@@ -309,13 +309,19 @@ fn extract_code_by_language(diff: &str) -> std::collections::HashMap<String, Str
         // 提取代码行（仅当能识别语言时）
         if let Some(lang) = current_file_language {
             let lang_name = lang.name().to_string();
-            
+
             if let Some(stripped) = line.strip_prefix('+') {
                 // 添加的行
-                language_code_map.entry(lang_name).or_default().push(stripped.to_string());
+                language_code_map
+                    .entry(lang_name)
+                    .or_default()
+                    .push(stripped.to_string());
             } else if !line.starts_with('-') && !line.trim().is_empty() {
                 // 上下文行
-                language_code_map.entry(lang_name).or_default().push(line.to_string());
+                language_code_map
+                    .entry(lang_name)
+                    .or_default()
+                    .push(line.to_string());
             }
         }
     }
@@ -332,7 +338,10 @@ fn extract_file_path_from_diff_line(line: &str) -> Option<String> {
     // diff --git a/src/main.rs b/src/main.rs
     if let Some(rest) = line.strip_prefix("diff --git ") {
         if let Some(b_part) = rest.split_whitespace().nth(1) {
-            return b_part.strip_prefix("b/").map(|s| s.to_string()).or_else(|| Some(b_part.to_string()));
+            return b_part
+                .strip_prefix("b/")
+                .map(|s| s.to_string())
+                .or_else(|| Some(b_part.to_string()));
         }
     }
     None
@@ -363,17 +372,11 @@ fn detect_supported_language(language: &str) -> Option<SupportedLanguage> {
     }
 }
 
-/// 从diff推断语言（单语言模式，保持向后兼容）
-fn infer_language_from_diff(diff: &str) -> Option<SupportedLanguage> {
-    let languages = infer_all_languages_from_diff(diff);
-    languages.into_iter().next()
-}
-
 /// 从diff推断所有语言
 fn infer_all_languages_from_diff(diff: &str) -> Vec<SupportedLanguage> {
     use std::collections::HashSet;
     let mut detected_languages = HashSet::new();
-    
+
     // 从文件扩展名推断
     for line in diff.lines() {
         if line.starts_with("diff --git") || line.starts_with("+++") || line.starts_with("---") {
