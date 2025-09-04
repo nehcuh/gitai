@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 /// 简化的Git命令处理（禁用pager，保证非交互输出稳定）
@@ -36,6 +37,8 @@ pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
 
 /// 获取所有变更（包括工作区、暂存区和未推送的提交）
 pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // 使用 --diff-filter 排除已删除的文件，这样会自然忽略 .gitignore 中的文件
+    // Git 的 diff 命令会自动排除未跟踪且在 .gitignore 中的文件
     let staged_diff = run_git(&["diff".to_string(), "--cached".to_string()]).unwrap_or_default();
     let unstaged_diff = run_git(&["diff".to_string()]).unwrap_or_default();
 
@@ -63,7 +66,14 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
     }
 
     if all_diff.trim().is_empty() {
-        return Err("没有检测到任何变更".into());
+        // 如果没有变更，尝试获取最后一次提交的 diff
+        // 这样 MCP 调用时即使没有新的变更也可以分析最近的提交
+        match get_last_commit_diff() {
+            Ok(last_diff) if !last_diff.trim().is_empty() => {
+                return Ok(format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff));
+            }
+            _ => return Err("没有检测到任何变更".into()),
+        }
     }
 
     Ok(all_diff)
@@ -163,6 +173,16 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
     }
 }
 
+/// 获取最后一次提交的 diff
+pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // 获取最后一次提交的 diff
+    run_git(&[
+        "diff".to_string(),
+        "HEAD~1".to_string(),
+        "HEAD".to_string(),
+    ])
+}
+
 /// 获取当前分支的上游分支
 pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // 尝试获取当前分支的上游分支
@@ -203,5 +223,48 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
                 Err(e) => Err(format!("无法获取当前分支: {e}").into()),
             }
         }
+    }
+}
+
+/// 过滤掉被 .gitignore 忽略的文件路径
+pub fn filter_ignored_files(paths: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    if paths.is_empty() {
+        return Ok(paths);
+    }
+    
+    // 使用 git check-ignore 来检查哪些文件被忽略
+    let output = Command::new("git")
+        .arg("check-ignore")
+        .args(&paths)
+        .output()?;
+    
+    let ignored = String::from_utf8_lossy(&output.stdout);
+    let ignored_set: std::collections::HashSet<_> = ignored.lines().collect();
+    
+    Ok(paths.into_iter().filter(|p| !ignored_set.contains(p.as_str())).collect())
+}
+
+/// 获取当前仓库中被跟踪的文件列表（排除 .gitignore 中的文件）
+pub fn get_tracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // git ls-files 只会列出被跟踪的文件，自动排除 .gitignore 中的文件
+    let output = run_git(&["ls-files".to_string()])?;
+    Ok(output.lines().map(|s| s.to_string()).collect())
+}
+
+/// 检查文件是否被 .gitignore 忽略
+pub fn is_file_ignored(file_path: &Path) -> bool {
+    let path_str = file_path.to_string_lossy();
+    
+    // 使用 git check-ignore 命令检查文件
+    match Command::new("git")
+        .arg("check-ignore")
+        .arg(path_str.as_ref())
+        .output()
+    {
+        Ok(output) => {
+            // 如果退出码为 0，说明文件被忽略
+            output.status.success()
+        }
+        Err(_) => false,
     }
 }

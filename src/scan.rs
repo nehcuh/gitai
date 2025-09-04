@@ -87,6 +87,10 @@ pub fn run_opengrep_scan(
     if config.scan.jobs > 0 {
         args.push(format!("--jobs={}", config.scan.jobs));
     }
+    
+    // 添加 .gitignore 支持
+    // OpenGrep/Semgrep 默认会遵守 .gitignore，但我们明确启用它
+    args.push("--use-gitignore".to_string());
 
     // 规则目录
     let rules_dir = config
