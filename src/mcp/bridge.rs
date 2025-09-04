@@ -204,6 +204,21 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 }
                                             },
                                             {
+                                                "name": "convert_graph_to_image",
+                                                "description": "Convert DOT or Mermaid content to an image file (PNG, SVG, PDF). Provide output path and desired format.",
+                                                "inputSchema": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "input_format": {"type": "string", "enum": ["dot","mermaid"], "description": "Input content format"},
+                                                        "input_content": {"type": "string", "description": "Graph content in DOT or Mermaid"},
+                                                        "output_format": {"type": "string", "enum": ["png","svg","pdf"], "description": "Desired output image format"},
+                                                        "output_path": {"type": "string", "description": "Output file path (must be writable)"},
+                                                        "engine": {"type": "string", "enum": ["dot","neato","circo","fdp","sfdp","twopi"], "description": "Graphviz layout engine (default dot)"}
+                                                    },
+                                                    "required": ["input_format","input_content","output_format","output_path"]
+                                                }
+                                            },
+                                            {
                                                 "name": "query_call_chain",
                                                 "description": "Query function call chains (downstream/upstream)",
                                                 "inputSchema": {

@@ -432,13 +432,22 @@ impl DependencyService {
                     output_path: None,
                     statistics,
                     graph_data: None,
-                    dot_content: Some(dot_content),
+                    dot_content: Some(dot_content.clone()),
                     mermaid_content: None,
                     ascii_content: None,
                     details: {
                         let mut details = HashMap::new();
                         details.insert("note".to_string(), "需要 Graphviz 将 DOT 转换为 SVG".to_string());
                         details.insert("hint".to_string(), "可改用 summarize_graph 获取摘要，或调用 convert_graph_to_image 进行转换".to_string());
+                        details.insert("suggested_tool".to_string(), "convert_graph_to_image".to_string());
+                        // 提供一个序列化后的建议参数示例（便于调用方直接使用）
+                        let example_args = serde_json::json!({
+                            "input_format": "dot",
+                            "input_content": dot_content,
+                            "output_format": "svg",
+                            "output_path": "./dependency.svg"
+                        }).to_string();
+                        details.insert("suggested_args".to_string(), example_args);
                         details
                     },
                 })
