@@ -1,5 +1,0 @@
-# Test .gitignore behavior
-*.tmp
-test_ignored/
-target/
-
