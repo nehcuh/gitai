@@ -189,29 +189,16 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 }
                                             },
                                             {
-                                                "name": "export_dependency_graph",
-                                                "description": "Export dependency graph (default ASCII). You can also use execute_dependency_graph with format=json|dot|svg|mermaid|ascii.",
-                                                "inputSchema": {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "path": {"type": "string", "description": "Scan directory (default .)"},
-                                                        "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
-                                                        "output": {"type": "string", "description": "Output file path (optional)"},
-                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
-                                                    },
-                                                    "required": ["path"]
-                                                }
-                                            },
-                                            {
                                                 "name": "execute_dependency_graph",
-                                                "description": "Generate dependency graph (default ASCII) with format=json|dot|svg|mermaid|ascii.",
+                                                "description": "Generate dependency graph (default ASCII). Note: for large repos, prefer summarize_graph first; only export full graph after user confirmation.",
                                                 "inputSchema": {
                                                     "type": "object",
                                                     "properties": {
                                                         "path": {"type": "string", "description": "Scan directory (default .)"},
                                                         "format": {"type": "string", "enum": ["json","dot","svg","mermaid","ascii"], "description": "Output format (default ascii)"},
                                                         "output": {"type": "string", "description": "Output file path (optional)"},
-                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"}
+                                                        "verbosity": {"type": "integer", "minimum": 0, "maximum": 3, "description": "Detail level 0-3 (default 1)"},
+                                                        "confirm": {"type": "boolean", "description": "Confirm exporting full graph for large repos (prefer summarize_graph first)"}
                                                     },
                                                     "required": ["path"]
                                                 }

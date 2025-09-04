@@ -529,18 +529,6 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
                 }).as_object().unwrap().clone()),
             },
             Tool {
-                name: "export_dependency_graph".to_string().into(),
-                description: "导出依赖图（全局/子目录），支持 JSON、DOT、SVG 和 Mermaid 格式输出。注意：输出可能非常长，建议优先使用 summarize_graph（预算自适应裁剪），仅在必要时导出完整图。".to_string().into(),
-                input_schema: Arc::new(serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string", "description": "扫描目录（默认 .）"},
-                        "threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "关键节点高亮阈值 (0-1)，默认 0.15"}
-                    },
-                    "required": ["path"]
-                }).as_object().unwrap().clone()),
-            },
-            Tool {
                 name: "query_call_chain".to_string().into(),
                 description: "查询函数调用链（上游/下游），可设定最大深度与路径数量".to_string().into(),
                 input_schema: Arc::new(serde_json::json!({
@@ -604,24 +592,6 @@ impl crate::mcp::GitAiMcpService for AnalysisService {
 
                 Ok(serde_json::to_value(result)
                     .map_err(|e| crate::mcp::serialize_error("analysis", e))?)
-            }
-            "export_dependency_graph" => {
-                let path = arguments
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(".");
-                let threshold = arguments
-                    .get("threshold")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.15) as f32;
-                let dot = crate::architectural_impact::graph_export::export_dot_string(
-                    std::path::Path::new(path),
-                    threshold,
-                )
-                .await
-                .map_err(|e| crate::mcp::execution_error("Analysis", e))?;
-                let obj = serde_json::json!({"dot": dot, "message": "ok"});
-                Ok(obj)
             }
             "query_call_chain" => {
                 let path = arguments

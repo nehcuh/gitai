@@ -474,7 +474,6 @@ pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
     rules_info
 }
 
-
 /// 安装OpenGrep（优先使用 cargo；若不可用则给出明确指引）
 pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     println!("🔧 正在安装OpenGrep...");

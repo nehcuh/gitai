@@ -12,7 +12,6 @@ use gitai::args::MetricsAction;
 #[cfg(feature = "ai")]
 use gitai::ai;
 
-
 #[cfg(feature = "security")]
 use gitai::scan;
 
