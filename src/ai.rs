@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::project_insights::InsightsGenerator;
 use crate::prompts::{PromptContext, PromptManager};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// AI请求
 #[derive(Serialize)]
@@ -56,14 +57,25 @@ pub async fn call_ai(
     }
     let response = req.send().await?;
 
-    let ai_response: AiResponse = response.json().await?;
-    let content = ai_response
-        .choices
-        .first()
-        .ok_or("No response from AI")?
-        .message
-        .content
-        .clone();
+    let status = response.status();
+    let body_text = response.text().await?;
+    if !status.is_success() {
+        let preview = truncate_preview(&body_text, 800);
+        return Err(format!(
+            "AI request failed (status {}): {}",
+            status.as_u16(), preview
+        )
+        .into());
+    }
+
+    // Try robust parsing across providers (OpenAI-compatible and variants)
+    let v: Value = serde_json::from_str(&body_text).map_err(|e| {
+        let preview = truncate_preview(&body_text, 800);
+        format!("error decoding response body: {e}; body preview: {preview}")
+    })?;
+
+    let content = extract_content_from_ai_response(&v)
+        .ok_or_else(|| "No usable content in AI response".to_string())?;
 
     Ok(content)
 }
@@ -130,16 +142,76 @@ pub async fn call_ai_with_template(
     }
     let response = req.send().await?;
 
-    let ai_response: AiResponse = response.json().await?;
-    let content = ai_response
-        .choices
-        .first()
-        .ok_or("No response from AI")?
-        .message
-        .content
-        .clone();
+    let status = response.status();
+    let body_text = response.text().await?;
+    if !status.is_success() {
+        let preview = truncate_preview(&body_text, 800);
+        return Err(format!(
+            "AI request failed (status {}): {}",
+            status.as_u16(), preview
+        )
+        .into());
+    }
+
+    let v: Value = serde_json::from_str(&body_text).map_err(|e| {
+        let preview = truncate_preview(&body_text, 800);
+        format!("error decoding response body: {e}; body preview: {preview}")
+    })?;
+
+    let content = extract_content_from_ai_response(&v)
+        .ok_or_else(|| "No usable content in AI response".to_string())?;
 
     Ok(content)
+}
+
+fn truncate_preview(s: &str, max: usize) -> String {
+    if s.len() <= max { s.to_string() } else { format!("{}...", &s[..max]) }
+}
+
+fn extract_content_from_ai_response(v: &Value) -> Option<String> {
+    // OpenAI Chat Completions: choices[0].message.content (string)
+    if let Some(s) = v.get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.get(0))
+        .and_then(|c0| c0.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str()) {
+        return Some(s.to_string());
+    }
+    // Some providers: choices[0].message.content is array of blocks with {type:"text", text:"..."}
+    if let Some(arr) = v.get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.get(0))
+        .and_then(|c0| c0.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_array()) {
+        let mut texts = Vec::new();
+        for item in arr {
+            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                texts.push(text);
+            } else if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                if let Some(t) = item.get("text").and_then(|t| t.as_str()) {
+                    texts.push(t);
+                }
+            }
+        }
+        if !texts.is_empty() {
+            return Some(texts.join("\n"));
+        }
+    }
+    // OpenAI text completions: choices[0].text
+    if let Some(s) = v.get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.get(0))
+        .and_then(|c0| c0.get("text"))
+        .and_then(|t| t.as_str()) {
+        return Some(s.to_string());
+    }
+    // Response API style: output_text or content
+    if let Some(s) = v.get("output_text").and_then(|t| t.as_str()) {
+        return Some(s.to_string());
+    }
+    None
 }
 
 pub async fn review_code_with_template(

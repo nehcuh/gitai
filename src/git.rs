@@ -49,7 +49,33 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
     if let Ok(untracked) = get_untracked_files() {
         if !untracked.is_empty() {
             let mut combined = String::new();
+            // 过滤过大的或二进制/资产类文件，避免生成巨大的 diff
+            const MAX_INLINE_SIZE: u64 = 1_000_000; // 1MB 上限
+            let skip_exts = [
+                "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "pdf", "zip", "tar", "gz", "bz2", "xz",
+            ];
+
             for p in &untracked {
+                let path = std::path::Path::new(p);
+                let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                let mut should_skip_content = skip_exts.iter().any(|e| e.eq_ignore_ascii_case(ext));
+                let mut size_info = String::new();
+                if let Ok(meta) = std::fs::metadata(path) {
+                    let len = meta.len();
+                    if len > MAX_INLINE_SIZE {
+                        should_skip_content = true;
+                        size_info = format!(" ({} bytes)", len);
+                    }
+                }
+
+                if should_skip_content {
+                    // 仅添加一个简短的记录，说明新增了大文件/二进制文件
+                    combined.push_str(&format!(
+                        "diff --git a/{p} b/{p}\nnew file mode 100644\n--- /dev/null\n+++ b/{p}\n@@\n+ [新增大文件/二进制文件已省略内容]{size_info}\n\n"
+                    ));
+                    continue;
+                }
+
                 if let Ok((code, stdout, _stderr)) = run_git_capture(&[
                     "diff".to_string(),
                     "--no-index".to_string(),
