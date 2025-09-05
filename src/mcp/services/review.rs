@@ -66,6 +66,19 @@ impl ReviewService {
         &self,
         params: ReviewParams,
     ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
+        // 如果指定了 path，则临时切换工作目录
+        let orig_dir = std::env::current_dir().ok();
+        let mut changed_dir = false;
+        if let Some(ref p) = params.path {
+            if !p.is_empty() {
+                if let Err(e) = std::env::set_current_dir(p) {
+                    log::warn!("无法切换到指定路径 '{}': {}", p, e);
+                } else {
+                    changed_dir = true;
+                }
+            }
+        }
+
         // 构建评审配置
         let mut review_config = self.default_config.clone();
 
@@ -98,7 +111,16 @@ impl ReviewService {
         let tree_sitter_enabled = review_config.tree_sitter;
 
         // 执行评审
-        let review_result = review::execute_review_with_result(&self.config, review_config).await?;
+        let exec_res = review::execute_review_with_result(&self.config, review_config).await;
+
+        // 恢复工作目录
+        if changed_dir {
+            if let Some(orig) = orig_dir {
+                let _ = std::env::set_current_dir(orig);
+            }
+        }
+
+        let review_result = exec_res?;
 
         // 转换为 MCP 使用的 ReviewResult 格式
         let mut details = review_result.details;
@@ -201,6 +223,10 @@ impl crate::mcp::GitAiMcpService for ReviewService {
                 serde_json::json!({
                     "type": "object",
                     "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "可选：仓库根路径（当 MCP 服务运行目录不是仓库根时需指定）"
+                        },
                         "tree_sitter": {
                             "type": "boolean",
                             "description": "是否启用 Tree-sitter 多语言结构分析 (可选，默认 false)。支持自动检测和分析多种编程语言"
@@ -263,6 +289,8 @@ impl crate::mcp::GitAiMcpService for ReviewService {
 /// Review 参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewParams {
+    /// 可选：指定仓库根路径（当 MCP 服务运行目录不是仓库根时需指定）
+    pub path: Option<String>,
     /// 是否启用 Tree-sitter 结构分析
     pub tree_sitter: Option<bool>,
     /// 是否启用安全扫描  

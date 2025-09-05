@@ -148,6 +148,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                 "inputSchema": {
                                                     "type": "object",
                                                     "properties": {
+                                                        "path": {"type": "string", "description": "Optional repository root path"},
                                                         "tree_sitter": {"type": "boolean"},
                                                         "security_scan": {"type": "boolean"}
                                                     }
