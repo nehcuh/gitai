@@ -87,6 +87,10 @@ pub fn run_opengrep_scan(
     if config.scan.jobs > 0 {
         args.push(format!("--jobs={}", config.scan.jobs));
     }
+    
+    // 添加 .gitignore 支持
+    // OpenGrep/Semgrep 默认会遵守 .gitignore，但我们明确启用它
+    args.push("--use-git-ignore".to_string());
 
     // 规则目录
     let rules_dir = config
@@ -106,7 +110,8 @@ pub fn run_opengrep_scan(
     if rules_dir.exists() {
         if let Ok(mut iter) = std::fs::read_dir(&rules_dir) {
             if iter.next().is_some() {
-                // 语言已指定：仅使用该子目录；未指定：包含所有存在的语言子目录，避免根目录中的非规则 YAML 被解析
+                // 语言已指定：仅使用该子目录（且包含有效规则）
+                // 未指定：包含所有存在且包含有效规则的语言子目录，避免根目录中的非规则 YAML 被解析
                 let known_langs = [
                     "java",
                     "python",
@@ -122,24 +127,97 @@ pub fn run_opengrep_scan(
                     "scala",
                     "swift",
                 ];
-                if let Some(l) = lang {
-                    let candidate = rules_dir.join(l);
-                    let rules_root = if candidate.exists() {
-                        candidate
-                    } else {
-                        rules_dir.clone()
-                    };
-                    used_config_paths.push(rules_root.clone());
-                } else {
-                    for l in known_langs {
-                        let p = rules_dir.join(l);
-                        if p.exists() && p.is_dir() {
-                            used_config_paths.push(p);
+
+                // 辅助：检测目录是否包含有效规则（任意 .yml/.yaml 且包含 'rules:' 键）
+                fn dir_contains_valid_rules(dir: &std::path::Path) -> bool {
+                    use std::fs;
+                    let mut stack = vec![dir.to_path_buf()];
+                    while let Some(d) = stack.pop() {
+                        if let Ok(entries) = fs::read_dir(&d) {
+                            for entry in entries.flatten() {
+                                let p = entry.path();
+                                if p.is_dir() {
+                                    // 跳过隐藏目录
+                                    if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                                        if name.starts_with('.') { continue; }
+                                    }
+                                    stack.push(p);
+                                } else if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
+                                    if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml") {
+                                        // 排除常见的非规则配置文件
+                                        if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+                                            if fname.starts_with('.') { continue; }
+                                            if fname.contains("pre-commit") { continue; }
+                                        }
+                                        if let Ok(content) = fs::read_to_string(&p) {
+                                            for line in content.lines().take(200) {
+                                                let t = line.trim_start();
+                                                if t.starts_with("rules:") || t.starts_with("rules :") {
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    // 回退：若没有任何语言子目录存在，则退回根目录
+                    false
+                }
+
+                // 构造候选根目录：rules_dir 以及其一级子目录（兼容 opengrep-rules-main/java 结构）
+                let mut candidate_roots: Vec<std::path::PathBuf> = vec![rules_dir.clone()];
+                if let Ok(entries) = std::fs::read_dir(&rules_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_dir() {
+                            candidate_roots.push(p);
+                        }
+                    }
+                }
+
+                if let Some(l) = lang {
+                    let mut found_any = false;
+                    for root in &candidate_roots {
+                        let candidate = root.join(l);
+                        if candidate.exists() && candidate.is_dir() {
+                            if dir_contains_valid_rules(&candidate) {
+                                if !used_config_paths.iter().any(|x| x == &candidate) {
+                                    used_config_paths.push(candidate.clone());
+                                }
+                                found_any = true;
+                            } else {
+                                log::warn!(
+                                    "指定语言 '{}' 的规则目录存在但未检测到有效规则: {}",
+                                    l,
+                                    candidate.display()
+                                );
+                            }
+                        }
+                    }
+                    if !found_any {
+                        log::warn!(
+                            "未找到指定语言 '{}' 的有效规则目录（已检查候选根目录下的子目录）: {}",
+                            l,
+                            rules_dir.display()
+                        );
+                    }
+                } else {
+                    for root in &candidate_roots {
+                        for l in known_langs {
+                            let p = root.join(l);
+                            if p.exists() && p.is_dir() && dir_contains_valid_rules(&p) {
+                                if !used_config_paths.iter().any(|x| x == &p) {
+                                    used_config_paths.push(p);
+                                }
+                            }
+                        }
+                    }
                     if used_config_paths.is_empty() {
-                        used_config_paths.push(rules_dir.clone());
+                        log::warn!(
+                            "未在规则目录及其一级子目录下找到任何包含有效规则的语言子目录: {}",
+                            rules_dir.display()
+                        );
                     }
                 }
 

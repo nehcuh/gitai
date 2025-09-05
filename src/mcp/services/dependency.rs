@@ -121,6 +121,11 @@ impl DependencyService {
             depth = params.depth
         );
 
+        // 如果用户指定了输出路径但未指定导出格式，提示用户选择格式
+        if params.output.is_some() && params.format.is_none() {
+            return Err("未指定导出格式。请在参数中设置 format: json|dot|svg|mermaid|ascii。建议：大项目先使用 summarize_graph 获取摘要。".into());
+        }
+
         let path = Path::new(&params.path);
 
         // 验证路径是否存在
@@ -379,43 +384,70 @@ impl DependencyService {
             }
             "svg" => {
                 info!("📄 生成 SVG 格式依赖图");
-                // 先生成 DOT，然后转换为 SVG
+                // 先生成 DOT 内容
                 let dot_options = DotOptions::default();
                 let dot_content = graph.to_dot(Some(&dot_options));
 
-                let output_path = params.output.clone().unwrap_or_else(|| {
-                    format!(
-                        "{}/dependency_graph.svg",
-                        std::env::current_dir().unwrap().display()
-                    )
-                });
+                if let Some(out_path) = &params.output {
+                    // 如果提供了输出路径，尝试直接转换为 SVG（通过 stdin 传给 Graphviz）
+                    match self
+                        .convert_graph_to_image(ConvertGraphParams {
+                            input_format: "dot".to_string(),
+                            input_content: dot_content.clone(),
+                            output_format: "svg".to_string(),
+                            output_path: out_path.clone(),
+                            engine: None,
+                        })
+                        .await
+                    {
+                        Ok(conv) => {
+                            return Ok(DependencyResult {
+                                success: true,
+                                message: format!(
+                                    "依赖图已导出为 SVG: {}",
+                                    conv.output_path
+                                ),
+                                format: "svg".to_string(),
+                                output_path: Some(conv.output_path),
+                                statistics,
+                                graph_data: None,
+                                dot_content: None,
+                                mermaid_content: None,
+                                ascii_content: None,
+                                details: conv.details,
+                            });
+                        }
+                        Err(e) => {
+                            warn!("⚠️ SVG 转换失败，将返回 DOT 内容: {}", e);
+                        }
+                    }
+                }
 
-                // 写入临时 DOT 文件
-                let temp_dot_path =
-                    format!("{base}.dot", base = output_path.trim_end_matches(".svg"));
-                std::fs::write(&temp_dot_path, &dot_content)
-                    .map_err(|e| format!("无法写入临时 DOT 文件: {e}"))?;
-
-                // TODO: 这里可以调用 Graphviz 的 dot 命令将 DOT 转换为 SVG
-                // 目前先返回 DOT 内容
-                warn!("⚠️ SVG 转换功能需要 Graphviz，当前返回 DOT 格式");
-
+                // 未提供输出路径或转换失败：返回 DOT 内容与转换建议
+                warn!("⚠️ SVG 转换需要 Graphviz。已返回 DOT 内容，可使用 convert_graph_to_image 工具或本地 dot 命令进行转换");
                 Ok(DependencyResult {
                     success: true,
-                    message: "依赖图生成成功（DOT 格式，需要 Graphviz 转换为 SVG）".to_string(),
+                    message: "已生成 DOT 内容。请使用 Graphviz 将其转换为 SVG（例如：dot -Tsvg -o out.svg）".to_string(),
                     format: "dot".to_string(),
-                    output_path: Some(temp_dot_path),
+                    output_path: None,
                     statistics,
                     graph_data: None,
-                    dot_content: Some(dot_content),
+                    dot_content: Some(dot_content.clone()),
                     mermaid_content: None,
                     ascii_content: None,
                     details: {
                         let mut details = HashMap::new();
-                        details.insert(
-                            "note".to_string(),
-                            "需要 Graphviz 将 DOT 转换为 SVG".to_string(),
-                        );
+                        details.insert("note".to_string(), "需要 Graphviz 将 DOT 转换为 SVG".to_string());
+                        details.insert("hint".to_string(), "可改用 summarize_graph 获取摘要，或调用 convert_graph_to_image 进行转换".to_string());
+                        details.insert("suggested_tool".to_string(), "convert_graph_to_image".to_string());
+                        // 提供一个序列化后的建议参数示例（便于调用方直接使用）
+                        let example_args = serde_json::json!({
+                            "input_format": "dot",
+                            "input_content": dot_content,
+                            "output_format": "svg",
+                            "output_path": "./dependency.svg"
+                        }).to_string();
+                        details.insert("suggested_args".to_string(), example_args);
                         details
                     },
                 })
@@ -872,49 +904,38 @@ impl DependencyService {
             params.input_content.clone()
         };
 
-        // 创建临时 DOT 文件
-        let temp_dir = std::env::temp_dir();
-        let temp_dot_file = temp_dir.join(format!(
-            "gitai_graph_{}.dot",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-        ));
-
-        std::fs::write(&temp_dot_file, &dot_content)
-            .map_err(|e| format!("无法写入临时 DOT 文件: {}", e))?;
-
-        // 使用 Graphviz 转换
+        // 使用 Graphviz 转换（通过 stdin，避免在只读环境创建临时文件）
         let engine = params.engine.unwrap_or_else(|| "dot".to_string());
 
-        // 构建 Graphviz 命令
-        let output = std::process::Command::new(&engine)
+        use std::io::Write as _;
+        let mut child = std::process::Command::new(&engine)
             .arg("-T")
             .arg(&output_format)
             .arg("-o")
             .arg(&params.output_path)
-            .arg(&temp_dot_file)
-            .output()
-            .map_err(|e| {
-                format!(
-                    "无法执行 Graphviz 命令 '{}': {}\n请确保 Graphviz 已安装并在 PATH 中",
-                    engine, e
-                )
-            })?;
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("无法执行 Graphviz 命令 '{}': {}\n请确保 Graphviz 已安装并在 PATH 中", engine, e))?;
 
-        // 清理临时文件
-        let _ = std::fs::remove_file(&temp_dot_file);
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin
+                .write_all(dot_content.as_bytes())
+                .map_err(|e| format!("向 Graphviz 写入 DOT 内容失败: {}", e))?;
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("等待 Graphviz 进程结束失败: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!(
-                "Graphviz 转换失败: {}\n命令: {} -T{} -o {} {}",
+                "Graphviz 转换失败: {}\n命令: {} -T{} -o {} (stdin)",
                 stderr,
                 engine,
                 output_format,
-                params.output_path,
-                temp_dot_file.display()
+                params.output_path
             )
             .into());
         }

@@ -69,7 +69,47 @@ pub async fn execute_review_with_result(
     review_config: ReviewConfig,
 ) -> Result<ReviewResult, Box<dyn std::error::Error + Send + Sync>> {
     // 获取代码变更
-    let diff = crate::git::get_all_diff()?;
+    // 优先获取当前变更，如果没有则尝试获取最后一次提交
+    // 这样 MCP 调用时即使没有新变更也可以分析最近的提交
+    let diff = match crate::git::get_all_diff() {
+        Ok(d) => d,
+        Err(_) => {
+            // 如果没有当前变更，尝试获取最后一次提交
+            match crate::git::get_last_commit_diff() {
+                Ok(last_diff) if !last_diff.trim().is_empty() => {
+                    format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}")
+                }
+                Ok(_) => {
+                    // 最后一次提交为空
+                    return Ok(ReviewResult {
+                        success: true,
+                        message: "没有检测到代码变更".to_string(),
+                        summary: "没有需要评审的代码变更".to_string(),
+                        details: std::collections::HashMap::new(),
+                        findings: Vec::new(),
+                        score: Some(100),
+                        recommendations: Vec::new(),
+                    });
+                }
+                Err(e) => {
+                    // 无法获取任何 diff，可能是新仓库或空仓库
+                    log::warn!("无法获取代码变更: {e}");
+                    return Ok(ReviewResult {
+                        success: true,
+                        message: "无法获取代码变更，可能是新仓库或空仓库".to_string(),
+                        summary: "没有可用的代码变更进行评审".to_string(),
+                        details: std::collections::HashMap::new(),
+                        findings: Vec::new(),
+                        score: None,
+                        recommendations: vec![
+                            "请确保仓库中至少有一个提交".to_string(),
+                            "或者添加一些代码变更后再进行评审".to_string(),
+                        ],
+                    });
+                }
+            }
+        }
+    };
 
     // 如果没有变更，返回空结果
     if diff.trim().is_empty() {
@@ -101,21 +141,35 @@ pub async fn execute_review_with_result(
         });
     }
 
-    // 检查暂存状态
+    // 检查暂存状态与未跟踪文件、提交基线
     let has_unstaged = crate::git::has_unstaged_changes().unwrap_or(false);
     let has_staged = crate::git::has_staged_changes().unwrap_or(false);
+    let has_untracked = crate::git::has_untracked_changes().unwrap_or(false);
+    let has_commits = crate::git::has_any_commit();
 
-    if has_unstaged {
-        println!("💡 提示：检测到未暂存的代码变更");
-        println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
+    if has_unstaged || has_untracked {
+        if has_unstaged {
+            println!("💡 提示：检测到未暂存的代码变更");
+            println!("   使用 `git add .` 暂存所有变更，或使用 `git add <file>` 暂存特定文件");
+        }
+        if has_untracked {
+            println!("💡 提示：检测到未跟踪的新文件");
+            println!("   使用 `git add <file>` 开始跟踪这些文件");
+        }
         if has_staged {
             println!("   当前已暂存的变更也会被评审");
         }
-        println!("   📝 GitAI将分析所有变更（已暂存 + 未暂存）");
+        if !has_commits {
+            println!("   ⚠️ 当前仓库还没有任何提交（建议尽快 `git commit -m \"<msg>\"`）");
+        }
+        println!("   📝 GitAI将分析所有变更（已暂存 + 未暂存 + 未跟踪）");
         println!();
     } else if has_staged {
         println!("✅ 已暂存的代码准备就绪");
         println!("   📝 GitAI将分析已暂存的变更");
+    } else if !has_commits {
+        println!("💡 提示：仓库没有任何提交。请先进行一次提交以建立基线：");
+        println!("   git add -A && git commit -m \"init\"");
     } else {
         println!("🔍 检查未推送的提交...");
         println!("   📝 GitAI将分析最近的提交变更");

@@ -71,7 +71,7 @@ version = "0.1.0"
 
 [mcp.services]
 # Enabled services
-enabled = ["review", "commit", "scan", "analysis"]
+enabled = ["review", "commit", "scan", "analysis", "dependency", "deviation"]
 
 [mcp.services.review]
 # Review service configuration

@@ -230,8 +230,8 @@ pub struct McpServicesConfig {
 impl McpServicesConfig {
     /// 验证 MCP 服务配置
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-        // 验证启用的服务
-        let valid_services = ["review", "commit", "scan", "analysis", "dependency"];
+        // 验证启用的服务（支持 deviation 服务）
+        let valid_services = ["review", "commit", "scan", "analysis", "dependency", "deviation"];
         for service in &self.enabled {
             if !valid_services.contains(&service.as_str()) {
                 return Err(format!(
