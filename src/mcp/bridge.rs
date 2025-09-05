@@ -150,7 +150,9 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                                                     "properties": {
                                                         "path": {"type": "string", "description": "Optional repository root path"},
                                                         "tree_sitter": {"type": "boolean"},
-                                                        "security_scan": {"type": "boolean"}
+                                                        "security_scan": {"type": "boolean"},
+                                                        "issue_ids": {"type": "array", "items": {"type": "string"}},
+                                                        "space_id": {"type": "integer", "description": "Coding space ID (optional)"}
                                                     }
                                                 }
                                             },

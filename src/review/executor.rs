@@ -77,7 +77,7 @@ pub async fn execute_review_with_result(
             // 如果没有当前变更，尝试获取最后一次提交
             match crate::git::get_last_commit_diff() {
                 Ok(last_diff) if !last_diff.trim().is_empty() => {
-                    format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff)
+                    format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}")
                 }
                 Ok(_) => {
                     // 最后一次提交为空
@@ -93,7 +93,7 @@ pub async fn execute_review_with_result(
                 }
                 Err(e) => {
                     // 无法获取任何 diff，可能是新仓库或空仓库
-                    log::warn!("无法获取代码变更: {}", e);
+                    log::warn!("无法获取代码变更: {e}");
                     return Ok(ReviewResult {
                         success: true,
                         message: "无法获取代码变更，可能是新仓库或空仓库".to_string(),
@@ -167,14 +167,12 @@ pub async fn execute_review_with_result(
     } else if has_staged {
         println!("✅ 已暂存的代码准备就绪");
         println!("   📝 GitAI将分析已暂存的变更");
+    } else if !has_commits {
+        println!("💡 提示：仓库没有任何提交。请先进行一次提交以建立基线：");
+        println!("   git add -A && git commit -m \"init\"");
     } else {
-        if !has_commits {
-            println!("💡 提示：仓库没有任何提交。请先进行一次提交以建立基线：");
-            println!("   git add -A && git commit -m \"init\"");
-        } else {
-            println!("🔍 检查未推送的提交...");
-            println!("   📝 GitAI将分析最近的提交变更");
-        }
+        println!("🔍 检查未推送的提交...");
+        println!("   📝 GitAI将分析最近的提交变更");
     }
 
     // 如果启用了 tree-sitter 分析

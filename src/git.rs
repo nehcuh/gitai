@@ -58,12 +58,10 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
                     p.clone(),
                 ]) {
                     // exit code 1 表示存在差异，这是预期情况
-                    if code.is_none() || code == Some(1) || code == Some(0) {
-                        if !stdout.trim().is_empty() {
-                            combined.push_str(&stdout);
-                            if !combined.ends_with('\n') {
-                                combined.push('\n');
-                            }
+                    if (code.is_none() || code == Some(1) || code == Some(0)) && !stdout.trim().is_empty() {
+                        combined.push_str(&stdout);
+                        if !combined.ends_with('\n') {
+                            combined.push('\n');
                         }
                     }
                 }
@@ -218,7 +216,7 @@ pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send
     let commit_count: usize = log_output.trim().parse().unwrap_or(0);
     
     if commit_count == 0 {
-        return Err("仓库中没有任何提交".into());
+        Err("仓库中没有任何提交".into())
     } else if commit_count == 1 {
         // 只有一个提交，显示第一次提交的内容
         run_git(&[
@@ -288,7 +286,7 @@ pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error
             // 如果没有当前变更，尝试获取最后一次提交的 diff
             match get_last_commit_diff() {
                 Ok(last_diff) if !last_diff.trim().is_empty() => {
-                    Ok(format!("## 最后一次提交的变更 (Last Commit):\n{}", last_diff))
+                    Ok(format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}"))
                 }
                 _ => Err("没有检测到任何变更".into()),
             }

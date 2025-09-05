@@ -95,6 +95,10 @@ impl ReviewService {
             review_config.issue_ids = issue_ids;
         }
 
+        if let Some(space_id) = params.space_id {
+            review_config.space_id = Some(space_id);
+        }
+
         if let Some(scan_tool) = params.scan_tool {
             review_config.scan_tool = Some(scan_tool);
         }
@@ -238,7 +242,11 @@ impl crate::mcp::GitAiMcpService for ReviewService {
                         "issue_ids": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "关联的 Issue ID 列表 (可选，空数组表示不关联)"
+                            "description": "关联的 Issue ID 列表 (可选，空数组表示不关联；提供后将隐式启用偏离度分析)"
+                        },
+                        "space_id": {
+                            "type": "integer",
+                            "description": "Coding 空间（项目）ID（可选；提供则覆盖配置 devops.space_id）"
                         },
                         "scan_tool": {
                             "type": "string",
@@ -246,7 +254,7 @@ impl crate::mcp::GitAiMcpService for ReviewService {
                         },
                         "deviation_analysis": {
                             "type": "boolean",
-                            "description": "是否进行偏差分析 (可选，默认 false)"
+                            "description": "是否进行偏差分析 (可选，默认 false；若未提供则在存在 issue_ids 时自动启用)"
                         },
                         "format": {
                             "type": "string",
@@ -291,15 +299,17 @@ impl crate::mcp::GitAiMcpService for ReviewService {
 pub struct ReviewParams {
     /// 可选：指定仓库根路径（当 MCP 服务运行目录不是仓库根时需指定）
     pub path: Option<String>,
+    /// 可选：Coding 空间（项目）ID；如提供将覆盖配置中的 devops.space_id
+    pub space_id: Option<u64>,
     /// 是否启用 Tree-sitter 结构分析
     pub tree_sitter: Option<bool>,
     /// 是否启用安全扫描  
     pub security_scan: Option<bool>,
-    /// 关联的 Issue ID 列表
+    /// 关联的 Issue ID 列表（传入后将隐式启用偏离度分析）
     pub issue_ids: Option<Vec<String>>,
     /// 使用的扫描工具
     pub scan_tool: Option<String>,
-    /// 是否进行偏差分析
+    /// 是否进行偏差分析（可选，若未提供则在存在 issue_ids 时自动启用）
     pub deviation_analysis: Option<bool>,
     /// 输出格式
     pub format: Option<String>,
