@@ -92,18 +92,26 @@ pub async fn execute_review_with_result(
                     });
                 }
                 Err(e) => {
-                    // 无法获取任何 diff，可能是新仓库或空仓库
+                    // 无法获取任何 diff，可能是新仓库或空仓库，或 MCP 服务未在仓库目录执行
                     log::warn!("无法获取代码变更: {e}");
+
+                    // 在 details 中附带当前工作目录，方便排查
+                    let mut details = std::collections::HashMap::new();
+                    if let Ok(cwd) = std::env::current_dir() {
+                        details.insert("cwd".to_string(), cwd.display().to_string());
+                    }
+
                     return Ok(ReviewResult {
                         success: true,
-                        message: "无法获取代码变更，可能是新仓库或空仓库".to_string(),
+                        message: "无法获取代码变更，可能是新仓库、空仓库，或 MCP 服务不在 Git 仓库目录中运行".to_string(),
                         summary: "没有可用的代码变更进行评审".to_string(),
-                        details: std::collections::HashMap::new(),
+                        details,
                         findings: Vec::new(),
                         score: None,
                         recommendations: vec![
                             "请确保仓库中至少有一个提交".to_string(),
                             "或者添加一些代码变更后再进行评审".to_string(),
+                            "如果通过 MCP 调用，请在参数中设置 path 指向仓库根目录，或在仓库根目录启动 MCP 服务".to_string(),
                         ],
                     });
                 }
