@@ -64,7 +64,7 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
                     let len = meta.len();
                     if len > MAX_INLINE_SIZE {
                         should_skip_content = true;
-                        size_info = format!(" ({} bytes)", len);
+                        size_info = format!(" ({len} bytes)");
                     }
                 }
 

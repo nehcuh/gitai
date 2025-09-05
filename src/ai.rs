@@ -19,16 +19,6 @@ struct AiMessage {
     content: String,
 }
 
-/// AI响应
-#[derive(Deserialize)]
-struct AiResponse {
-    choices: Vec<AiChoice>,
-}
-
-#[derive(Deserialize)]
-struct AiChoice {
-    message: AiMessage,
-}
 
 pub async fn call_ai(
     config: &Config,
@@ -172,7 +162,7 @@ fn extract_content_from_ai_response(v: &Value) -> Option<String> {
     // OpenAI Chat Completions: choices[0].message.content (string)
     if let Some(s) = v.get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str()) {
@@ -181,7 +171,7 @@ fn extract_content_from_ai_response(v: &Value) -> Option<String> {
     // Some providers: choices[0].message.content is array of blocks with {type:"text", text:"..."}
     if let Some(arr) = v.get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_array()) {
@@ -202,7 +192,7 @@ fn extract_content_from_ai_response(v: &Value) -> Option<String> {
     // OpenAI text completions: choices[0].text
     if let Some(s) = v.get("choices")
         .and_then(|c| c.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("text"))
         .and_then(|t| t.as_str()) {
         return Some(s.to_string());
