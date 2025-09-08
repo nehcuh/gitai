@@ -2,7 +2,12 @@
 //!
 //! 这个示例展示了如何使用容器的统计和性能监控功能。
 
-#![allow(dead_code, clippy::uninlined_format_args, clippy::print_stdout, unused_imports)]
+#![allow(
+    dead_code,
+    clippy::uninlined_format_args,
+    clippy::print_stdout,
+    unused_imports
+)]
 
 use gitai::infrastructure::container::ServiceContainer;
 

@@ -21,11 +21,11 @@ async fn test_minimal_simple_api() {
     }
 
     println!("注册服务...");
-container
+    container
         .register_singleton_simple(|| {
             unsafe {
                 CALL_COUNT += 1;
-let cnt = CALL_COUNT;
+                let cnt = CALL_COUNT;
                 println!("工厂函数被调用，次数: {}", cnt);
             }
             Ok::<_, ContainerError>(TestService { value: 42 })
@@ -62,7 +62,7 @@ async fn test_direct_comparison() {
         println!("测试1: 直接provider");
         let container = ServiceContainer::new();
 
-let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = call_count.clone();
         container
             .register_singleton_simple(move || {
@@ -77,7 +77,10 @@ let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
             Ok(service) => println!("✓ 直接provider成功: {:?}", service),
             Err(e) => println!("✗ 直接provider失败: {:?}", e),
         }
-println!("直接provider调用次数: {}", call_count.load(std::sync::atomic::Ordering::SeqCst));
+        println!(
+            "直接provider调用次数: {}",
+            call_count.load(std::sync::atomic::Ordering::SeqCst)
+        );
     }
 
     // 测试2: 闭包语法（推荐方式）
@@ -92,7 +95,9 @@ println!("直接provider调用次数: {}", call_count.load(std::sync::atomic::Or
             .register_singleton_simple(move || {
                 let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                 println!("闭包工厂被调用: {}", n);
-                Ok::<_, ContainerError>(TestService { value: captured_value })
+                Ok::<_, ContainerError>(TestService {
+                    value: captured_value,
+                })
             })
             .await;
         println!("闭包语法注册完成");
@@ -118,7 +123,7 @@ async fn test_factory_capture() {
     let value = 42;
 
     println!("使用捕获的值创建工厂...");
-container
+    container
         .register_singleton_simple(move || {
             println!("工厂执行，使用值: {}", value);
             Ok::<_, ContainerError>(TestService { value })
@@ -139,12 +144,12 @@ async fn test_result_type_explicit() {
     let container = ServiceContainer::new();
 
     // 尝试最显式的类型声明（使用闭包语法）
-container
-            .register_singleton_simple(|| -> Result<TestService, ContainerError> {
-                println!("显式工厂被调用");
-                Ok(TestService { value: 999 })
-            })
-            .await;
+    container
+        .register_singleton_simple(|| -> Result<TestService, ContainerError> {
+            println!("显式工厂被调用");
+            Ok(TestService { value: 999 })
+        })
+        .await;
 
     println!("显式注册完成，解析服务...");
     match container.resolve::<TestService>().await {
@@ -160,7 +165,7 @@ async fn test_with_println() {
     let container = ServiceContainer::new();
 
     println!("注册前");
-container
+    container
         .register_singleton_simple(|| {
             println!("工厂函数内部 - 开始");
             let service = TestService { value: 555 };

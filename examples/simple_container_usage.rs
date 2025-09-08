@@ -185,15 +185,19 @@ async fn test_error_handling() {
     assert!(result.is_err(), "应该返回错误");
 
     // 注册一个总是失败的服务
-container
-        .register_singleton_simple(|| -> Result<Config, gitai::infrastructure::container::ContainerError> {
-            Err(gitai::infrastructure::container::ContainerError::ServiceCreationFailed {
-                service_type: "Config".to_string(),
-                service_name: Some("Config".to_string()),
-                reason: "配置错误".to_string(),
-                source_error: None,
-            })
-        })
+    container
+        .register_singleton_simple(
+            || -> Result<Config, gitai::infrastructure::container::ContainerError> {
+                Err(
+                    gitai::infrastructure::container::ContainerError::ServiceCreationFailed {
+                        service_type: "Config".to_string(),
+                        service_name: Some("Config".to_string()),
+                        reason: "配置错误".to_string(),
+                        source_error: None,
+                    },
+                )
+            },
+        )
         .await;
 
     let result = container.resolve::<Config>().await;

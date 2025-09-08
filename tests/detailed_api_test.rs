@@ -48,7 +48,7 @@ async fn test_direct_closure_vs_simple() {
         println!("\n测试2: 闭包语法");
         let container = ServiceContainer::new();
 
-container
+        container
             .register_singleton_simple(|| {
                 println!("  闭包工厂被调用");
                 Ok::<_, ContainerError>(TestService { value: 222 })
@@ -97,7 +97,7 @@ async fn test_service_type_registration() {
     println!("注册前服务类型ID: {:?}", TypeId::of::<TestService>());
 
     // 使用闭包语法注册（推荐方式）
-container
+    container
         .register_singleton_simple(|| Ok::<_, ContainerError>(TestService { value: 555 }))
         .await;
 

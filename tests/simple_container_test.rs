@@ -4,9 +4,7 @@
 
 #![allow(clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::{
-    ContainerError, ServiceContainer, ServiceProvider,
-};
+use gitai::infrastructure::container::{ContainerError, ServiceContainer, ServiceProvider};
 use std::sync::Arc;
 
 /// 测试用的简单服务

@@ -23,7 +23,7 @@ async fn demo_simple_singleton() {
     let container = ServiceContainer::new();
 
     // 方法1: 使用直接的闭包语法（推荐）
-container
+    container
         .register_singleton_simple(|| Ok(SimpleService { value: 42 }))
         .await;
 
@@ -44,7 +44,7 @@ async fn demo_simple_transient() {
     let container = ServiceContainer::new();
 
     // 使用直接的闭包语法
-container
+    container
         .register_transient_simple(|| Ok(SimpleService { value: 100 }))
         .await;
 
@@ -68,7 +68,7 @@ async fn demo_complex_service() {
     let container = ServiceContainer::new();
 
     // 注册复杂服务
-container
+    container
         .register_singleton_simple(|| {
             Ok(ComplexService {
                 name: "DatabaseService".to_string(),
@@ -91,11 +91,11 @@ async fn demo_multiple_services() {
     let container = ServiceContainer::new();
 
     // 注册多个服务
-container
+    container
         .register_singleton_simple(|| Ok(SimpleService { value: 1 }))
         .await;
 
-container
+    container
         .register_transient_simple(|| {
             Ok(ComplexService {
                 name: "TransientService".to_string(),
@@ -122,7 +122,7 @@ async fn demo_concurrent_usage() {
     let container = ServiceContainer::new();
 
     // 注册单例服务
-container
+    container
         .register_singleton_simple(|| Ok(SimpleService { value: 777 }))
         .await;
 
@@ -163,7 +163,7 @@ async fn demo_error_handling() {
     }
 
     // 注册一个总是失败的服务
-container
+    container
         .register_singleton_simple(|| -> Result<SimpleService, ContainerError> {
             Err(ContainerError::ServiceCreationFailed {
                 service_type: "SimpleService".to_string(),
@@ -179,4 +179,3 @@ container
         Err(e) => println!("创建失败错误: {:?}", e),
     }
 }
-

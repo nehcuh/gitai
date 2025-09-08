@@ -1,4 +1,10 @@
-#![allow(dead_code, clippy::uninlined_format_args, clippy::print_stdout, clippy::unnecessary_cast, clippy::io_other_error)]
+#![allow(
+    dead_code,
+    clippy::uninlined_format_args,
+    clippy::print_stdout,
+    clippy::unnecessary_cast,
+    clippy::io_other_error
+)]
 //! DI容器v2的性能基准测试
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
@@ -66,7 +72,7 @@ fn bench_simple_service_resolution(c: &mut Criterion) {
 
                         // 解析服务
                         let mut results = Vec::new();
-for _ in 0..100 {
+                        for _ in 0..100 {
                             let service = container.resolve::<SimpleService>().await.unwrap();
                             results.push(service.value);
                         }
@@ -217,7 +223,7 @@ fn bench_concurrent_resolution(c: &mut Criterion) {
                         }
 
                         // 等待所有任务完成
-let results = future::join_all(handles).await;
+                        let results = future::join_all(handles).await;
                         let sum: i32 = results.into_iter().map(|r| r.unwrap()).sum();
 
                         black_box(sum)
@@ -335,11 +341,10 @@ fn bench_error_handling(c: &mut Criterion) {
                 let container = ServiceContainer::new();
 
                 // 注册总是失败的服务
-container.register::<SimpleService, _>(|_| {
-                    Err::<SimpleService, Box<dyn std::error::Error + Send + Sync>>(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Creation failed",
-                    )))
+                container.register::<SimpleService, _>(|_| {
+                    Err::<SimpleService, Box<dyn std::error::Error + Send + Sync>>(Box::new(
+                        std::io::Error::new(std::io::ErrorKind::Other, "Creation failed"),
+                    ))
                 });
 
                 match container.resolve::<SimpleService>().await {
