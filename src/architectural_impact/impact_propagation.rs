@@ -350,8 +350,8 @@ impl ImpactPropagation {
         }
 
         // 按影响分数排序
-        direct_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap());
-        indirect_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap());
+        direct_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap_or(std::cmp::Ordering::Equal));
+        indirect_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap_or(std::cmp::Ordering::Equal));
 
         let total_nodes = direct_impacts.len() + indirect_impacts.len();
         let average_score = if total_nodes > 0 {
@@ -429,7 +429,7 @@ impl ImpactPropagation {
             .filter(|(id, _)| !source_nodes.contains(*id))
             .map(|(id, (score, _, _))| (id.clone(), *score))
             .collect();
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let targets: Vec<String> = candidates.into_iter().take(5).map(|(id, _)| id).collect();
 
         // 对每个目标，尝试找到从源节点到它的最短路径
@@ -450,7 +450,7 @@ impl ImpactPropagation {
         }
 
         // 按权重排序，只保留前5条关键路径
-        paths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        paths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
         paths.truncate(5);
 
         paths

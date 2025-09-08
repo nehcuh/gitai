@@ -71,3 +71,7 @@ graph_summary*.json
 # Debug scripts
 debug_*.rs
 debug_*.sh
+
+# Project intermediates
+.tasks/
+*.backup

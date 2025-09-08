@@ -216,7 +216,7 @@ pub async fn export_summary_string(
             .iter()
             .map(|(id, n)| (id.clone(), n.importance_score))
             .collect();
-        ids.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        ids.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         for (id, _) in ids.into_iter().take(20) {
             seed_ids.push(id);
         }
@@ -257,7 +257,7 @@ pub async fn export_summary_string(
                 .map(|n| (id.clone(), n.importance_score))
         })
         .collect();
-    top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     if top.len() > top_k {
         top.truncate(top_k);
     }
@@ -313,7 +313,7 @@ pub async fn export_summary_string(
                     })
                 })
                 .collect();
-            samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             let sample_labels: Vec<String> = samples
                 .into_iter()
                 .take(max_nodes_per_community)
@@ -469,7 +469,7 @@ pub async fn export_summary_string(
                             .map(|n| (id.clone(), n.importance_score))
                     })
                     .collect();
-                t.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                t.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 if t.len() > top_vec.len() { /* 保持不扩增 */ }
                 top_vec = t;
                 reduced_radius = true;
