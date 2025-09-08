@@ -532,4 +532,3 @@ impl Default for GitConfigOptions {
     }
 }
 
-use crate::domain::entities::common::ProgrammingLanguage;

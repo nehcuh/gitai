@@ -7,10 +7,6 @@ pub mod review;
 pub mod scan;
 pub mod common;
 
-pub use git::*;
-pub use review::*;
-pub use scan::*;
-pub use common::*;
 
 use serde::{Serialize, Deserialize};
 use std::fmt;

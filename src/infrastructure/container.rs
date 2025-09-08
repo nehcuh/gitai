@@ -503,37 +503,43 @@ impl ScopeManager {
         let mut scope_stack = self.active_scope_stack.write().await;
         let mut instances = self.scope_instances.write().await;
         
-        let scope_info = scopes.get_mut(&scope_id)
-            .ok_or_else(|| ContainerError::ScopeError {
-                scope_id,
-                scope_name: "unknown".to_string(),
-                operation: "end_scope".to_string(),
-                reason: "Scope not found".to_string(),
-                current_state: ScopeState::Ended,
-            })?;
-        
-        if scope_info.state != ScopeState::Active {
-            return Err(ContainerError::ScopeError {
-                scope_id,
-                scope_name: scope_info.name.clone(),
-                operation: "end_scope".to_string(),
-                reason: format!("Cannot end scope in state {:?}", scope_info.state),
-                current_state: scope_info.state.clone(),
-            });
-        }
-        
-        // 检查是否有子作用域
-        if scope_info.child_count > 0 {
-            return Err(ContainerError::ScopeError {
-                scope_id,
-                scope_name: scope_info.name.clone(),
-                operation: "end_scope".to_string(),
-                reason: format!("Cannot end scope with {} active child scopes", scope_info.child_count),
-                current_state: scope_info.state.clone(),
-            });
-        }
-        
-        scope_info.state = ScopeState::Ending;
+        // 先获取并校验作用域状态，同时记录父作用域ID，然后将当前作用域标记为 Ending
+        let parent_id_opt = {
+            let scope_info = scopes.get_mut(&scope_id)
+                .ok_or_else(|| ContainerError::ScopeError {
+                    scope_id,
+                    scope_name: "unknown".to_string(),
+                    operation: "end_scope".to_string(),
+                    reason: "Scope not found".to_string(),
+                    current_state: ScopeState::Ended,
+                })?;
+            
+            if scope_info.state != ScopeState::Active {
+                return Err(ContainerError::ScopeError {
+                    scope_id,
+                    scope_name: scope_info.name.clone(),
+                    operation: "end_scope".to_string(),
+                    reason: format!("Cannot end scope in state {:?}", scope_info.state),
+                    current_state: scope_info.state.clone(),
+                });
+            }
+            
+            // 检查是否有子作用域
+            if scope_info.child_count > 0 {
+                return Err(ContainerError::ScopeError {
+                    scope_id,
+                    scope_name: scope_info.name.clone(),
+                    operation: "end_scope".to_string(),
+                    reason: format!("Cannot end scope with {} active child scopes", scope_info.child_count),
+                    current_state: scope_info.state.clone(),
+                });
+            }
+            
+            // 记录父作用域ID，并先标记为 Ending
+            let parent_id = scope_info.parent_id;
+            scope_info.state = ScopeState::Ending;
+            parent_id
+        };
         
         // 清理作用域实例
         instances.remove(&scope_id);
@@ -542,9 +548,21 @@ impl ScopeManager {
         if let Some(pos) = scope_stack.iter().position(|&id| id == scope_id) {
             scope_stack.remove(pos);
         }
+
+        // 更新父作用域的子计数（当子作用域被结束时）
+        if let Some(parent_id) = parent_id_opt {
+            if let Some(parent_info) = scopes.get_mut(&parent_id) {
+                if parent_info.child_count > 0 {
+                    parent_info.child_count -= 1;
+                }
+            }
+        }
         
-        scope_info.state = ScopeState::Ended;
-        scope_info.ended_at = Some(std::time::Instant::now());
+        // 最后将当前作用域状态置为 Ended，并记录结束时间
+        if let Some(scope_info) = scopes.get_mut(&scope_id) {
+            scope_info.state = ScopeState::Ended;
+            scope_info.ended_at = Some(std::time::Instant::now());
+        }
         
         Ok(())
     }
