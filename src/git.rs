@@ -52,7 +52,8 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
             // 过滤过大的或二进制/资产类文件，避免生成巨大的 diff
             const MAX_INLINE_SIZE: u64 = 1_000_000; // 1MB 上限
             let skip_exts = [
-                "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "pdf", "zip", "tar", "gz", "bz2", "xz",
+                "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "pdf", "zip", "tar", "gz", "bz2",
+                "xz",
             ];
 
             for p in &untracked {
@@ -84,7 +85,9 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
                     p.clone(),
                 ]) {
                     // exit code 1 表示存在差异，这是预期情况
-                    if (code.is_none() || code == Some(1) || code == Some(0)) && !stdout.trim().is_empty() {
+                    if (code.is_none() || code == Some(1) || code == Some(0))
+                        && !stdout.trim().is_empty()
+                    {
                         combined.push_str(&stdout);
                         if !combined.ends_with('\n') {
                             combined.push('\n');
@@ -120,7 +123,9 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
     if !unstaged_diff.trim().is_empty() {
         all_diff.push_str("## 未暂存的变更 (Unstaged Changes):\n");
         all_diff.push_str(&unstaged_diff);
-        if !all_diff.ends_with('\n') { all_diff.push('\n'); }
+        if !all_diff.ends_with('\n') {
+            all_diff.push('\n');
+        }
     }
 
     if !untracked_section.trim().is_empty() {
@@ -238,9 +243,9 @@ pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send
         "--count".to_string(),
         "HEAD".to_string(),
     ])?;
-    
+
     let commit_count: usize = log_output.trim().parse().unwrap_or(0);
-    
+
     if commit_count == 0 {
         Err("仓库中没有任何提交".into())
     } else if commit_count == 1 {
@@ -252,11 +257,7 @@ pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send
         ])
     } else {
         // 有多个提交，显示最后一次提交与前一次的差异
-        run_git(&[
-            "diff".to_string(),
-            "HEAD~1".to_string(),
-            "HEAD".to_string(),
-        ])
+        run_git(&["diff".to_string(), "HEAD~1".to_string(), "HEAD".to_string()])
     }
 }
 
@@ -321,21 +322,26 @@ pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error
 }
 
 /// 过滤掉被 .gitignore 忽略的文件路径
-pub fn filter_ignored_files(paths: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn filter_ignored_files(
+    paths: Vec<String>,
+) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     if paths.is_empty() {
         return Ok(paths);
     }
-    
+
     // 使用 git check-ignore 来检查哪些文件被忽略
     let output = Command::new("git")
         .arg("check-ignore")
         .args(&paths)
         .output()?;
-    
+
     let ignored = String::from_utf8_lossy(&output.stdout);
     let ignored_set: std::collections::HashSet<_> = ignored.lines().collect();
-    
-    Ok(paths.into_iter().filter(|p| !ignored_set.contains(p.as_str())).collect())
+
+    Ok(paths
+        .into_iter()
+        .filter(|p| !ignored_set.contains(p.as_str()))
+        .collect())
 }
 
 /// 获取当前仓库中被跟踪的文件列表（排除 .gitignore 中的文件）
@@ -368,7 +374,11 @@ pub fn has_untracked_changes() -> Result<bool, Box<dyn std::error::Error + Send 
 
 /// 是否存在任何提交
 pub fn has_any_commit() -> bool {
-    if let Ok((code, _out, _err)) = run_git_capture(&["rev-parse".to_string(), "--verify".to_string(), "HEAD".to_string()]) {
+    if let Ok((code, _out, _err)) = run_git_capture(&[
+        "rev-parse".to_string(),
+        "--verify".to_string(),
+        "HEAD".to_string(),
+    ]) {
         return code == Some(0);
     }
     false
@@ -377,7 +387,7 @@ pub fn has_any_commit() -> bool {
 /// 检查文件是否被 .gitignore 忽略
 pub fn is_file_ignored(file_path: &Path) -> bool {
     let path_str = file_path.to_string_lossy();
-    
+
     // 使用 git check-ignore 命令检查文件
     match Command::new("git")
         .arg("check-ignore")

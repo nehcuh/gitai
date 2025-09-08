@@ -1,24 +1,16 @@
 //! 领域层接口定义
-//! 
+//!
 //! 定义所有外部依赖的抽象接口，实现依赖倒置原则
 
 use std::sync::Arc;
 
-pub mod config;
-pub mod git;
 pub mod ai;
 pub mod cache;
-pub mod scan;
-pub mod review;
+pub mod config;
 pub mod devops;
-
-pub use config::*;
-pub use git::*;
-pub use ai::*;
-pub use cache::*;
-pub use scan::*;
-pub use review::*;
-pub use devops::*;
+pub mod git;
+pub mod review;
+pub mod scan;
 
 use async_trait::async_trait;
 
@@ -27,12 +19,12 @@ use async_trait::async_trait;
 pub trait VersionedInterface {
     /// 获取当前接口版本
     fn interface_version(&self) -> &'static str;
-    
+
     /// 获取支持的版本列表
     fn supported_versions(&self) -> Vec<&'static str> {
         vec![self.interface_version()]
     }
-    
+
     /// 检查是否支持指定版本
     fn supports_version(&self, version: &str) -> bool {
         self.supported_versions().contains(&version)
@@ -45,10 +37,13 @@ pub trait VersionedInterface {
 pub trait ConfigurableInterface {
     /// 验证配置
     async fn validate_config(&self) -> Result<(), crate::domain::errors::ConfigError>;
-    
+
     /// 更新配置
-    async fn update_config(&self, config: serde_json::Value) -> Result<(), crate::domain::errors::ConfigError>;
-    
+    async fn update_config(
+        &self,
+        config: serde_json::Value,
+    ) -> Result<(), crate::domain::errors::ConfigError>;
+
     /// 获取当前配置
     async fn get_config(&self) -> Result<serde_json::Value, crate::domain::errors::ConfigError>;
 }
@@ -78,7 +73,7 @@ impl HealthCheckResult {
             details: None,
         }
     }
-    
+
     pub fn unhealthy(message: impl Into<String>) -> Self {
         Self {
             is_healthy: false,
@@ -87,7 +82,7 @@ impl HealthCheckResult {
             details: None,
         }
     }
-    
+
     pub fn degraded(message: impl Into<String>) -> Self {
         Self {
             is_healthy: true,
@@ -114,10 +109,10 @@ pub enum HealthStatus {
 pub trait MetricsInterface {
     /// 记录指标
     async fn record_metric(&self, name: &str, value: f64, tags: Vec<(&str, &str)>);
-    
+
     /// 增加计数器
     async fn increment_counter(&self, name: &str, tags: Vec<(&str, &str)>);
-    
+
     /// 记录直方图
     async fn record_histogram(&self, name: &str, value: f64, tags: Vec<(&str, &str)>);
 }
@@ -126,13 +121,13 @@ pub trait MetricsInterface {
 pub trait LoggingInterface {
     /// 记录调试日志
     fn log_debug(&self, message: &str);
-    
+
     /// 记录信息日志
     fn log_info(&self, message: &str);
-    
+
     /// 记录警告日志
     fn log_warning(&self, message: &str);
-    
+
     /// 记录错误日志
     fn log_error(&self, message: &str);
 }
@@ -142,7 +137,7 @@ pub trait LoggingInterface {
 pub trait DisposableInterface {
     /// 清理资源
     async fn dispose(&self) -> Result<(), crate::domain::errors::DomainError>;
-    
+
     /// 检查是否需要清理
     fn needs_disposal(&self) -> bool;
 }
@@ -152,7 +147,7 @@ pub trait DisposableInterface {
 pub trait ServiceStatusInterface {
     /// 获取服务状态
     async fn get_status(&self) -> ServiceStatus;
-    
+
     /// 获取服务统计信息
     async fn get_statistics(&self) -> ServiceStatistics;
 }
@@ -219,34 +214,35 @@ impl Default for ServiceStatistics {
 pub trait ServiceRegistry {
     /// 注册服务
     fn register_service<T: VersionedInterface + Send + Sync + 'static>(
-        &mut self, 
-        name: &str, 
-        service: Arc<T>
+        &mut self,
+        name: &str,
+        service: Arc<T>,
     ) -> Result<(), String>;
-    
+
     /// 获取服务
     fn get_service<T: VersionedInterface + Send + Sync + 'static>(
-        &self, 
-        name: &str
+        &self,
+        name: &str,
     ) -> Option<Arc<T>>;
-    
+
     /// 列出所有服务
-    fn list_services(&self
-    ) -> Vec<(&str, &str, &str)>; // (name, version, interface_type)
+    fn list_services(&self) -> Vec<(&str, &str, &str)>; // (name, version, interface_type)
 }
 
 /// 服务发现trait
 #[async_trait]
 pub trait ServiceDiscovery {
     /// 发现服务
-    async fn discover_service(&self, 
-        name: &str, 
-        version_requirement: Option<&str>
+    async fn discover_service(
+        &self,
+        name: &str,
+        version_requirement: Option<&str>,
     ) -> Result<ServiceEndpoint, DiscoveryError>;
-    
+
     /// 健康检查
-    async fn health_check(&self, 
-        endpoint: &ServiceEndpoint
+    async fn health_check(
+        &self,
+        endpoint: &ServiceEndpoint,
     ) -> Result<HealthCheckResult, DiscoveryError>;
 }
 
@@ -274,7 +270,9 @@ impl std::fmt::Display for DiscoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DiscoveryError::ServiceNotFound(name) => write!(f, "Service not found: {}", name),
-            DiscoveryError::NoHealthyInstances(name) => write!(f, "No healthy instances for service: {}", name),
+            DiscoveryError::NoHealthyInstances(name) => {
+                write!(f, "No healthy instances for service: {}", name)
+            }
             DiscoveryError::NetworkError(msg) => write!(f, "Network error: {}", msg),
             DiscoveryError::Timeout => write!(f, "Discovery timeout"),
         }

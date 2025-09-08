@@ -1,9 +1,9 @@
 //! 安全扫描服务接口定义
 
+use crate::domain::errors::DomainError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::domain::errors::DomainError;
 
 /// 扫描类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,13 +73,13 @@ pub struct ScanSummary {
 pub trait ScanService: Send + Sync {
     /// 执行扫描
     async fn scan(&self, config: ScanConfig) -> Result<ScanResult, DomainError>;
-    
+
     /// 批量扫描
     async fn batch_scan(&self, configs: Vec<ScanConfig>) -> Result<Vec<ScanResult>, DomainError>;
-    
+
     /// 获取扫描历史
     async fn scan_history(&self, limit: Option<usize>) -> Result<Vec<ScanResult>, DomainError>;
-    
+
     /// 检查扫描规则
     async fn validate_rules(&self, rules_path: &str) -> Result<Vec<RuleValidation>, DomainError>;
 }
@@ -97,7 +97,7 @@ pub struct RuleValidation {
 pub trait ScanProvider: Send + Sync {
     /// 创建扫描服务
     fn create_service(&self, config: ScanConfig) -> Result<Box<dyn ScanService>, DomainError>;
-    
+
     /// 支持的扫描类型
     fn supported_scan_types(&self) -> Vec<ScanType>;
 }

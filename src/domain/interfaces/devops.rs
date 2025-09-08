@@ -1,9 +1,9 @@
 //! DevOps服务接口定义
 
+use crate::domain::errors::DomainError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::domain::errors::DomainError;
 
 /// DevOps平台类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,26 +97,46 @@ pub enum BuildStatus {
 #[async_trait]
 pub trait DevOpsService: Send + Sync {
     /// 获取Issue列表
-    async fn get_issues(&self, status: Option<IssueStatus>, limit: Option<usize>) -> Result<Vec<IssueInfo>, DomainError>;
-    
+    async fn get_issues(
+        &self,
+        status: Option<IssueStatus>,
+        limit: Option<usize>,
+    ) -> Result<Vec<IssueInfo>, DomainError>;
+
     /// 获取Issue详情
     async fn get_issue(&self, issue_id: &str) -> Result<IssueInfo, DomainError>;
-    
+
     /// 更新Issue状态
-    async fn update_issue_status(&self, issue_id: &str, status: IssueStatus) -> Result<(), DomainError>;
-    
+    async fn update_issue_status(
+        &self,
+        issue_id: &str,
+        status: IssueStatus,
+    ) -> Result<(), DomainError>;
+
     /// 获取Pull Request列表
-    async fn get_pull_requests(&self, status: Option<PRStatus>, limit: Option<usize>) -> Result<Vec<PullRequestInfo>, DomainError>;
-    
+    async fn get_pull_requests(
+        &self,
+        status: Option<PRStatus>,
+        limit: Option<usize>,
+    ) -> Result<Vec<PullRequestInfo>, DomainError>;
+
     /// 获取Pull Request详情
     async fn get_pull_request(&self, pr_id: &str) -> Result<PullRequestInfo, DomainError>;
-    
+
     /// 获取构建历史
-    async fn get_builds(&self, branch: Option<&str>, limit: Option<usize>) -> Result<Vec<BuildInfo>, DomainError>;
-    
+    async fn get_builds(
+        &self,
+        branch: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<BuildInfo>, DomainError>;
+
     /// 触发构建
-    async fn trigger_build(&self, branch: &str, parameters: Option<HashMap<String, String>>) -> Result<String, DomainError>;
-    
+    async fn trigger_build(
+        &self,
+        branch: &str,
+        parameters: Option<HashMap<String, String>>,
+    ) -> Result<String, DomainError>;
+
     /// 获取构建状态
     async fn get_build_status(&self, build_id: &str) -> Result<BuildInfo, DomainError>;
 }
@@ -126,7 +146,7 @@ pub trait DevOpsService: Send + Sync {
 pub trait DevOpsProvider: Send + Sync {
     /// 创建DevOps服务
     fn create_service(&self, config: DevOpsConfig) -> Result<Box<dyn DevOpsService>, DomainError>;
-    
+
     /// 支持的DevOps平台
     fn supported_platforms(&self) -> Vec<DevOpsPlatform>;
 }

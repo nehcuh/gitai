@@ -1,8 +1,8 @@
 //! 安全扫描相关实体
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// 扫描配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

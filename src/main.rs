@@ -1,3 +1,11 @@
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::collapsible_else_if,
+    clippy::wildcard_in_or_patterns,
+    clippy::too_many_arguments,
+    clippy::unnecessary_map_or
+)]
+
 // Use modules from the library crate
 use gitai::{
     args::{Args, Command, ConfigAction, PromptAction},

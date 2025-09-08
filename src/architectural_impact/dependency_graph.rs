@@ -701,7 +701,8 @@ impl DependencyGraph {
             .iter()
             .map(|(id, node)| (id.clone(), node.importance_score))
             .collect();
-        nodes_by_importance.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        nodes_by_importance
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // 对每个重要节点，找到其关键依赖路径
         for (node_id, _) in nodes_by_importance.iter().take(top_n) {

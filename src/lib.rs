@@ -1,3 +1,6 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::multiple_bound_locations)]
+
 // GitAI Library
 // 提供AI驱动的Git工作流功能
 
@@ -49,12 +52,10 @@ pub use architectural_impact::{ArchitecturalImpactAnalysis, BreakingChange, Risk
 pub use config::Config;
 pub use context::{Issue, OperationContext, OperationOptions};
 pub use error::{GitAIError, Result};
-pub use utils::error_handling::{SafeResult, DomainErrorHandler, convenience};
 pub use project_insights::{InsightsGenerator, ProjectInsights};
 pub use prompts::{PromptContext, PromptManager};
 pub use tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
+pub use utils::error_handling::{convenience, DomainErrorHandler, SafeResult};
 
 // 导出新的基础设施组件
-pub use infrastructure::{
-    ServiceContainer, ContainerError,
-};
+pub use infrastructure::{ContainerError, ServiceContainer};

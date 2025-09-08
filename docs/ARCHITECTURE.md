@@ -257,6 +257,54 @@ GitAI的核心价值在于将多个维度的数据融合分析，提供比单一
 - 逐步探索和使用更多功能
 - 每个功能都有独立的价值
 
+## 9. 依赖注入容器（v2）
+
+GitAI 使用简化且高性能的 DI 容器（v2）作为默认实现：
+
+- 生命周期：Singleton / Transient / Scoped（三种模式）
+- 并发：DashMap + OnceCell 保证并发安全与单例只创建一次
+- 作用域：支持 begin_scope / end_scope，按作用域缓存实例
+- 统计：提供总解析次数与缓存命中率（命中/未命中统计）
+- 简化注册 API：
+  - register_singleton_simple(|| Ok(service))
+  - register_transient_simple(|| Ok(service))
+  - register_scoped_simple(|| Ok(service))
+
+示例：
+
+```rust
+let container = ServiceContainer::new();
+
+// 单例注册
+container.register_singleton_simple(|| Ok(MyService { value: 42 })).await;
+
+// 解析
+let svc = container.resolve::<MyService>().await?;
+assert_eq!(svc.value, 42);
+
+// 作用域
+container.begin_scope().await;
+container.register_scoped_simple(|| Ok(ScopedService {})).await;
+let s1 = container.resolve::<ScopedService>().await?;
+let s2 = container.resolve::<ScopedService>().await?;
+// 在同一作用域内，值应保持一致（实现可能返回同一实例或等价实例）
+assert_eq!(s1.value(), s2.value());
+
+// 统计
+let stats = container.get_stats();
+println!("total={}, hit_rate={:.1}%", stats.total(), stats.hit_rate() * 100.0);
+```
+
+注意：v2 是默认实现；旧版 v1 已移除。若你看到文档提到 ServiceProvider trait 的使用方式，请优先采用上述简化 API 或传入带容器参数的闭包注册：
+
+```rust
+// 原始闭包风格（需要容器引用）
+let provider = |_c: &ServiceContainer| -> Result<MyService, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(MyService::new())
+};
+container.register::<MyService, _>(provider);
+```
+
 ## 10. MCP 集成架构
 
 GitAI通过Model Context Protocol (MCP) 提供与LLM客户端的无缝集成，实现AI辅助编程的完整生态。

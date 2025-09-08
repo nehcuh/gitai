@@ -350,8 +350,16 @@ impl ImpactPropagation {
         }
 
         // 按影响分数排序
-        direct_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap_or(std::cmp::Ordering::Equal));
-        indirect_impacts.sort_by(|a, b| b.impact_score.partial_cmp(&a.impact_score).unwrap_or(std::cmp::Ordering::Equal));
+        direct_impacts.sort_by(|a, b| {
+            b.impact_score
+                .partial_cmp(&a.impact_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        indirect_impacts.sort_by(|a, b| {
+            b.impact_score
+                .partial_cmp(&a.impact_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let total_nodes = direct_impacts.len() + indirect_impacts.len();
         let average_score = if total_nodes > 0 {
@@ -450,7 +458,11 @@ impl ImpactPropagation {
         }
 
         // 按权重排序，只保留前5条关键路径
-        paths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+        paths.sort_by(|a, b| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         paths.truncate(5);
 
         paths

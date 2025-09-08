@@ -2,6 +2,8 @@
 //
 // 这是一个独立的 MCP 服务器，可以通过 stdio 与 LLM 客户端通信
 
+#![allow(clippy::uninlined_format_args, clippy::unnecessary_map_or)]
+
 use clap::{Parser, Subcommand};
 use gitai::config::Config;
 use gitai::mcp::bridge;

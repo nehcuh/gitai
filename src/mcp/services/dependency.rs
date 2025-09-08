@@ -403,10 +403,7 @@ impl DependencyService {
                         Ok(conv) => {
                             return Ok(DependencyResult {
                                 success: true,
-                                message: format!(
-                                    "依赖图已导出为 SVG: {}",
-                                    conv.output_path
-                                ),
+                                message: format!("依赖图已导出为 SVG: {}", conv.output_path),
                                 format: "svg".to_string(),
                                 output_path: Some(conv.output_path),
                                 statistics,
@@ -917,7 +914,12 @@ impl DependencyService {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| format!("无法执行 Graphviz 命令 '{}': {}\n请确保 Graphviz 已安装并在 PATH 中", engine, e))?;
+            .map_err(|e| {
+                format!(
+                    "无法执行 Graphviz 命令 '{}': {}\n请确保 Graphviz 已安装并在 PATH 中",
+                    engine, e
+                )
+            })?;
 
         if let Some(stdin) = child.stdin.as_mut() {
             stdin
@@ -932,10 +934,7 @@ impl DependencyService {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!(
                 "Graphviz 转换失败: {}\n命令: {} -T{} -o {} (stdin)",
-                stderr,
-                engine,
-                output_format,
-                params.output_path
+                stderr, engine, output_format, params.output_path
             )
             .into());
         }

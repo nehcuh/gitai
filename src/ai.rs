@@ -19,7 +19,6 @@ struct AiMessage {
     content: String,
 }
 
-
 pub async fn call_ai(
     config: &Config,
     prompt: &str,
@@ -53,7 +52,8 @@ pub async fn call_ai(
         let preview = truncate_preview(&body_text, 800);
         return Err(format!(
             "AI request failed (status {}): {}",
-            status.as_u16(), preview
+            status.as_u16(),
+            preview
         )
         .into());
     }
@@ -138,7 +138,8 @@ pub async fn call_ai_with_template(
         let preview = truncate_preview(&body_text, 800);
         return Err(format!(
             "AI request failed (status {}): {}",
-            status.as_u16(), preview
+            status.as_u16(),
+            preview
         )
         .into());
     }
@@ -155,26 +156,34 @@ pub async fn call_ai_with_template(
 }
 
 fn truncate_preview(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}...", &s[..max]) }
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max])
+    }
 }
 
 fn extract_content_from_ai_response(v: &Value) -> Option<String> {
     // OpenAI Chat Completions: choices[0].message.content (string)
-    if let Some(s) = v.get("choices")
+    if let Some(s) = v
+        .get("choices")
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("message"))
         .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_str()) {
+        .and_then(|c| c.as_str())
+    {
         return Some(s.to_string());
     }
     // Some providers: choices[0].message.content is array of blocks with {type:"text", text:"..."}
-    if let Some(arr) = v.get("choices")
+    if let Some(arr) = v
+        .get("choices")
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("message"))
         .and_then(|m| m.get("content"))
-        .and_then(|c| c.as_array()) {
+        .and_then(|c| c.as_array())
+    {
         let mut texts = Vec::new();
         for item in arr {
             if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
@@ -190,11 +199,13 @@ fn extract_content_from_ai_response(v: &Value) -> Option<String> {
         }
     }
     // OpenAI text completions: choices[0].text
-    if let Some(s) = v.get("choices")
+    if let Some(s) = v
+        .get("choices")
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
         .and_then(|c0| c0.get("text"))
-        .and_then(|t| t.as_str()) {
+        .and_then(|t| t.as_str())
+    {
         return Some(s.to_string());
     }
     // Response API style: output_text or content

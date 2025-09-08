@@ -1,16 +1,16 @@
 //! 统一错误处理工具模块
-//! 
+//!
 //! 提供安全的错误处理模式，替代 .unwrap() 调用
 
-use crate::error::{GitAIError, Result};
 use crate::domain::errors::*;
+use crate::error::{GitAIError, Result};
 
 /// 安全的 Result 处理工具
 pub struct SafeResult;
 
 impl SafeResult {
     /// 安全地处理 Result，提供默认值和错误日志
-    pub fn unwrap_or_log<T, E>(result: std::result::Result<T, E>, default: T, context: &str) -> T 
+    pub fn unwrap_or_log<T, E>(result: std::result::Result<T, E>, default: T, context: &str) -> T
     where
         E: std::fmt::Display,
     {
@@ -24,7 +24,11 @@ impl SafeResult {
     }
 
     /// 安全地处理 Result，提供错误回调
-    pub fn unwrap_or_else_log<T, E, F>(result: std::result::Result<T, E>, fallback: F, context: &str) -> T 
+    pub fn unwrap_or_else_log<T, E, F>(
+        result: std::result::Result<T, E>,
+        fallback: F,
+        context: &str,
+    ) -> T
     where
         E: std::fmt::Display,
         F: FnOnce() -> T,
@@ -50,7 +54,7 @@ impl SafeResult {
     }
 
     /// 安全地处理 Option，提供错误回调
-    pub fn some_or_else_log<T, F>(option: Option<T>, fallback: F, context: &str) -> T 
+    pub fn some_or_else_log<T, F>(option: Option<T>, fallback: F, context: &str) -> T
     where
         F: FnOnce() -> T,
     {
@@ -64,7 +68,7 @@ impl SafeResult {
     }
 
     /// 将 Result 转换为 GitAIError::Unknown
-    pub fn convert_unknown<T, E>(result: std::result::Result<T, E>, context: &str) -> Result<T> 
+    pub fn convert_unknown<T, E>(result: std::result::Result<T, E>, context: &str) -> Result<T>
     where
         E: std::fmt::Display,
     {
@@ -76,7 +80,11 @@ impl SafeResult {
     }
 
     /// 将 Result 转换为 GitAIError::Unknown，提供上下文
-    pub fn convert_unknown_with<T, E>(result: std::result::Result<T, E>, context: &str, operation: &str) -> Result<T> 
+    pub fn convert_unknown_with<T, E>(
+        result: std::result::Result<T, E>,
+        context: &str,
+        operation: &str,
+    ) -> Result<T>
     where
         E: std::fmt::Display,
     {
@@ -93,7 +101,10 @@ pub struct DomainErrorHandler;
 
 impl DomainErrorHandler {
     /// 处理配置错误
-    pub fn handle_config_error<T>(result: std::result::Result<T, impl std::fmt::Display>, operation: &str) -> ConfigResult<T> {
+    pub fn handle_config_error<T>(
+        result: std::result::Result<T, impl std::fmt::Display>,
+        operation: &str,
+    ) -> ConfigResult<T> {
         result.map_err(|e| {
             log::error!("Config operation '{}' failed: {}", operation, e);
             ConfigError::LoadFailed(format!("{}: {}", operation, e))
@@ -101,7 +112,10 @@ impl DomainErrorHandler {
     }
 
     /// 处理 Git 错误
-    pub fn handle_git_error<T>(result: std::result::Result<T, impl std::fmt::Display>, operation: &str) -> GitResult<T> {
+    pub fn handle_git_error<T>(
+        result: std::result::Result<T, impl std::fmt::Display>,
+        operation: &str,
+    ) -> GitResult<T> {
         result.map_err(|e| {
             log::error!("Git operation '{}' failed: {}", operation, e);
             GitError::CommandFailed(format!("{}: {}", operation, e))
@@ -109,7 +123,10 @@ impl DomainErrorHandler {
     }
 
     /// 处理 AI 错误
-    pub fn handle_ai_error<T>(result: std::result::Result<T, impl std::fmt::Display>, operation: &str) -> AiResult<T> {
+    pub fn handle_ai_error<T>(
+        result: std::result::Result<T, impl std::fmt::Display>,
+        operation: &str,
+    ) -> AiResult<T> {
         result.map_err(|e| {
             log::error!("AI operation '{}' failed: {}", operation, e);
             AiError::ApiCallFailed(format!("{}: {}", operation, e))
@@ -117,7 +134,10 @@ impl DomainErrorHandler {
     }
 
     /// 处理扫描错误
-    pub fn handle_scan_error<T>(result: std::result::Result<T, impl std::fmt::Display>, operation: &str) -> ScanResult<T> {
+    pub fn handle_scan_error<T>(
+        result: std::result::Result<T, impl std::fmt::Display>,
+        operation: &str,
+    ) -> ScanResult<T> {
         result.map_err(|e| {
             log::error!("Scan operation '{}' failed: {}", operation, e);
             ScanError::ScanExecutionFailed(format!("{}: {}", operation, e))
@@ -192,54 +212,80 @@ macro_rules! handle_scan_error {
 
 /// 特定场景的便捷函数
 pub mod convenience {
-    use super::*;
 
     /// 安全解析数字字符串
-    pub fn safe_parse_number<T>(s: &str, default: T, context: &str) -> T 
+    pub fn safe_parse_number<T>(s: &str, default: T, context: &str) -> T
     where
         T: std::str::FromStr + std::fmt::Display,
     {
         s.trim().parse().unwrap_or_else(|_| {
-            log::warn!("{}: Failed to parse '{}', using default {}", context, s, default);
+            log::warn!(
+                "{}: Failed to parse '{}', using default {}",
+                context,
+                s,
+                default
+            );
             default
         })
     }
 
     /// 安全获取字符串切片
-    pub fn safe_str_slice(s: &str, start: usize, end: usize, default: &str, context: &str) -> String {
-        s.get(start..end)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                log::warn!("{}: Invalid slice range {}..{} for string '{}'", context, start, end, s);
-                default.to_string()
-            })
+    pub fn safe_str_slice(
+        s: &str,
+        start: usize,
+        end: usize,
+        default: &str,
+        context: &str,
+    ) -> String {
+        s.get(start..end).map(|s| s.to_string()).unwrap_or_else(|| {
+            log::warn!(
+                "{}: Invalid slice range {}..{} for string '{}'",
+                context,
+                start,
+                end,
+                s
+            );
+            default.to_string()
+        })
     }
 
     /// 安全获取 JSON 值
-    pub fn safe_json_value<T>(json: &serde_json::Value, key: &str, default: T, context: &str) -> T 
+    pub fn safe_json_value<T>(json: &serde_json::Value, key: &str, default: T, context: &str) -> T
     where
         T: serde::de::DeserializeOwned + std::fmt::Display,
     {
         json.get(key)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_else(|| {
-                log::warn!("{}: Failed to get or parse key '{}' from JSON", context, key);
+                log::warn!(
+                    "{}: Failed to get or parse key '{}' from JSON",
+                    context,
+                    key
+                );
                 default
             })
     }
 
     /// 安全获取 JSON 数值
-    pub fn safe_json_number(json: &serde_json::Value, key: &str, default: u64, context: &str) -> u64 {
-        json.get(key)
-            .and_then(|v| v.as_u64())
-            .unwrap_or_else(|| {
-                log::warn!("{}: Failed to get number key '{}' from JSON", context, key);
-                default
-            })
+    pub fn safe_json_number(
+        json: &serde_json::Value,
+        key: &str,
+        default: u64,
+        context: &str,
+    ) -> u64 {
+        json.get(key).and_then(|v| v.as_u64()).unwrap_or_else(|| {
+            log::warn!("{}: Failed to get number key '{}' from JSON", context, key);
+            default
+        })
     }
 
     /// 安全获取 JSON 字符串
-    pub fn safe_json_string(json: &serde_json::Value, key: &str, default: &str, context: &str) -> String {
+    pub fn safe_json_string(
+        json: &serde_json::Value,
+        key: &str,
+        default: &str,
+        context: &str,
+    ) -> String {
         json.get(key)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
@@ -250,13 +296,16 @@ pub mod convenience {
     }
 
     /// 安全获取 JSON 布尔值
-    pub fn safe_json_bool(json: &serde_json::Value, key: &str, default: bool, context: &str) -> bool {
-        json.get(key)
-            .and_then(|v| v.as_bool())
-            .unwrap_or_else(|| {
-                log::warn!("{}: Failed to get bool key '{}' from JSON", context, key);
-                default
-            })
+    pub fn safe_json_bool(
+        json: &serde_json::Value,
+        key: &str,
+        default: bool,
+        context: &str,
+    ) -> bool {
+        json.get(key).and_then(|v| v.as_bool()).unwrap_or_else(|| {
+            log::warn!("{}: Failed to get bool key '{}' from JSON", context, key);
+            default
+        })
     }
 }
 
@@ -265,24 +314,42 @@ mod tests {
     #[test]
     fn test_safe_unwrap_or_log() {
         let result: std::result::Result<i32, &str> = Ok(42);
-        assert_eq!(crate::utils::error_handling::SafeResult::unwrap_or_log(result, 0, "test"), 42);
-        
+        assert_eq!(
+            crate::utils::error_handling::SafeResult::unwrap_or_log(result, 0, "test"),
+            42
+        );
+
         let result: std::result::Result<i32, &str> = Err("error");
-        assert_eq!(crate::utils::error_handling::SafeResult::unwrap_or_log(result, 0, "test"), 0);
+        assert_eq!(
+            crate::utils::error_handling::SafeResult::unwrap_or_log(result, 0, "test"),
+            0
+        );
     }
 
     #[test]
     fn test_safe_some_or_log() {
         let option = Some(42);
-        assert_eq!(crate::utils::error_handling::SafeResult::some_or_log(option, 0, "test"), 42);
-        
+        assert_eq!(
+            crate::utils::error_handling::SafeResult::some_or_log(option, 0, "test"),
+            42
+        );
+
         let option: Option<i32> = None;
-        assert_eq!(crate::utils::error_handling::SafeResult::some_or_log(option, 0, "test"), 0);
+        assert_eq!(
+            crate::utils::error_handling::SafeResult::some_or_log(option, 0, "test"),
+            0
+        );
     }
 
     #[test]
     fn test_convenience_safe_parse_number() {
-        assert_eq!(crate::utils::error_handling::convenience::safe_parse_number("42", 0, "test"), 42);
-        assert_eq!(crate::utils::error_handling::convenience::safe_parse_number("abc", 0, "test"), 0);
+        assert_eq!(
+            crate::utils::error_handling::convenience::safe_parse_number("42", 0, "test"),
+            42
+        );
+        assert_eq!(
+            crate::utils::error_handling::convenience::safe_parse_number("abc", 0, "test"),
+            0
+        );
     }
 }

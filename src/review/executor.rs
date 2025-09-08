@@ -389,7 +389,7 @@ pub async fn execute_review_with_result(
         println!("🔒 正在进行安全扫描...");
         let scan_result = crate::scan::run_opengrep_scan(
             config,
-            &std::path::Path::new("."),
+            std::path::Path::new("."),
             None,
             Some(60),
             false,
@@ -448,7 +448,7 @@ pub async fn execute_review_with_result(
                                 for issue in &issues {
                                     if let Some(ref ctx) = issue.ai_context {
                                         // 优先使用为 AI 准备的上下文摘要
-                                        let _ = writeln!(&mut s, "{}\n", ctx);
+                                        let _ = writeln!(&mut s, "{ctx}\n");
                                     } else {
                                         let _ = write!(
                                             &mut s,

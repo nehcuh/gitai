@@ -209,7 +209,7 @@ impl ScanService {
                     _ => Severity::Info,
                 },
                 rule_id: finding.rule_id.unwrap_or_else(|| "unknown".to_string()),
-                description: format!("发现安全问题的代码段"),
+                description: "发现安全问题的代码段".to_string(),
                 suggestion: None,
                 code_snippet: finding.code_snippet,
             });
@@ -251,9 +251,9 @@ impl ScanService {
             // 检查是否是因为没有规则
             if error.contains("exit status 2") || error.contains("No rules") {
                 if !has_valid_rules {
-                    format!("扫描完成，未加载到有效规则（规则目录可能为空或无效）")
+                    "扫描完成，未加载到有效规则（规则目录可能为空或无效）".to_string()
                 } else {
-                    format!("扫描完成，未发现问题")
+                    "扫描完成，未发现问题".to_string()
                 }
             } else if !findings.is_empty() {
                 // 有发现但也有错误，说明扫描部分成功
@@ -270,9 +270,9 @@ impl ScanService {
             if findings_count > 0 {
                 format!("扫描完成，发现 {} 个问题", findings_count)
             } else if !has_valid_rules {
-                format!("扫描完成，但未加载到有效规则")
+                "扫描完成，但未加载到有效规则".to_string()
             } else {
-                format!("扫描完成，未发现问题")
+                "扫描完成，未发现问题".to_string()
             }
         };
 

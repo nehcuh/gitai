@@ -70,9 +70,15 @@
 - ✅ 环境变量支持
 - ✅ 配置重置和备份
 
-## ✅ 已完成功能（最近更新）
+### ✅ 已完成功能（最近更新）
 
-### 1. **代码评审 (review)** ✅ 100%
+### 1. **DI 容器（v2）** ✅ 100%
+- ✅ 生命周期：Singleton / Transient / Scoped
+- ✅ 作用域管理与缓存
+- ✅ 简化注册 API（register_*_simple）
+- ✅ 同步统计（total/hit_rate/cache_hits/cache_misses）
+
+### 2. **代码评审 (review)** ✅ 100%
 - ✅ 基本 AI 评审功能完全恢复
 - ✅ Git diff 获取
 - ✅ 暂存状态检查
@@ -94,7 +100,7 @@
 根据 TODO 列表，还有以下小任务：
 
 1. **代码清理**
-   - [ ] 添加 PerformanceCollector 的 Default 实现
+   - [x]（已完成）DI 容器 v2 成为默认实现，移除旧版 v1
    - [ ] 移除不必要的借用
    - [ ] 优化迭代器使用
 

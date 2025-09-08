@@ -278,21 +278,19 @@ pub enum ContainerError {
         reason: String,
     },
     /// 类型转换失败
-    TypeCastFailed {
-        expected: String,
-        actual: String,
-    },
+    TypeCastFailed { expected: String, actual: String },
     /// 作用域错误
-    ScopeError {
-        operation: String,
-        reason: String,
-    },
+    ScopeError { operation: String, reason: String },
 }
 
 impl fmt::Display for ContainerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ContainerError::ServiceNotRegistered { type_name, available_services, suggestion } => {
+            ContainerError::ServiceNotRegistered {
+                type_name,
+                available_services,
+                suggestion,
+            } => {
                 write!(f, "服务未注册: {}", type_name)?;
                 if !available_services.is_empty() {
                     write!(f, "，可用服务: {:?}", available_services)?;
@@ -302,10 +300,20 @@ impl fmt::Display for ContainerError {
                 }
                 Ok(())
             }
-            ContainerError::CircularDependency { service_chain, cycle_point } => {
-                write!(f, "循环依赖检测: 依赖链 {:?}，循环点 {}", service_chain, cycle_point)
+            ContainerError::CircularDependency {
+                service_chain,
+                cycle_point,
+            } => {
+                write!(
+                    f,
+                    "循环依赖检测: 依赖链 {:?}，循环点 {}",
+                    service_chain, cycle_point
+                )
             }
-            ContainerError::ServiceCreationFailed { service_type, reason } => {
+            ContainerError::ServiceCreationFailed {
+                service_type,
+                reason,
+            } => {
                 write!(f, "服务创建失败: {}，原因: {}", service_type, reason)
             }
             ContainerError::TypeCastFailed { expected, actual } => {
@@ -406,8 +414,8 @@ impl GitAIError {
     /// 记录错误到日志
     pub fn log(&self) {
         match self {
-            GitAIError::Config(_) 
-            | GitAIError::MissingDependency(_) 
+            GitAIError::Config(_)
+            | GitAIError::MissingDependency(_)
             | GitAIError::Container(_)
             | GitAIError::Update(_)
             | GitAIError::Mcp(_) => {
@@ -566,16 +574,16 @@ pub trait ErrorContext<T> {
 
     /// 添加用户友好的提示
     fn with_hint(self, hint: &str) -> Result<T>;
-    
+
     /// 添加文件路径上下文
     fn with_file(self, file: &str) -> Result<T>;
-    
+
     /// 添加函数上下文
     fn with_function(self, function: &str) -> Result<T>;
-    
+
     /// 添加行号上下文
     fn with_line(self, line: u32) -> Result<T>;
-    
+
     /// 添加自定义键值对上下文
     fn with_context(self, key: &str, value: &str) -> Result<T>;
 }
@@ -615,51 +623,52 @@ impl ErrorContextInfo {
             ..Default::default()
         }
     }
-    
+
     /// 设置文件路径
     pub fn file(mut self, file: &str) -> Self {
         self.file = Some(file.to_string());
         self
     }
-    
+
     /// 设置函数名
     pub fn function(mut self, function: &str) -> Self {
         self.function = Some(function.to_string());
         self
     }
-    
+
     /// 设置行号
     pub fn line(mut self, line: u32) -> Self {
         self.line = Some(line);
         self
     }
-    
+
     /// 添加自定义上下文
     pub fn add_context(mut self, key: &str, value: &str) -> Self {
-        self.custom_context.insert(key.to_string(), value.to_string());
+        self.custom_context
+            .insert(key.to_string(), value.to_string());
         self
     }
-    
+
     /// 格式化上下文信息
     pub fn format(&self) -> String {
         let mut parts = Vec::new();
-        
+
         if let Some(ref file) = self.file {
             parts.push(format!("文件: {}", file));
         }
-        
+
         if let Some(ref function) = self.function {
             parts.push(format!("函数: {}", function));
         }
-        
+
         if let Some(line) = self.line {
             parts.push(format!("行号: {}", line));
         }
-        
+
         for (key, value) in &self.custom_context {
             parts.push(format!("{}: {}", key, value));
         }
-        
+
         if parts.is_empty() {
             String::new()
         } else {
@@ -687,28 +696,28 @@ where
             GitAIError::Unknown(error_msg)
         })
     }
-    
+
     fn with_file(self, file: &str) -> Result<T> {
         self.map_err(|e| {
             let error_msg = format!("{} [文件: {}]", e, file);
             GitAIError::Unknown(error_msg)
         })
     }
-    
+
     fn with_function(self, function: &str) -> Result<T> {
         self.map_err(|e| {
             let error_msg = format!("{} [函数: {}]", e, function);
             GitAIError::Unknown(error_msg)
         })
     }
-    
+
     fn with_line(self, line: u32) -> Result<T> {
         self.map_err(|e| {
             let error_msg = format!("{} [行号: {}]", e, line);
             GitAIError::Unknown(error_msg)
         })
     }
-    
+
     fn with_context(self, key: &str, value: &str) -> Result<T> {
         self.map_err(|e| {
             let error_msg = format!("{} [{}: {}]", e, key, value);
