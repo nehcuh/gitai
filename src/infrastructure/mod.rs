@@ -9,7 +9,5 @@
 // 容器实现
 pub mod container;
 
-// 重新导出API（切换为 v2 实现，保留生命周期与 Provider 接口自 v1）
-pub use container::v2::{ContainerError, ServiceContainer};
-pub use container::{ServiceLifetime};
-pub use container::{ErasedServiceProvider, ServiceProvider};
+// 重新导出API（v2 为默认实现）
+pub use container::{ContainerError, ServiceContainer, ServiceLifetime};

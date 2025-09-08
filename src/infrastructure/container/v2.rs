@@ -16,6 +16,14 @@ use uuid::Uuid;
 // Reuse lifecycle enum from parent container module to keep compatibility
 use super::ServiceLifetime;
 
+// Type aliases to reduce type complexity in signatures/fields
+type AnyArc = Arc<dyn Any + Send + Sync>;
+type OnceCellArc = Arc<OnceCell<AnyArc>>;
+// Maps
+type SingletonsMap = DashMap<TypeId, OnceCellArc>;
+type ScopedInstances = DashMap<TypeId, AnyArc>;
+type ScopesMap = DashMap<Uuid, ScopedInstances>;
+
 /// 简化的容器错误类型
 #[derive(Debug)]
 pub enum ContainerError {
@@ -124,9 +132,9 @@ pub struct ServiceContainer {
     /// 服务工厂注册表（含生命周期）
     registrations: Arc<DashMap<TypeId, Registration>>,
     /// 单例实例缓存 - 使用OnceCell确保只创建一次
-    singletons: Arc<DashMap<TypeId, Arc<OnceCell<Arc<dyn Any + Send + Sync>>>>>,
+    singletons: Arc<SingletonsMap>,
     /// 作用域实例缓存：scope_id -> (type_id -> instance)
-    scopes: Arc<DashMap<Uuid, DashMap<TypeId, Arc<dyn Any + Send + Sync>>>>,
+    scopes: Arc<ScopesMap>,
     /// 当前激活的作用域栈（栈顶为当前）
     active_scopes: Arc<RwLock<Vec<(Uuid, String)>>>,
     /// 容器统计信息（内部原子计数器）
@@ -308,7 +316,7 @@ impl ServiceContainer {
 
                 // 命中作用域缓存
                 if let Some(inst) = scope_map.get(&type_id) {
-                    let cloned: Arc<dyn Any + Send + Sync> = inst.clone();
+                    let cloned: AnyArc = inst.clone();
                     match cloned.downcast::<T>() {
                         Ok(arc_t) => return Ok(arc_t),
                         Err(_) => {

@@ -2,7 +2,7 @@
 
 #![allow(clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::{ContainerError, ServiceContainer, ServiceProvider};
+use gitai::infrastructure::container::v2::{ContainerError, ServiceContainer};
 use std::any::TypeId;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -10,15 +10,7 @@ struct TestService {
     value: i32,
 }
 
-struct ManualProvider;
-
-impl ServiceProvider for ManualProvider {
-    type Service = TestService;
-
-    fn create(&self, _container: &ServiceContainer) -> Result<Self::Service, ContainerError> {
-        Ok(TestService { value: 100 })
-    }
-}
+// 取消基于 ServiceProvider 的示例，统一使用闭包或简单注册 API
 
 #[tokio::test]
 async fn test_direct_closure_vs_simple() {
@@ -29,12 +21,12 @@ async fn test_direct_closure_vs_simple() {
         println!("测试1: 直接闭包方法");
         let container = ServiceContainer::new();
 
-        let provider = |_container: &ServiceContainer| -> Result<TestService, ContainerError> {
+        let provider = |_container: &ServiceContainer| -> Result<TestService, Box<dyn std::error::Error + Send + Sync>> {
             println!("  闭包provider被调用");
             Ok(TestService { value: 111 })
         };
 
-        container.register_singleton(provider).await;
+        container.register::<TestService, _>(provider);
         println!("  注册完成");
 
         match container.resolve::<TestService>().await {
@@ -72,12 +64,12 @@ async fn test_direct_closure_vs_simple() {
             Ok::<_, ContainerError>(TestService { value: 333 })
         };
 
-        let provider = move |_container: &ServiceContainer| -> Result<TestService, ContainerError> {
+        let provider = move |_container: &ServiceContainer| -> Result<TestService, Box<dyn std::error::Error + Send + Sync>> {
             println!("  manual provider被调用");
-            factory()
+            Ok(factory()?)
         };
 
-        container.register_singleton(provider).await;
+        container.register::<TestService, _>(provider);
         println!("  注册完成");
 
         match container.resolve::<TestService>().await {
@@ -111,7 +103,11 @@ async fn test_service_type_registration() {
 
     // 对比手动provider
     let container2 = ServiceContainer::new();
-    container2.register_singleton(ManualProvider).await;
+    // 使用闭包模拟手动 provider
+    let manual = |_c: &ServiceContainer| -> Result<TestService, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(TestService { value: 100 })
+    };
+    container2.register::<TestService, _>(manual);
 
     match container2.resolve::<TestService>().await {
         Ok(service) => println!("✓ 手动provider解析成功: {:?}", service),
