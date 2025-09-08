@@ -228,10 +228,7 @@ impl std::error::Error for McpError {}
 
 impl From<McpError> for ServiceError {
     fn from(err: McpError) -> Self {
-        ServiceError::Transport(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            err.to_string(),
-        ))
+ServiceError::Transport(std::io::Error::other(err.to_string()))
     }
 }
 
@@ -311,7 +308,7 @@ pub fn unknown_error<T: Into<String>>(msg: T) -> McpError {
 // 向后兼容的辅助函数
 #[allow(dead_code)]
 pub fn service_error(msg: String) -> ServiceError {
-    ServiceError::Transport(std::io::Error::new(std::io::ErrorKind::Other, msg))
+ServiceError::Transport(std::io::Error::other(msg))
 }
 
 /// GitAI MCP 服务管理器

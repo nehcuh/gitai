@@ -114,7 +114,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
             Ok(0) => break, // EOF
             Ok(_) => {
                 // 尝试解析 JSON 消息
-                if let Ok(msg) = serde_json::from_str::<Value>(&buffer.trim()) {
+if let Ok(msg) = serde_json::from_str::<Value>(buffer.trim()) {
                     if let Some(method) = msg.get("method").and_then(|m| m.as_str()) {
                         match method {
                             "initialize" => {

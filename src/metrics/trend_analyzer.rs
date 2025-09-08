@@ -174,12 +174,10 @@ impl<'a> TrendAnalyzer<'a> {
             } else {
                 Trend::Degrading
             }
+        } else if change_rate < 0.0 {
+            Trend::Improving
         } else {
-            if change_rate < 0.0 {
-                Trend::Improving
-            } else {
-                Trend::Degrading
-            }
+            Trend::Degrading
         };
 
         let significance = if change_rate.abs() > 50.0 {
@@ -335,16 +333,13 @@ impl<'a> TrendAnalyzer<'a> {
 
         // 基于发现的建议
         for finding in findings {
-            if finding.significance as i32 >= Significance::High as i32 {
-                match finding.metric.as_str() {
-                    "circular_dependencies" => {
-                        recommendations.push(
-                            "紧急：需要解决循环依赖问题，这会影响系统的可维护性和测试性"
-                                .to_string(),
-                        );
-                    }
-                    _ => {}
-                }
+            if finding.significance as i32 >= Significance::High as i32
+                && finding.metric.as_str() == "circular_dependencies"
+            {
+                recommendations.push(
+                    "紧急：需要解决循环依赖问题，这会影响系统的可维护性和测试性"
+                        .to_string(),
+                );
             }
         }
 

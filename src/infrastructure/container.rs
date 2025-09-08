@@ -6,6 +6,8 @@
 //! - 工厂模式
 //! - 循环依赖检测
 
+#![allow(clippy::type_complexity)]
+
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
@@ -299,7 +301,7 @@ impl fmt::Display for ContainerError {
 impl std::error::Error for ContainerError {}
 
 /// 容器统计信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ContainerStats {
     /// 总解析次数
     pub total_resolutions: u64,
@@ -323,22 +325,6 @@ pub struct ContainerStats {
     pub type_cast_failures: u64,
 }
 
-impl Default for ContainerStats {
-    fn default() -> Self {
-        Self {
-            total_resolutions: 0,
-            singleton_cache_hits: 0,
-            singleton_cache_misses: 0,
-            transient_creations: 0,
-            scoped_creations: 0,
-            registered_services: 0,
-            active_singletons: 0,
-            active_scoped_instances: 0,
-            circular_dependency_checks: 0,
-            type_cast_failures: 0,
-        }
-    }
-}
 
 impl ContainerStats {
     /// 获取缓存命中率（百分比）
@@ -854,7 +840,7 @@ impl ServiceContainer {
         let service = instance.downcast::<T>().map_err(|_| {
             let expected_type = std::any::type_name::<T>();
             let actual_type = "Box<dyn Any + Send + Sync>";
-            let context = format!("singleton service creation");
+let context = "singleton service creation".to_string();
             let backtrace_hint =
                 Some("Check that the service provider returns the correct type".to_string());
 
@@ -890,7 +876,7 @@ impl ServiceContainer {
         let service = instance.downcast::<T>().map_err(|_| {
             let expected_type = std::any::type_name::<T>();
             let actual_type = "Box<dyn Any + Send + Sync>";
-            let context = format!("transient service creation");
+let context = "transient service creation".to_string();
             let backtrace_hint =
                 Some("Check that the service provider returns the correct type".to_string());
 

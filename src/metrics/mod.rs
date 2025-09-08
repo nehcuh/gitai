@@ -271,7 +271,7 @@ impl QualityTracker {
     /// 获取当前分支
     fn get_current_branch() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = std::process::Command::new("git")
-            .args(&["branch", "--show-current"])
+.args(["branch", "--show-current"])
             .output()?;
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -280,7 +280,7 @@ impl QualityTracker {
     /// 获取当前 commit hash
     fn get_current_commit() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = std::process::Command::new("git")
-            .args(&["rev-parse", "HEAD"])
+.args(["rev-parse", "HEAD"])
             .output()?;
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -290,7 +290,7 @@ impl QualityTracker {
     fn count_lines_of_code() -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         // 简化实现，实际可以使用 tokei 或类似工具
         let output = std::process::Command::new("find")
-            .args(&[
+.args([
                 ".", "-type", "f", "-name", "*.rs", "-o", "-name", "*.java", "-o", "-name", "*.py",
                 "-o", "-name", "*.js", "-o", "-name", "*.ts",
             ])
@@ -470,7 +470,7 @@ mod tests {
     fn test_quality_tracker_creation() {
         // 注意：这个测试需要 git 仓库环境
         if std::process::Command::new("git")
-            .args(&["status"])
+.args(["status"])
             .output()
             .is_ok()
         {

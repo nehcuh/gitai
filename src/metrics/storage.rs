@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 // 质量指标存储模块
 // 使用 JSON Lines 格式按分支存储快照数据
 

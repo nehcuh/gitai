@@ -155,8 +155,7 @@ fn test_display_implementations() {
     ];
 
     for error in errors {
-        let display = format!("{}", error);
+        let display = format!("{error}");
         assert!(!display.is_empty());
-        assert!(display.len() > 0);
     }
 }

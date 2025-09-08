@@ -49,7 +49,7 @@ pub trait ConfigProvider:
     async fn to_json(&self) -> Result<serde_json::Value, ConfigError>;
 
     /// 从JSON更新配置
-    async fn from_json(&mut self, json: serde_json::Value) -> Result<(), ConfigError>;
+    async fn update_from_json(&mut self, json: serde_json::Value) -> Result<(), ConfigError>;
 
     /// 订阅配置变更通知
     fn subscribe_config_changes(&self, handler: Box<dyn Fn(&str) + Send + Sync>);
@@ -645,7 +645,7 @@ impl ConfigProvider for DefaultConfigProvider {
         self.get_config().await
     }
 
-    async fn from_json(&mut self, _json: serde_json::Value) -> Result<(), ConfigError> {
+    async fn update_from_json(&mut self, _json: serde_json::Value) -> Result<(), ConfigError> {
         // TODO: 实现从JSON更新配置
         Ok(())
     }

@@ -217,10 +217,10 @@ pub fn run_opengrep_scan(
                     for root in &candidate_roots {
                         for l in known_langs {
                             let p = root.join(l);
-                            if p.exists() && p.is_dir() && dir_contains_valid_rules(&p) {
-                                if !used_config_paths.iter().any(|x| x == &p) {
-                                    used_config_paths.push(p);
-                                }
+if p.exists() && p.is_dir() && dir_contains_valid_rules(&p)
+                                && !used_config_paths.iter().any(|x| x == &p)
+                            {
+                                used_config_paths.push(p);
                             }
                         }
                     }

@@ -1,3 +1,7 @@
+#![allow(clippy::while_let_on_iterator)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::implicit_saturating_sub)]
+
 // MCP Analysis 服务
 //
 // 提供代码结构分析功能的 MCP 服务实现
@@ -166,7 +170,7 @@ impl AnalysisService {
         for file_path in &code_files {
             debug!("🔍 分析文件: {}", file_path.display());
 
-            match self.analyze_single_file(&file_path).await {
+match self.analyze_single_file(file_path).await {
                 Ok(result) => {
                     total_summary.total_lines += result.summary.total_lines;
                     total_summary.code_lines += result.summary.code_lines;
