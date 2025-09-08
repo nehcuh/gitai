@@ -57,7 +57,9 @@ impl fmt::Display for ConfigError {
         match self {
             ConfigError::Missing(key) => write!(f, "Missing configuration: {}", key),
             ConfigError::InvalidFormat(msg) => write!(f, "Invalid configuration format: {}", msg),
-            ConfigError::ValidationFailed(msg) => write!(f, "Configuration validation failed: {}", msg),
+            ConfigError::ValidationFailed(msg) => {
+                write!(f, "Configuration validation failed: {}", msg)
+            }
             ConfigError::FileNotFound(path) => write!(f, "Configuration file not found: {}", path),
             ConfigError::LoadFailed(msg) => write!(f, "Failed to load configuration: {}", msg),
         }
@@ -90,7 +92,9 @@ impl fmt::Display for GitError {
             GitError::RepositoryNotFound(path) => write!(f, "Git repository not found: {}", path),
             GitError::BranchNotFound(name) => write!(f, "Git branch not found: {}", name),
             GitError::CommitNotFound(hash) => write!(f, "Git commit not found: {}", hash),
-            GitError::WorkingDirectoryDirty(msg) => write!(f, "Working directory is dirty: {}", msg),
+            GitError::WorkingDirectoryDirty(msg) => {
+                write!(f, "Working directory is dirty: {}", msg)
+            }
             GitError::PermissionDenied(msg) => write!(f, "Git permission denied: {}", msg),
         }
     }
@@ -120,7 +124,9 @@ impl fmt::Display for AiError {
         match self {
             AiError::ApiCallFailed(msg) => write!(f, "AI API call failed: {}", msg),
             AiError::ModelUnavailable(model) => write!(f, "AI model unavailable: {}", model),
-            AiError::RequestTimeout(seconds) => write!(f, "AI request timeout: {} seconds", seconds),
+            AiError::RequestTimeout(seconds) => {
+                write!(f, "AI request timeout: {} seconds", seconds)
+            }
             AiError::ResponseParseFailed(msg) => write!(f, "AI response parse failed: {}", msg),
             AiError::AuthenticationFailed(msg) => write!(f, "AI authentication failed: {}", msg),
             AiError::QuotaExceeded(msg) => write!(f, "AI quota exceeded: {}", msg),
@@ -150,8 +156,12 @@ impl fmt::Display for CacheError {
         match self {
             CacheError::KeyNotFound(key) => write!(f, "Cache key not found: {}", key),
             CacheError::CacheFull => write!(f, "Cache is full"),
-            CacheError::SerializationFailed(msg) => write!(f, "Cache serialization failed: {}", msg),
-            CacheError::DeserializationFailed(msg) => write!(f, "Cache deserialization failed: {}", msg),
+            CacheError::SerializationFailed(msg) => {
+                write!(f, "Cache serialization failed: {}", msg)
+            }
+            CacheError::DeserializationFailed(msg) => {
+                write!(f, "Cache deserialization failed: {}", msg)
+            }
             CacheError::StorageError(msg) => write!(f, "Cache storage error: {}", msg),
         }
     }
@@ -210,9 +220,13 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::CommandNotFound(name) => write!(f, "Command not found: {}", name),
-            CommandError::ArgumentValidationFailed(msg) => write!(f, "Argument validation failed: {}", msg),
+            CommandError::ArgumentValidationFailed(msg) => {
+                write!(f, "Argument validation failed: {}", msg)
+            }
             CommandError::ExecutionFailed(msg) => write!(f, "Command execution failed: {}", msg),
-            CommandError::InsufficientPermissions(msg) => write!(f, "Insufficient permissions: {}", msg),
+            CommandError::InsufficientPermissions(msg) => {
+                write!(f, "Insufficient permissions: {}", msg)
+            }
             CommandError::Timeout(seconds) => write!(f, "Command timeout: {} seconds", seconds),
         }
     }

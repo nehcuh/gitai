@@ -133,7 +133,11 @@ impl CascadeDetector {
         }
 
         // 结果排序与截断
-        effects.sort_by(|a, b| b.probability.partial_cmp(&a.probability).unwrap_or(std::cmp::Ordering::Equal));
+        effects.sort_by(|a, b| {
+            b.probability
+                .partial_cmp(&a.probability)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         effects.truncate(self.thresholds.max_results);
         effects
     }
@@ -154,7 +158,11 @@ impl CascadeDetector {
                 });
             }
         }
-        critical.sort_by(|a, b| b.centrality.partial_cmp(&a.centrality).unwrap_or(std::cmp::Ordering::Equal));
+        critical.sort_by(|a, b| {
+            b.centrality
+                .partial_cmp(&a.centrality)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         critical
     }
 

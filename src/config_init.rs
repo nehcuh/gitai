@@ -219,19 +219,28 @@ impl ConfigInitializer {
 
                         table.insert("cache".to_string(), toml::Value::Table(cache));
                     }
-                    
+
                     // Add MCP section if not exists
                     if !table.contains_key("mcp") {
                         let mut mcp = toml::Table::new();
                         mcp.insert("enabled".to_string(), toml::Value::Boolean(true));
-                        
+
                         // Add MCP server section
                         let mut mcp_server = toml::Table::new();
-                        mcp_server.insert("transport".to_string(), toml::Value::String("stdio".to_string()));
-                        mcp_server.insert("name".to_string(), toml::Value::String("gitai-mcp".to_string()));
-                        mcp_server.insert("version".to_string(), toml::Value::String("0.1.0".to_string()));
+                        mcp_server.insert(
+                            "transport".to_string(),
+                            toml::Value::String("stdio".to_string()),
+                        );
+                        mcp_server.insert(
+                            "name".to_string(),
+                            toml::Value::String("gitai-mcp".to_string()),
+                        );
+                        mcp_server.insert(
+                            "version".to_string(),
+                            toml::Value::String("0.1.0".to_string()),
+                        );
                         mcp.insert("server".to_string(), toml::Value::Table(mcp_server));
-                        
+
                         // Add MCP services section
                         let mut mcp_services = toml::Table::new();
                         let enabled_services = vec![
@@ -240,35 +249,63 @@ impl ConfigInitializer {
                             toml::Value::String("scan".to_string()),
                             toml::Value::String("analysis".to_string()),
                         ];
-                        mcp_services.insert("enabled".to_string(), toml::Value::Array(enabled_services));
-                        
+                        mcp_services
+                            .insert("enabled".to_string(), toml::Value::Array(enabled_services));
+
                         // Add review service config
                         let mut review_service = toml::Table::new();
-                        review_service.insert("default_format".to_string(), toml::Value::String("text".to_string()));
-                        review_service.insert("default_tree_sitter".to_string(), toml::Value::Boolean(false));
-                        review_service.insert("default_security_scan".to_string(), toml::Value::Boolean(false));
-                        mcp_services.insert("review".to_string(), toml::Value::Table(review_service));
-                        
+                        review_service.insert(
+                            "default_format".to_string(),
+                            toml::Value::String("text".to_string()),
+                        );
+                        review_service.insert(
+                            "default_tree_sitter".to_string(),
+                            toml::Value::Boolean(false),
+                        );
+                        review_service.insert(
+                            "default_security_scan".to_string(),
+                            toml::Value::Boolean(false),
+                        );
+                        mcp_services
+                            .insert("review".to_string(), toml::Value::Table(review_service));
+
                         // Add commit service config
                         let mut commit_service = toml::Table::new();
-                        commit_service.insert("default_add_all".to_string(), toml::Value::Boolean(false));
-                        commit_service.insert("default_review".to_string(), toml::Value::Boolean(false));
-                        commit_service.insert("default_tree_sitter".to_string(), toml::Value::Boolean(false));
-                        mcp_services.insert("commit".to_string(), toml::Value::Table(commit_service));
-                        
+                        commit_service
+                            .insert("default_add_all".to_string(), toml::Value::Boolean(false));
+                        commit_service
+                            .insert("default_review".to_string(), toml::Value::Boolean(false));
+                        commit_service.insert(
+                            "default_tree_sitter".to_string(),
+                            toml::Value::Boolean(false),
+                        );
+                        mcp_services
+                            .insert("commit".to_string(), toml::Value::Table(commit_service));
+
                         // Add scan service config
                         let mut scan_service = toml::Table::new();
-                        scan_service.insert("default_tool".to_string(), toml::Value::String("opengrep".to_string()));
-                        scan_service.insert("default_timeout".to_string(), toml::Value::Integer(300));
+                        scan_service.insert(
+                            "default_tool".to_string(),
+                            toml::Value::String("opengrep".to_string()),
+                        );
+                        scan_service
+                            .insert("default_timeout".to_string(), toml::Value::Integer(300));
                         mcp_services.insert("scan".to_string(), toml::Value::Table(scan_service));
-                        
+
                         // Add analysis service config
                         let mut analysis_service = toml::Table::new();
                         analysis_service.insert("verbosity".to_string(), toml::Value::Integer(1));
-                        analysis_service.insert("default_format".to_string(), toml::Value::String("json".to_string()));
-                        analysis_service.insert("max_files_per_analysis".to_string(), toml::Value::Integer(1000));
-                        mcp_services.insert("analysis".to_string(), toml::Value::Table(analysis_service));
-                        
+                        analysis_service.insert(
+                            "default_format".to_string(),
+                            toml::Value::String("json".to_string()),
+                        );
+                        analysis_service.insert(
+                            "max_files_per_analysis".to_string(),
+                            toml::Value::Integer(1000),
+                        );
+                        mcp_services
+                            .insert("analysis".to_string(), toml::Value::Table(analysis_service));
+
                         mcp.insert("services".to_string(), toml::Value::Table(mcp_services));
                         table.insert("mcp".to_string(), toml::Value::Table(mcp));
                     }

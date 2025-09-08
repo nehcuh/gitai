@@ -1,9 +1,9 @@
 //! 代码审查服务接口定义
 
+use crate::domain::errors::DomainError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::domain::errors::DomainError;
 
 /// 审查类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,13 +89,16 @@ pub struct ReviewSummary {
 pub trait ReviewService: Send + Sync {
     /// 执行代码审查
     async fn review(&self, request: ReviewRequest) -> Result<ReviewResult, DomainError>;
-    
+
     /// 批量审查
-    async fn batch_review(&self, requests: Vec<ReviewRequest>) -> Result<Vec<ReviewResult>, DomainError>;
-    
+    async fn batch_review(
+        &self,
+        requests: Vec<ReviewRequest>,
+    ) -> Result<Vec<ReviewResult>, DomainError>;
+
     /// 获取审查历史
     async fn review_history(&self, limit: Option<usize>) -> Result<Vec<ReviewResult>, DomainError>;
-    
+
     /// 获取审查规则
     async fn get_rules(&self, review_type: ReviewType) -> Result<Vec<ReviewRule>, DomainError>;
 }
@@ -115,7 +118,7 @@ pub struct ReviewRule {
 pub trait ReviewProvider: Send + Sync {
     /// 创建审查服务
     fn create_service(&self, config: ReviewConfig) -> Result<Box<dyn ReviewService>, DomainError>;
-    
+
     /// 支持的审查类型
     fn supported_review_types(&self) -> Vec<ReviewType>;
 }

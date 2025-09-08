@@ -87,7 +87,7 @@ pub fn run_opengrep_scan(
     if config.scan.jobs > 0 {
         args.push(format!("--jobs={}", config.scan.jobs));
     }
-    
+
     // 添加 .gitignore 支持
     // OpenGrep/Semgrep 默认会遵守 .gitignore，但我们明确启用它
     args.push("--use-git-ignore".to_string());
@@ -139,20 +139,31 @@ pub fn run_opengrep_scan(
                                 if p.is_dir() {
                                     // 跳过隐藏目录
                                     if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-                                        if name.starts_with('.') { continue; }
+                                        if name.starts_with('.') {
+                                            continue;
+                                        }
                                     }
                                     stack.push(p);
                                 } else if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-                                    if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml") {
+                                    if ext.eq_ignore_ascii_case("yml")
+                                        || ext.eq_ignore_ascii_case("yaml")
+                                    {
                                         // 排除常见的非规则配置文件
-                                        if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
-                                            if fname.starts_with('.') { continue; }
-                                            if fname.contains("pre-commit") { continue; }
+                                        if let Some(fname) = p.file_name().and_then(|s| s.to_str())
+                                        {
+                                            if fname.starts_with('.') {
+                                                continue;
+                                            }
+                                            if fname.contains("pre-commit") {
+                                                continue;
+                                            }
                                         }
                                         if let Ok(content) = fs::read_to_string(&p) {
                                             for line in content.lines().take(200) {
                                                 let t = line.trim_start();
-                                                if t.starts_with("rules:") || t.starts_with("rules :") {
+                                                if t.starts_with("rules:")
+                                                    || t.starts_with("rules :")
+                                                {
                                                     return true;
                                                 }
                                             }

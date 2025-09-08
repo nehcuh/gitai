@@ -1,12 +1,11 @@
 //! 领域实体定义
-//! 
+//!
 //! 包含核心业务对象和数据结构
 
+pub mod common;
 pub mod git;
 pub mod review;
 pub mod scan;
-pub mod common;
-
 
 use std::fmt;
 
@@ -15,7 +14,7 @@ use std::fmt;
 pub trait AggregateRoot: Send + Sync {
     /// 获取聚合根ID
     fn id(&self) -> String;
-    
+
     /// 验证聚合根的一致性
     fn validate(&self) -> Result<(), String>;
 }
@@ -36,13 +35,13 @@ pub trait ValueObject: Send + Sync + Clone + PartialEq {
 pub trait DomainEvent: Send + Sync {
     /// 获取事件ID
     fn event_id(&self) -> String;
-    
+
     /// 获取事件类型
     fn event_type(&self) -> &str;
-    
+
     /// 获取事件发生时间
     fn occurred_at(&self) -> chrono::DateTime<chrono::Utc>;
-    
+
     /// 获取事件数据
     fn event_data(&self) -> serde_json::Value;
 }
@@ -52,12 +51,9 @@ pub trait DomainEvent: Send + Sync {
 pub trait DomainEventPublisher: Send + Sync {
     /// 发布领域事件
     async fn publish<E: DomainEvent + 'static>(&self, event: E) -> Result<(), String>;
-    
+
     /// 批量发布领域事件
-    async fn publish_batch<E: DomainEvent + 'static>(
-        &self, 
-        events: Vec<E>
-    ) -> Result<(), String>;
+    async fn publish_batch<E: DomainEvent + 'static>(&self, events: Vec<E>) -> Result<(), String>;
 }
 
 /// 领域事件订阅者trait
@@ -65,7 +61,7 @@ pub trait DomainEventPublisher: Send + Sync {
 pub trait DomainEventSubscriber: Send + Sync {
     /// 处理领域事件
     async fn handle<E: DomainEvent + 'static>(&self, event: &E) -> Result<(), String>;
-    
+
     /// 获取订阅的事件类型
     fn subscribed_events(&self) -> Vec<String>;
 }
@@ -92,7 +88,7 @@ impl BusinessRuleViolation {
             details: None,
         }
     }
-    
+
     pub fn with_details(mut self, details: serde_json::Value) -> Self {
         self.details = Some(details);
         self
@@ -101,7 +97,11 @@ impl BusinessRuleViolation {
 
 impl fmt::Display for BusinessRuleViolation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Business rule '{}' violated: {}", self.rule_name, self.message)
+        write!(
+            f,
+            "Business rule '{}' violated: {}",
+            self.rule_name, self.message
+        )
     }
 }
 
@@ -111,12 +111,11 @@ impl std::error::Error for BusinessRuleViolation {}
 pub trait Specification<T>: Send + Sync {
     /// 检查是否满足规格
     fn is_satisfied_by(&self, candidate: &T) -> bool;
-    
+
     /// 组合规格（AND）
-    fn and<S: Specification<T>>(self, other: S) -> AndSpecification<T, Self, S>
+    fn and<S: Specification<T> + 'static>(self, other: S) -> AndSpecification<T, Self, S>
     where
         Self: Sized + 'static,
-        S: 'static,
     {
         AndSpecification {
             left: self,
@@ -124,12 +123,11 @@ pub trait Specification<T>: Send + Sync {
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     /// 组合规格（OR）
-    fn or<S: Specification<T>>(self, other: S) -> OrSpecification<T, Self, S>
+    fn or<S: Specification<T> + 'static>(self, other: S) -> OrSpecification<T, Self, S>
     where
         Self: Sized + 'static,
-        S: 'static,
     {
         OrSpecification {
             left: self,
@@ -137,7 +135,7 @@ pub trait Specification<T>: Send + Sync {
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     /// 否定规格（NOT）
     fn not(self) -> NotSpecification<T, Self>
     where
@@ -157,7 +155,9 @@ pub struct AndSpecification<T, L, R> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Send + Sync, L: Specification<T>, R: Specification<T>> Specification<T> for AndSpecification<T, L, R> {
+impl<T: Send + Sync, L: Specification<T>, R: Specification<T>> Specification<T>
+    for AndSpecification<T, L, R>
+{
     fn is_satisfied_by(&self, candidate: &T) -> bool {
         self.left.is_satisfied_by(candidate) && self.right.is_satisfied_by(candidate)
     }
@@ -170,7 +170,9 @@ pub struct OrSpecification<T, L, R> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Send + Sync, L: Specification<T>, R: Specification<T>> Specification<T> for OrSpecification<T, L, R> {
+impl<T: Send + Sync, L: Specification<T>, R: Specification<T>> Specification<T>
+    for OrSpecification<T, L, R>
+{
     fn is_satisfied_by(&self, candidate: &T) -> bool {
         self.left.is_satisfied_by(candidate) || self.right.is_satisfied_by(candidate)
     }
@@ -192,16 +194,16 @@ impl<T: Send + Sync, S: Specification<T>> Specification<T> for NotSpecification<
 pub trait Auditable: Send + Sync {
     /// 获取创建时间
     fn created_at(&self) -> chrono::DateTime<chrono::Utc>;
-    
+
     /// 获取更新时间
     fn updated_at(&self) -> chrono::DateTime<chrono::Utc>;
-    
+
     /// 获取创建者
     fn created_by(&self) -> Option<&str>;
-    
+
     /// 获取更新者
     fn updated_by(&self) -> Option<&str>;
-    
+
     /// 获取版本号
     fn version(&self) -> u64;
 }
@@ -210,10 +212,10 @@ pub trait Auditable: Send + Sync {
 pub trait SoftDeletable: Send + Sync {
     /// 是否已删除
     fn is_deleted(&self) -> bool;
-    
+
     /// 删除时间
     fn deleted_at(&self) -> Option<chrono::DateTime<chrono::Utc>>;
-    
+
     /// 删除者
     fn deleted_by(&self) -> Option<&str>;
 }
@@ -222,10 +224,10 @@ pub trait SoftDeletable: Send + Sync {
 pub trait Versionable: Send + Sync {
     /// 获取当前版本
     fn current_version(&self) -> &str;
-    
+
     /// 获取支持的版本
     fn supported_versions(&self) -> Vec<&str>;
-    
+
     /// 检查版本兼容性
     fn is_version_compatible(&self, version: &str) -> bool;
 }

@@ -1,8 +1,8 @@
 //! 代码审查相关实体
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// 代码审查请求
 #[derive(Debug, Clone, Serialize, Deserialize)]

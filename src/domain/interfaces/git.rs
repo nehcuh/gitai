@@ -1,92 +1,105 @@
 //! Git服务接口定义
 
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
-use crate::domain::errors::GitError;
+use super::{ConfigurableInterface, HealthCheckInterface, VersionedInterface};
 use crate::domain::entities::common::FilePath;
-use super::{VersionedInterface, HealthCheckInterface, ConfigurableInterface};
+use crate::domain::errors::GitError;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Git服务接口
 #[async_trait]
-pub trait GitService: VersionedInterface + ConfigurableInterface + HealthCheckInterface + Send + Sync {
+pub trait GitService:
+    VersionedInterface + ConfigurableInterface + HealthCheckInterface + Send + Sync
+{
     /// 执行Git命令
     async fn execute_command(&self, args: &[String]) -> Result<GitCommandOutput, GitError>;
-    
+
     /// 获取Git状态
     async fn get_status(&self) -> Result<GitStatus, GitError>;
-    
+
     /// 获取暂存区的diff
     async fn get_staged_diff(&self) -> Result<String, GitError>;
-    
+
     /// 获取工作区的diff
     async fn get_working_diff(&self) -> Result<String, GitError>;
-    
+
     /// 获取所有diff（包括暂存区、工作区和未跟踪文件）
     async fn get_all_diff(&self) -> Result<String, GitError>;
-    
+
     /// 获取最后一次提交的diff
     async fn get_last_commit_diff(&self) -> Result<String, GitError>;
-    
+
     /// 获取两个提交之间的diff
     async fn get_commit_diff(&self, from: &str, to: &str) -> Result<String, GitError>;
-    
+
     /// 获取未跟踪的文件列表
     async fn get_untracked_files(&self) -> Result<Vec<FilePath>, GitError>;
-    
+
     /// 获取修改的文件列表
     async fn get_modified_files(&self) -> Result<Vec<FilePath>, GitError>;
-    
+
     /// 获取提交历史
-    async fn get_commit_history(&self, options: CommitHistoryOptions) -> Result<Vec<CommitInfo>, GitError>;
-    
+    async fn get_commit_history(
+        &self,
+        options: CommitHistoryOptions,
+    ) -> Result<Vec<CommitInfo>, GitError>;
+
     /// 获取当前分支信息
     async fn get_current_branch(&self) -> Result<BranchInfo, GitError>;
-    
+
     /// 获取分支列表
     async fn get_branches(&self) -> Result<Vec<BranchInfo>, GitError>;
-    
+
     /// 获取标签列表
     async fn get_tags(&self) -> Result<Vec<TagInfo>, GitError>;
-    
+
     /// 获取远程仓库信息
     async fn get_remotes(&self) -> Result<Vec<RemoteInfo>, GitError>;
-    
+
     /// 检查是否是Git仓库
     async fn is_git_repository(&self) -> Result<bool, GitError>;
-    
+
     /// 获取仓库根目录
     async fn get_repository_root(&self) -> Result<PathBuf, GitError>;
-    
+
     /// 获取当前HEAD的commit hash
     async fn get_head_commit(&self) -> Result<String, GitError>;
-    
+
     /// 获取文件在指定提交中的内容
-    async fn get_file_content(&self, file_path: &FilePath, commit: &str) -> Result<String, GitError>;
-    
+    async fn get_file_content(
+        &self,
+        file_path: &FilePath,
+        commit: &str,
+    ) -> Result<String, GitError>;
+
     /// 获取文件的blame信息
     async fn get_file_blame(&self, file_path: &FilePath) -> Result<Vec<BlameLine>, GitError>;
-    
+
     /// 获取仓库统计信息
     async fn get_repository_stats(&self) -> Result<RepositoryStats, GitError>;
-    
+
     /// 检查工作区是否干净
     async fn is_working_directory_clean(&self) -> Result<bool, GitError>;
-    
+
     /// 暂存文件
     async fn stage_file(&self, file_path: &FilePath) -> Result<(), GitError>;
-    
+
     /// 取消暂存文件
     async fn unstage_file(&self, file_path: &FilePath) -> Result<(), GitError>;
-    
+
     /// 创建提交
-    async fn create_commit(&self, message: &str, author: Option<&GitAuthor>) -> Result<CommitInfo, GitError>;
-    
+    async fn create_commit(
+        &self,
+        message: &str,
+        author: Option<&GitAuthor>,
+    ) -> Result<CommitInfo, GitError>;
+
     /// 获取配置信息
     async fn get_config(&self, key: &str) -> Result<Option<String>, GitError>;
-    
+
     /// 设置配置信息
     async fn set_config(&self, key: &str, value: &str) -> Result<(), GitError>;
 }
@@ -117,7 +130,7 @@ impl GitCommandOutput {
             execution_time_ms,
         }
     }
-    
+
     /// 创建失败的命令输出
     pub fn failure(stderr: String, exit_code: Option<i32>, execution_time_ms: u64) -> Self {
         Self {
@@ -251,7 +264,7 @@ impl GitAuthor {
             timestamp: None,
         }
     }
-    
+
     /// 格式化为标准Git格式
     pub fn to_git_format(&self) -> String {
         format!("{} <{}>", self.name, self.email)
@@ -531,4 +544,3 @@ impl Default for GitConfigOptions {
         }
     }
 }
-

@@ -1,3 +1,5 @@
+#![allow(clippy::uninlined_format_args)]
+
 use crate::tree_sitter::{
     queries::QueriesManager, ClassInfo, CommentInfo, FunctionInfo, StructuralSummary,
     SupportedLanguage,
@@ -31,8 +33,8 @@ impl StructureAnalyzer {
             comment_query: None,
             cursor: QueryCursor::new(),
             function_buffer: Vec::with_capacity(100), // 预分配
-            class_buffer: Vec::with_capacity(50),    // 预分配
-            comment_buffer: Vec::with_capacity(200), // 预分配
+            class_buffer: Vec::with_capacity(50),     // 预分配
+            comment_buffer: Vec::with_capacity(200),  // 预分配
         };
 
         // 尝试创建自定义查询
@@ -421,7 +423,7 @@ impl StructureAnalyzer {
         self.function_buffer.clear();
         self.class_buffer.clear();
         self.comment_buffer.clear();
-        
+
         let mut summary = StructuralSummary {
             language: self.language.name().to_string(),
             language_summaries: std::collections::HashMap::new(),
@@ -504,6 +506,7 @@ impl StructureAnalyzer {
     }
 
     /// 提取函数信息
+    #[allow(dead_code)]
     fn extract_functions(
         &self,
         query: &Query,
@@ -559,6 +562,7 @@ impl StructureAnalyzer {
     }
 
     /// 提取类信息
+    #[allow(dead_code)]
     fn extract_classes(
         &self,
         query: &Query,
@@ -615,6 +619,7 @@ impl StructureAnalyzer {
     }
 
     /// 提取注释信息
+    #[allow(dead_code)]
     fn extract_comments(
         &self,
         query: &Query,
@@ -644,6 +649,7 @@ impl StructureAnalyzer {
     }
 
     /// 解析参数列表
+    #[allow(dead_code)]
     fn parse_parameters(&self, params_text: &str) -> Vec<String> {
         // 简单的参数解析，可以根据语言进行优化
         params_text
@@ -668,6 +674,7 @@ impl StructureAnalyzer {
     }
 
     /// 计算复杂度提示
+    #[allow(dead_code)]
     fn calculate_complexity_hints(&self, summary: &StructuralSummary) -> Vec<String> {
         let mut hints = Vec::new();
 
@@ -714,20 +721,23 @@ impl StructureAnalyzer {
         source: &[u8],
     ) -> Result<Vec<FunctionInfo>, Box<dyn std::error::Error + Send + Sync>> {
         self.function_buffer.clear();
-        let query = self.function_query.as_ref().ok_or("No function query available")?;
+        let query = self
+            .function_query
+            .as_ref()
+            .ok_or("No function query available")?;
         let matches = self.cursor.matches(query, node, source);
-        
+
         for m in matches {
             let mut function = FunctionInfo {
-                name: String::with_capacity(32), // 预分配
-                parameters: Vec::with_capacity(5),  // 预分配
+                name: String::with_capacity(32),   // 预分配
+                parameters: Vec::with_capacity(5), // 预分配
                 return_type: None,
                 line_start: 0,
                 line_end: 0,
                 is_async: false,
                 visibility: None,
             };
-            
+
             for capture in m.captures {
                 let captured_node = capture.node;
                 if let Ok(text) = captured_node.utf8_text(source) {
@@ -754,23 +764,25 @@ impl StructureAnalyzer {
                     }
                 }
             }
-            
+
             if !function.name.is_empty() {
                 self.function_buffer.push(function);
             }
         }
-        
+
         // 后处理：解析参数（避免借用冲突）
         let mut functions_to_process = std::mem::take(&mut self.function_buffer);
         for function in &mut functions_to_process {
             if function.parameters.len() == 1 && function.parameters[0].contains('(') {
                 let param_text = function.parameters[0].clone();
                 function.parameters.clear();
-                function.parameters.extend(self.parse_parameters_optimized(&param_text));
+                function
+                    .parameters
+                    .extend(self.parse_parameters_optimized(&param_text));
             }
         }
         self.function_buffer = functions_to_process;
-        
+
         Ok(std::mem::take(&mut self.function_buffer))
     }
 
@@ -781,21 +793,24 @@ impl StructureAnalyzer {
         source: &[u8],
     ) -> Result<Vec<ClassInfo>, Box<dyn std::error::Error + Send + Sync>> {
         self.class_buffer.clear();
-        let query = self.class_query.as_ref().ok_or("No class query available")?;
+        let query = self
+            .class_query
+            .as_ref()
+            .ok_or("No class query available")?;
         let matches = self.cursor.matches(query, node, source);
-        
+
         for m in matches {
             let mut class = ClassInfo {
                 name: String::with_capacity(32), // 预分配
-                methods: Vec::with_capacity(10),  // 预分配
-                fields: Vec::with_capacity(10),   // 预分配
+                methods: Vec::with_capacity(10), // 预分配
+                fields: Vec::with_capacity(10),  // 预分配
                 line_start: 0,
                 line_end: 0,
                 is_abstract: false,
                 extends: None,
                 implements: Vec::with_capacity(3), // 预分配
             };
-            
+
             for capture in m.captures {
                 let captured_node = capture.node;
                 if let Ok(text) = captured_node.utf8_text(source) {
@@ -820,12 +835,12 @@ impl StructureAnalyzer {
                     }
                 }
             }
-            
+
             if !class.name.is_empty() {
                 self.class_buffer.push(class);
             }
         }
-        
+
         Ok(std::mem::take(&mut self.class_buffer))
     }
 
@@ -836,9 +851,12 @@ impl StructureAnalyzer {
         source: &[u8],
     ) -> Result<Vec<CommentInfo>, Box<dyn std::error::Error + Send + Sync>> {
         self.comment_buffer.clear();
-        let query = self.comment_query.as_ref().ok_or("No comment query available")?;
+        let query = self
+            .comment_query
+            .as_ref()
+            .ok_or("No comment query available")?;
         let matches = self.cursor.matches(query, node, source);
-        
+
         // 收集所有注释，避免借用冲突
         let mut captured_comments = Vec::new();
         for m in matches {
@@ -854,14 +872,14 @@ impl StructureAnalyzer {
                 }
             }
         }
-        
+
         // 后处理：判断文档注释（避免借用冲突）
         for comment in &mut captured_comments {
             comment.is_doc_comment = self.is_doc_comment(&comment.text);
         }
-        
+
         self.comment_buffer.extend(captured_comments);
-        
+
         Ok(std::mem::take(&mut self.comment_buffer))
     }
 
@@ -870,16 +888,16 @@ impl StructureAnalyzer {
         if params_text.is_empty() {
             return Vec::new();
         }
-        
+
         let trimmed = params_text.trim_matches(|c| c == '(' || c == ')');
         if trimmed.is_empty() {
             return Vec::new();
         }
-        
+
         let mut params = Vec::with_capacity(5); // 预分配
         let mut start = 0;
         let mut bracket_level: i32 = 0;
-        
+
         for (i, ch) in trimmed.char_indices() {
             match ch {
                 '(' | '<' | '[' => bracket_level += 1,
@@ -896,7 +914,7 @@ impl StructureAnalyzer {
                 _ => {}
             }
         }
-        
+
         // 添加最后一个参数
         if start < trimmed.len() {
             let param = trimmed[start..].trim();
@@ -904,7 +922,7 @@ impl StructureAnalyzer {
                 params.push(param.to_string());
             }
         }
-        
+
         params
     }
 
@@ -952,16 +970,17 @@ mod tests {
     use super::*;
     use crate::tree_sitter::queries::QueriesManager;
     use tree_sitter::Parser;
-  
+
     #[test]
     fn test_parse_parameters() {
         let queries_manager = QueriesManager::new().unwrap();
-        
+
         // 使用可用的语言进行测试，优先使用Java，否则使用Rust
         #[cfg(feature = "tree-sitter-java")]
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
-        let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+        let mut analyzer =
+            StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), not(feature = "tree-sitter-rust")))]
         {
             println!("Skipping test_parse_parameters - no supported languages available");
@@ -990,11 +1009,12 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager)
         let queries_manager = QueriesManager::new().unwrap();
 
         // Only test languages that are available in current build
-        
+
         // Rust (should always be available)
         #[cfg(feature = "tree-sitter-rust")]
         {
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+            let analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("///"));
             assert!(analyzer.is_doc_comment("//!"));
             assert!(!analyzer.is_doc_comment("//"));
@@ -1003,7 +1023,8 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         // Python
         #[cfg(feature = "tree-sitter-python")]
         {
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
+            let analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""));
             assert!(analyzer.is_doc_comment("'''docstring'''"));
             assert!(!analyzer.is_doc_comment("# comment"));
@@ -1012,7 +1033,8 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manage
         // Java
         #[cfg(feature = "tree-sitter-java")]
         {
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+            let analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("/**"));
             assert!(!analyzer.is_doc_comment("/*"));
             assert!(!analyzer.is_doc_comment("//"));
@@ -1022,94 +1044,42 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager)
     #[test]
     fn test_calculate_complexity_hints() {
         let queries_manager = QueriesManager::new().unwrap();
-        
+
         // 仅测试可用的语言
         #[cfg(feature = "tree-sitter-java")]
         {
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+            let analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
 
-        // 创建测试用的summary
-        let mut summary = StructuralSummary {
-            language: "java".to_string(),
-            language_summaries: std::collections::HashMap::new(),
-            functions: vec![
-                FunctionInfo {
-                    name: "shortFunction".to_string(),
-                    parameters: vec!["param1".to_string(), "param2".to_string()],
-                    return_type: Some("String".to_string()),
-                    line_start: 1,
-                    line_end: 10,
-                    is_async: false,
-                    visibility: Some("public".to_string()),
-                },
-                FunctionInfo {
-                    name: "longFunction".to_string(),
-                    parameters: vec![
-                        "param1".to_string(),
-                        "param2".to_string(),
-                        "param3".to_string(),
-                        "param4".to_string(),
-                        "param5".to_string(),
-                        "param6".to_string(),
-                    ],
-                    return_type: Some("void".to_string()),
-                    line_start: 20,
-                    line_end: 150, // 130行，超过100行限制
-                    is_async: false,
-                    visibility: Some("private".to_string()),
-                },
-            ],
-            classes: Vec::new(),
-            imports: Vec::new(),
-            exports: Vec::new(),
-            comments: Vec::new(),
-            complexity_hints: Vec::new(),
-            calls: Vec::new(),
-        };
-
-        // 添加更多的函数以达到数量限制
-        for i in 0..60 {
-            summary.functions.push(FunctionInfo {
-                name: format!("function{i}"),
-                parameters: vec!["param".to_string()],
-                return_type: None,
-                line_start: i * 10,
-                line_end: i * 10 + 5,
-                is_async: false,
-                visibility: None,
-            });
-        }
-
-        let hints = analyzer.calculate_complexity_hints(&summary);
-
-        // 验证提示内容
-        assert!(hints
-            .iter()
-            .any(|h| h.contains("文件包含") && h.contains("个函数")));
-        assert!(hints
-            .iter()
-            .any(|h| h.contains("longFunction") && h.contains("过长")));
-        assert!(hints
-            .iter()
-            .any(|h| h.contains("longFunction") && h.contains("参数过多")));
-        }
-        
-        // 如果Java不可用，测试Rust
-        #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
-        {
-let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
-            let summary = StructuralSummary {
-                language: "rust".to_string(),
+            // 创建测试用的summary
+            let mut summary = StructuralSummary {
+                language: "java".to_string(),
                 language_summaries: std::collections::HashMap::new(),
                 functions: vec![
                     FunctionInfo {
-                        name: "test_function".to_string(),
-                        parameters: vec!["param1".to_string()],
+                        name: "shortFunction".to_string(),
+                        parameters: vec!["param1".to_string(), "param2".to_string()],
                         return_type: Some("String".to_string()),
                         line_start: 1,
                         line_end: 10,
                         is_async: false,
-                        visibility: Some("pub".to_string()),
+                        visibility: Some("public".to_string()),
+                    },
+                    FunctionInfo {
+                        name: "longFunction".to_string(),
+                        parameters: vec![
+                            "param1".to_string(),
+                            "param2".to_string(),
+                            "param3".to_string(),
+                            "param4".to_string(),
+                            "param5".to_string(),
+                            "param6".to_string(),
+                        ],
+                        return_type: Some("void".to_string()),
+                        line_start: 20,
+                        line_end: 150, // 130行，超过100行限制
+                        is_async: false,
+                        visibility: Some("private".to_string()),
                     },
                 ],
                 classes: Vec::new(),
@@ -1119,12 +1089,64 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
                 complexity_hints: Vec::new(),
                 calls: Vec::new(),
             };
-            
+
+            // 添加更多的函数以达到数量限制
+            for i in 0..60 {
+                summary.functions.push(FunctionInfo {
+                    name: format!("function{i}"),
+                    parameters: vec!["param".to_string()],
+                    return_type: None,
+                    line_start: i * 10,
+                    line_end: i * 10 + 5,
+                    is_async: false,
+                    visibility: None,
+                });
+            }
+
+            let hints = analyzer.calculate_complexity_hints(&summary);
+
+            // 验证提示内容
+            assert!(hints
+                .iter()
+                .any(|h| h.contains("文件包含") && h.contains("个函数")));
+            assert!(hints
+                .iter()
+                .any(|h| h.contains("longFunction") && h.contains("过长")));
+            assert!(hints
+                .iter()
+                .any(|h| h.contains("longFunction") && h.contains("参数过多")));
+        }
+
+        // 如果Java不可用，测试Rust
+        #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
+        {
+            let analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+            let summary = StructuralSummary {
+                language: "rust".to_string(),
+                language_summaries: std::collections::HashMap::new(),
+                functions: vec![FunctionInfo {
+                    name: "test_function".to_string(),
+                    parameters: vec!["param1".to_string()],
+                    return_type: Some("String".to_string()),
+                    line_start: 1,
+                    line_end: 10,
+                    is_async: false,
+                    visibility: Some("pub".to_string()),
+                }],
+                classes: Vec::new(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                comments: Vec::new(),
+                complexity_hints: Vec::new(),
+                calls: Vec::new(),
+            };
+
             let hints = analyzer.calculate_complexity_hints(&summary);
             // 基本功能测试 - 确保不panic
             assert!(hints.is_empty() || !hints.is_empty());
         }
-        
+
         // 如果没有任何支持的语言，测试会跳过
         #[cfg(all(not(feature = "tree-sitter-java"), not(feature = "tree-sitter-rust")))]
         {
@@ -1139,14 +1161,22 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
 
         for lang in SupportedLanguage::all() {
             let result = StructureAnalyzer::new(lang, &queries_manager);
-            
+
             // 检查语言是否可用
             if lang.language().is_none() {
                 // 语言不可用，应该返回错误
-                assert!(result.is_err(), "Language {:?} should not be available in this build", lang);
+                assert!(
+                    result.is_err(),
+                    "Language {:?} should not be available in this build",
+                    lang
+                );
             } else {
                 // 语言可用，应该成功
-                assert!(result.is_ok(), "Should be able to create analyzer for {:?}", lang);
+                assert!(
+                    result.is_ok(),
+                    "Should be able to create analyzer for {:?}",
+                    lang
+                );
             }
         }
     }
@@ -1157,9 +1187,10 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         #[cfg(feature = "tree-sitter-java")]
         {
             let queries_manager = QueriesManager::new().unwrap();
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+            let mut analyzer =
+                StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
 
-        let java_code = r#"
+            let java_code = r#"
         public class TestClass {
             private String field;
             
@@ -1173,28 +1204,28 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         }
         "#;
 
-        // 创建解析器并解析代码
-        let mut parser = Parser::new();
-        parser
-            .set_language(
-                SupportedLanguage::Java
-                    .language()
-                    .expect("Java language not enabled in this build"),
-            )
-            .expect("Failed to set Java language for parser");
-        let tree = parser
-            .parse(java_code, None)
-            .expect("Failed to parse Java code with tree-sitter");
+            // 创建解析器并解析代码
+            let mut parser = Parser::new();
+            parser
+                .set_language(
+                    SupportedLanguage::Java
+                        .language()
+                        .expect("Java language not enabled in this build"),
+                )
+                .expect("Failed to set Java language for parser");
+            let tree = parser
+                .parse(java_code, None)
+                .expect("Failed to parse Java code with tree-sitter");
 
-        let result = analyzer.analyze(&tree, java_code.as_bytes());
-        assert!(result.is_ok(), "Should successfully analyze Java code");
+            let result = analyzer.analyze(&tree, java_code.as_bytes());
+            assert!(result.is_ok(), "Should successfully analyze Java code");
 
-        let summary = result.unwrap();
-        assert_eq!(summary.language, "java");
+            let summary = result.unwrap();
+            assert_eq!(summary.language, "java");
 
-        // 基本验证结构摘要不为空
+            // 基本验证结构摘要不为空
         }
-        
+
         // 如果Java不可用，测试会跳过
         #[cfg(not(feature = "tree-sitter-java"))]
         {
@@ -1207,10 +1238,11 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         // 仅测试可用的语言
         #[cfg(feature = "tree-sitter-c")]
         {
-        let queries_manager = QueriesManager::new().unwrap();
-        let mut analyzer = StructureAnalyzer::new(SupportedLanguage::C, &queries_manager).unwrap();
+            let queries_manager = QueriesManager::new().unwrap();
+            let mut analyzer =
+                StructureAnalyzer::new(SupportedLanguage::C, &queries_manager).unwrap();
 
-        let c_code = r#"
+            let c_code = r#"
         #include <stdio.h>
         
         // Simple structure definition
@@ -1248,54 +1280,54 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         }
         "#;
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(
-                SupportedLanguage::C
-                    .language()
-                    .expect("C language not enabled in this build"),
-            )
-            .expect("Failed to set C language for parser");
-        let tree = parser
-            .parse(c_code, None)
-            .expect("Failed to parse C code with tree-sitter");
+            let mut parser = Parser::new();
+            parser
+                .set_language(
+                    SupportedLanguage::C
+                        .language()
+                        .expect("C language not enabled in this build"),
+                )
+                .expect("Failed to set C language for parser");
+            let tree = parser
+                .parse(c_code, None)
+                .expect("Failed to parse C code with tree-sitter");
 
-        let result = analyzer.analyze(&tree, c_code.as_bytes());
-        assert!(
-            result.is_ok(),
-            "Should successfully analyze C code: {:?}",
-            result.err()
-        );
-
-        let summary = result.unwrap();
-        assert_eq!(summary.language, "c");
-
-        println!("C Analysis Results:");
-        println!("Functions found: {}", summary.functions.len());
-        for func in &summary.functions {
-            println!("  - {}: {} params", func.name, func.parameters.len());
-        }
-
-        println!("Structures found: {}", summary.classes.len());
-        for class in &summary.classes {
-            println!(
-                "  - {} (lines {}-{})",
-                class.name, class.line_start, class.line_end
+            let result = analyzer.analyze(&tree, c_code.as_bytes());
+            assert!(
+                result.is_ok(),
+                "Should successfully analyze C code: {:?}",
+                result.err()
             );
+
+            let summary = result.unwrap();
+            assert_eq!(summary.language, "c");
+
+            println!("C Analysis Results:");
+            println!("Functions found: {}", summary.functions.len());
+            for func in &summary.functions {
+                println!("  - {}: {} params", func.name, func.parameters.len());
+            }
+
+            println!("Structures found: {}", summary.classes.len());
+            for class in &summary.classes {
+                println!(
+                    "  - {} (lines {}-{})",
+                    class.name, class.line_start, class.line_end
+                );
+            }
+
+            println!("Comments found: {}", summary.comments.len());
+
+            // Basic validation - adjusted expectations for Tree-sitter parsing capabilities
+            // Note: The actual parsing might find more or fewer structures depending on Tree-sitter grammar
+            assert!(
+                !summary.functions.is_empty(),
+                "Should find at least some functions"
+            );
+            // Some parsing issues may prevent finding all structures, so we just ensure it runs
+            println!("Test completed successfully - C code was parsed without errors");
         }
 
-        println!("Comments found: {}", summary.comments.len());
-
-        // Basic validation - adjusted expectations for Tree-sitter parsing capabilities
-        // Note: The actual parsing might find more or fewer structures depending on Tree-sitter grammar
-        assert!(
-            !summary.functions.is_empty(),
-            "Should find at least some functions"
-        );
-        // Some parsing issues may prevent finding all structures, so we just ensure it runs
-        println!("Test completed successfully - C code was parsed without errors");
-        }
-        
         // 如果C不可用，测试会跳过
         #[cfg(not(feature = "tree-sitter-c"))]
         {
@@ -1308,11 +1340,11 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         // 仅测试可用的语言
         #[cfg(feature = "tree-sitter-cpp")]
         {
-        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
-        let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager)
-            .expect("Failed to create StructureAnalyzer for C++");
+            let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Cpp, &queries_manager)
+                .expect("Failed to create StructureAnalyzer for C++");
 
-        let cpp_code = r#"
+            let cpp_code = r#"
         #include <iostream>
         #include <string>
         #include <vector>
@@ -1377,49 +1409,49 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         }
         "#;
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(
-                SupportedLanguage::Cpp
-                    .language()
-                    .expect("C++ language not enabled in this build"),
-            )
-            .expect("Failed to set C++ language for parser");
-        let tree = parser
-            .parse(cpp_code, None)
-            .expect("Failed to parse C++ code with tree-sitter");
+            let mut parser = Parser::new();
+            parser
+                .set_language(
+                    SupportedLanguage::Cpp
+                        .language()
+                        .expect("C++ language not enabled in this build"),
+                )
+                .expect("Failed to set C++ language for parser");
+            let tree = parser
+                .parse(cpp_code, None)
+                .expect("Failed to parse C++ code with tree-sitter");
 
-        let result = analyzer.analyze(&tree, cpp_code.as_bytes());
-        assert!(
-            result.is_ok(),
-            "Should successfully analyze C++ code: {:?}",
-            result.err()
-        );
-
-        let summary = result.unwrap();
-        assert_eq!(summary.language, "cpp");
-
-        println!("C++ Analysis Results:");
-        println!("Functions found: {}", summary.functions.len());
-        for func in &summary.functions {
-            println!("  - {}: {} params", func.name, func.parameters.len());
-        }
-
-        println!("Classes found: {}", summary.classes.len());
-        for class in &summary.classes {
-            println!(
-                "  - {} (lines {}-{})",
-                class.name, class.line_start, class.line_end
+            let result = analyzer.analyze(&tree, cpp_code.as_bytes());
+            assert!(
+                result.is_ok(),
+                "Should successfully analyze C++ code: {:?}",
+                result.err()
             );
+
+            let summary = result.unwrap();
+            assert_eq!(summary.language, "cpp");
+
+            println!("C++ Analysis Results:");
+            println!("Functions found: {}", summary.functions.len());
+            for func in &summary.functions {
+                println!("  - {}: {} params", func.name, func.parameters.len());
+            }
+
+            println!("Classes found: {}", summary.classes.len());
+            for class in &summary.classes {
+                println!(
+                    "  - {} (lines {}-{})",
+                    class.name, class.line_start, class.line_end
+                );
+            }
+
+            println!("Comments found: {}", summary.comments.len());
+
+            // Basic validation - adjusted expectations
+            println!("Test completed successfully - C++ code was parsed without errors");
+            // Tree-sitter parsing results may vary, focus on ensuring no errors occurred
         }
 
-        println!("Comments found: {}", summary.comments.len());
-
-        // Basic validation - adjusted expectations
-        println!("Test completed successfully - C++ code was parsed without errors");
-        // Tree-sitter parsing results may vary, focus on ensuring no errors occurred
-        }
-        
         // 如果C++不可用，测试会跳过
         #[cfg(not(feature = "tree-sitter-cpp"))]
         {
@@ -1432,11 +1464,11 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         // 仅测试可用的语言
         #[cfg(feature = "tree-sitter-go")]
         {
-        let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
-        let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager)
-            .expect("Failed to create StructureAnalyzer for Go");
+            let queries_manager = QueriesManager::new().expect("Failed to create QueriesManager");
+            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Go, &queries_manager)
+                .expect("Failed to create StructureAnalyzer for Go");
 
-        let go_code = r#"
+            let go_code = r#"
         package main
         
         import (
@@ -1534,50 +1566,50 @@ let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager)
         }
         "#;
 
-        let mut parser = Parser::new();
-        parser
-            .set_language(
-                SupportedLanguage::Go
-                    .language()
-                    .expect("Go language not enabled in this build"),
-            )
-            .expect("Failed to set Go language for parser");
-        let tree = parser
-            .parse(go_code, None)
-            .expect("Failed to parse Go code with tree-sitter");
+            let mut parser = Parser::new();
+            parser
+                .set_language(
+                    SupportedLanguage::Go
+                        .language()
+                        .expect("Go language not enabled in this build"),
+                )
+                .expect("Failed to set Go language for parser");
+            let tree = parser
+                .parse(go_code, None)
+                .expect("Failed to parse Go code with tree-sitter");
 
-        let result = analyzer.analyze(&tree, go_code.as_bytes());
-        assert!(
-            result.is_ok(),
-            "Should successfully analyze Go code: {:?}",
-            result.err()
-        );
-
-        let summary = result.unwrap();
-        assert_eq!(summary.language, "go");
-
-        println!("Go Analysis Results:");
-        println!("Functions found: {}", summary.functions.len());
-        for func in &summary.functions {
-            println!("  - {}: {} params", func.name, func.parameters.len());
-        }
-
-        println!("Types found: {}", summary.classes.len());
-        for class in &summary.classes {
-            println!(
-                "  - {} (lines {}-{})",
-                class.name, class.line_start, class.line_end
+            let result = analyzer.analyze(&tree, go_code.as_bytes());
+            assert!(
+                result.is_ok(),
+                "Should successfully analyze Go code: {:?}",
+                result.err()
             );
+
+            let summary = result.unwrap();
+            assert_eq!(summary.language, "go");
+
+            println!("Go Analysis Results:");
+            println!("Functions found: {}", summary.functions.len());
+            for func in &summary.functions {
+                println!("  - {}: {} params", func.name, func.parameters.len());
+            }
+
+            println!("Types found: {}", summary.classes.len());
+            for class in &summary.classes {
+                println!(
+                    "  - {} (lines {}-{})",
+                    class.name, class.line_start, class.line_end
+                );
+            }
+
+            println!("Comments found: {}", summary.comments.len());
+
+            // Basic validation - adjusted expectations
+            println!("Test completed successfully - Go code was parsed without errors");
+            // Tree-sitter parsing results may vary, focus on ensuring no errors occurred
+            // Go types are being detected correctly, which is a good sign
         }
 
-        println!("Comments found: {}", summary.comments.len());
-
-        // Basic validation - adjusted expectations
-        println!("Test completed successfully - Go code was parsed without errors");
-        // Tree-sitter parsing results may vary, focus on ensuring no errors occurred
-        // Go types are being detected correctly, which is a good sign
-        }
-        
         // 如果Go不可用，测试会跳过
         #[cfg(not(feature = "tree-sitter-go"))]
         {

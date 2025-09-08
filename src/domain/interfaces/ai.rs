@@ -1,9 +1,9 @@
 //! AI服务接口定义
 
+use crate::domain::errors::DomainError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::domain::errors::DomainError;
 
 /// AI模型类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,10 +56,11 @@ pub struct UsageInfo {
 pub trait AIService: Send + Sync {
     /// 发送AI请求
     async fn request(&self, request: AIRequest) -> Result<AIResponse, DomainError>;
-    
+
     /// 批量发送AI请求
-    async fn batch_request(&self, requests: Vec<AIRequest>) -> Result<Vec<AIResponse>, DomainError>;
-    
+    async fn batch_request(&self, requests: Vec<AIRequest>)
+        -> Result<Vec<AIResponse>, DomainError>;
+
     /// 检查服务健康状态
     async fn health_check(&self) -> Result<bool, DomainError>;
 }
@@ -69,7 +70,7 @@ pub trait AIService: Send + Sync {
 pub trait AIProvider: Send + Sync {
     /// 创建AI服务
     fn create_service(&self, config: AIConfig) -> Result<Box<dyn AIService>, DomainError>;
-    
+
     /// 支持的模型列表
     fn supported_models(&self) -> Vec<AIModel>;
 }

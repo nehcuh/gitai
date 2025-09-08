@@ -1,8 +1,8 @@
 //! Git相关实体
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 /// Git提交信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
