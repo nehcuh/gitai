@@ -151,7 +151,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("容器统计信息:");
     println!("   📊 总解析次数: {}", stats.total());
     println!("   🎯 缓存命中率: {:.1}%", stats.hit_rate() * 100.0);
-    println!("   ✅ 命中: {}, ❌ 未命中: {}", stats.cache_hits, stats.cache_misses);
+    println!(
+        "   ✅ 命中: {}, ❌ 未命中: {}",
+        stats.cache_hits, stats.cache_misses
+    );
 
     println!("\n✅ 示例完成！");
     println!("当前架构提供了完整的DI功能，包括统计监控。");
@@ -180,9 +183,11 @@ async fn test_error_handling() {
     container
         .register_singleton_simple(
             || -> Result<Config, gitai::infrastructure::container::ContainerError> {
-                Err(gitai::infrastructure::container::ContainerError::CreationFailed(
-                    "配置错误".to_string(),
-                ))
+                Err(
+                    gitai::infrastructure::container::ContainerError::CreationFailed(
+                        "配置错误".to_string(),
+                    ),
+                )
             },
         )
         .await;

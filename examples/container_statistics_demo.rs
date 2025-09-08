@@ -68,7 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ 初始统计信息:");
     println!("   - 总解析次数: {}", initial_stats.total());
     println!("   - 缓存命中率: {:.1}%", initial_stats.hit_rate() * 100.0);
-    println!("   - 命中: {}, 未命中: {}", initial_stats.cache_hits, initial_stats.cache_misses);
+    println!(
+        "   - 命中: {}, 未命中: {}",
+        initial_stats.cache_hits, initial_stats.cache_misses
+    );
 
     println!("\n2️⃣ 解析服务并观察统计变化");
 
@@ -101,7 +104,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _cache = container.resolve::<CacheService>().await?;
 
     let after_cache = container.get_stats();
-    println!("   解析总数: {} (命中: {}, 未命中: {})", after_cache.total(), after_cache.cache_hits, after_cache.cache_misses);
+    println!(
+        "   解析总数: {} (命中: {}, 未命中: {})",
+        after_cache.total(),
+        after_cache.cache_hits,
+        after_cache.cache_misses
+    );
 
     // 多次解析瞬态服务
     println!("\n🔍 多次解析瞬态日志服务...");
@@ -123,7 +131,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📊 详细统计信息:");
     println!("   📈 总解析次数: {}", final_stats.total());
     println!("   🎯 缓存命中率: {:.1}%", final_stats.hit_rate() * 100.0);
-    println!("   ✅ 命中: {}, ❌ 未命中: {}", final_stats.cache_hits, final_stats.cache_misses);
+    println!(
+        "   ✅ 命中: {}, ❌ 未命中: {}",
+        final_stats.cache_hits, final_stats.cache_misses
+    );
 
     println!("\n4️⃣ 演示统计重置功能");
 

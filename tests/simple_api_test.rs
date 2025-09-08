@@ -24,9 +24,7 @@ async fn test_simple_transient_registration() {
 
     // 使用简单的瞬态服务注册（推荐方式）
     container
-        .register_transient_simple(|| {
-Ok::<_, ContainerError>(SimpleService { value: 42 })
-        })
+        .register_transient_simple(|| Ok::<_, ContainerError>(SimpleService { value: 42 }))
         .await;
 
     // 解析服务
@@ -45,9 +43,7 @@ async fn test_simple_singleton_registration() {
 
     // 使用简单的单例服务注册（推荐方式）
     container
-        .register_singleton_simple(|| {
-Ok::<_, ContainerError>(SimpleService { value: 100 })
-        })
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 100 }))
         .await;
 
     // 解析服务
@@ -66,9 +62,7 @@ async fn test_simple_scoped_registration() {
 
     // 使用简单的作用域服务注册（推荐方式）
     container
-        .register_scoped_simple(|| {
-Ok::<_, ContainerError>(SimpleService { value: 200 })
-        })
+        .register_scoped_simple(|| Ok::<_, ContainerError>(SimpleService { value: 200 }))
         .await;
 
     // 启动一个作用域以解析作用域服务
@@ -90,7 +84,7 @@ async fn test_simple_api_with_complex_service() {
     // 使用简单的单例服务注册复杂服务（推荐方式）
     container
         .register_singleton_simple(|| {
-Ok::<_, ContainerError>(ComplexService {
+            Ok::<_, ContainerError>(ComplexService {
                 name: "TestService".to_string(),
                 id: 12345,
             })
@@ -112,9 +106,7 @@ async fn test_simple_api_error_handling() {
     // 注册一个总是失败的服务（使用简单语法）
     container
         .register_singleton_simple(|| {
-            Err::<SimpleService, _>(
-                ContainerError::CreationFailed("Test error".to_string()),
-            )
+            Err::<SimpleService, _>(ContainerError::CreationFailed("Test error".to_string()))
         })
         .await;
 
@@ -131,14 +123,12 @@ async fn test_simple_api_multiple_services() {
 
     // 使用闭包语法注册多个不同类型的服务（推荐方式）
     container
-        .register_singleton_simple(|| {
-Ok::<_, ContainerError>(SimpleService { value: 42 })
-        })
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 42 }))
         .await;
 
     container
         .register_transient_simple(|| {
-Ok::<_, ContainerError>(ComplexService {
+            Ok::<_, ContainerError>(ComplexService {
                 name: "TransientService".to_string(),
                 id: 999,
             })
@@ -161,9 +151,7 @@ async fn test_simple_api_concurrent() {
 
     // 使用简单的单例服务注册（推荐方式）
     container
-        .register_singleton_simple(|| {
-Ok::<_, ContainerError>(SimpleService { value: 777 })
-        })
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 777 }))
         .await;
 
     // 并发解析服务

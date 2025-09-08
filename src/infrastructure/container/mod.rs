@@ -15,4 +15,3 @@ pub enum ServiceLifetime {
     /// Per-scope instance (shared within active scope)
     Scoped,
 }
-

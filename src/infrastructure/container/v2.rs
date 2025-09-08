@@ -59,8 +59,17 @@ impl fmt::Display for ContainerError {
             ContainerError::ConcurrencyLimitExceeded => {
                 write!(f, "Container concurrency limit exceeded")
             }
-            ContainerError::ScopeError { scope_name, operation, reason, .. } => {
-                write!(f, "Scope error ({}): {} [{}]", scope_name, reason, operation)
+            ContainerError::ScopeError {
+                scope_name,
+                operation,
+                reason,
+                ..
+            } => {
+                write!(
+                    f,
+                    "Scope error ({}): {} [{}]",
+                    scope_name, reason, operation
+                )
             }
         }
     }
@@ -180,10 +189,8 @@ impl ServiceContainer {
             factory,
             std::any::type_name::<T>(),
         ));
-        self.registrations.insert(
-            TypeId::of::<T>(),
-            Registration { factory, lifetime },
-        );
+        self.registrations
+            .insert(TypeId::of::<T>(), Registration { factory, lifetime });
     }
 
     /// 注册服务工厂（默认单例） - 简化API
@@ -219,8 +226,7 @@ impl ServiceContainer {
     /// 解析服务 - 主要API（按生命周期分派）
     pub async fn resolve<T: Send + Sync + 'static>(&self) -> Result<Arc<T>, ContainerError> {
         // 记录总解析次数
-        self
-            .stats
+        self.stats
             .total_resolutions
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -237,8 +243,7 @@ impl ServiceContainer {
                 // 先检查缓存
                 if let Some(cell) = self.singletons.get(&type_id) {
                     if let Some(service) = cell.get() {
-                        self
-                            .stats
+                        self.stats
                             .cache_hits
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         let cloned = service.clone();
@@ -253,8 +258,7 @@ impl ServiceContainer {
                 }
 
                 // 缓存未命中
-                self
-                    .stats
+                self.stats
                     .cache_misses
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -308,11 +312,7 @@ impl ServiceContainer {
                 };
 
                 // 获取或创建该作用域的实例表
-                let scope_map = self
-                    .scopes
-                    .entry(current_scope_id)
-                    .or_default()
-                    .clone();
+                let scope_map = self.scopes.entry(current_scope_id).or_default().clone();
 
                 // 命中作用域缓存
                 if let Some(inst) = scope_map.get(&type_id) {

@@ -104,9 +104,10 @@ async fn test_service_type_registration() {
     // 对比手动provider
     let container2 = ServiceContainer::new();
     // 使用闭包模拟手动 provider
-    let manual = |_c: &ServiceContainer| -> Result<TestService, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(TestService { value: 100 })
-    };
+    let manual =
+        |_c: &ServiceContainer| -> Result<TestService, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(TestService { value: 100 })
+        };
     container2.register::<TestService, _>(manual);
 
     match container2.resolve::<TestService>().await {
