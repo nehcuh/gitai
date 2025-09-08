@@ -1,5 +1,7 @@
 //! API对比测试 - 诊断简化API的问题
 
+#![allow(clippy::uninlined_format_args, clippy::print_stdout)]
+
 use gitai::infrastructure::container::{ContainerError, ServiceContainer, ServiceProvider};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -48,8 +50,8 @@ async fn test_simple_api_works() {
 
     // 使用闭包语法注册（推荐方式）
     println!("使用闭包语法注册服务...");
-    container
-        .register_singleton(|_container| Ok::<_, ContainerError>(TestService { value: 456 }))
+container
+        .register_singleton_simple(|| Ok::<_, ContainerError>(TestService { value: 456 }))
         .await;
     println!("闭包语法注册完成");
 
@@ -101,8 +103,8 @@ async fn test_type_inference_issue() {
 
     // 尝试不同的类型声明方式
     println!("尝试1: 完全限定语法...");
-    container
-        .register_singleton(|_container| -> Result<TestService, ContainerError> {
+container
+        .register_singleton_simple(|| -> Result<TestService, ContainerError> {
             Ok(TestService { value: 111 })
         })
         .await;
@@ -115,8 +117,8 @@ async fn test_type_inference_issue() {
     // 重置容器
     let container = ServiceContainer::new();
     println!("尝试2: 显式类型标注...");
-    let factory: fn() -> Result<TestService, ContainerError> = || Ok(TestService { value: 222 });
-    container.register_singleton(|_container| factory()).await;
+let factory: fn() -> Result<TestService, ContainerError> = || Ok(TestService { value: 222 });
+container.register_singleton_simple(factory).await;
 
     match container.resolve::<TestService>().await {
         Ok(service) => println!("✓ 方法2成功: {:?}", service),

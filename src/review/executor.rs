@@ -446,7 +446,7 @@ pub async fn execute_review_with_result(
                             if !issues.is_empty() {
                                 use std::fmt::Write as _;
                                 for issue in &issues {
-if let Some(ref ctx) = issue.ai_context {
+                                    if let Some(ref ctx) = issue.ai_context {
                                         // 优先使用为 AI 准备的上下文摘要
                                         let _ = writeln!(&mut s, "{ctx}\n");
                                     } else {

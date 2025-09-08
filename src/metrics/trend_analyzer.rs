@@ -336,10 +336,8 @@ impl<'a> TrendAnalyzer<'a> {
             if finding.significance as i32 >= Significance::High as i32
                 && finding.metric.as_str() == "circular_dependencies"
             {
-                recommendations.push(
-                    "紧急：需要解决循环依赖问题，这会影响系统的可维护性和测试性"
-                        .to_string(),
-                );
+                recommendations
+                    .push("紧急：需要解决循环依赖问题，这会影响系统的可维护性和测试性".to_string());
             }
         }
 

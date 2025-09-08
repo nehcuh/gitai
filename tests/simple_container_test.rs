@@ -2,8 +2,10 @@
 //!
 //! 验证新的DI容器实现的基本功能
 
+#![allow(clippy::uninlined_format_args, clippy::print_stdout)]
+
 use gitai::infrastructure::container::{
-    ContainerError, ServiceContainer, ServiceLifetime, ServiceProvider,
+    ContainerError, ServiceContainer, ServiceProvider,
 };
 use std::sync::Arc;
 

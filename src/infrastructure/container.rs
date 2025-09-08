@@ -8,6 +8,9 @@
 
 #![allow(clippy::type_complexity)]
 
+// 暴露改进版容器模块供基准和部分测试使用
+pub mod v2;
+
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
@@ -324,7 +327,6 @@ pub struct ContainerStats {
     /// 类型转换失败次数
     pub type_cast_failures: u64,
 }
-
 
 impl ContainerStats {
     /// 获取缓存命中率（百分比）
@@ -840,7 +842,7 @@ impl ServiceContainer {
         let service = instance.downcast::<T>().map_err(|_| {
             let expected_type = std::any::type_name::<T>();
             let actual_type = "Box<dyn Any + Send + Sync>";
-let context = "singleton service creation".to_string();
+            let context = "singleton service creation".to_string();
             let backtrace_hint =
                 Some("Check that the service provider returns the correct type".to_string());
 
@@ -876,7 +878,7 @@ let context = "singleton service creation".to_string();
         let service = instance.downcast::<T>().map_err(|_| {
             let expected_type = std::any::type_name::<T>();
             let actual_type = "Box<dyn Any + Send + Sync>";
-let context = "transient service creation".to_string();
+            let context = "transient service creation".to_string();
             let backtrace_hint =
                 Some("Check that the service provider returns the correct type".to_string());
 

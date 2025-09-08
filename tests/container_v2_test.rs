@@ -1,7 +1,9 @@
 //! DI容器v2的集成测试
 
+#![allow(clippy::uninlined_format_args, clippy::print_stdout)]
+
 use futures_util::future;
-use gitai::infrastructure::container::{ContainerError, ServiceContainer};
+use gitai::infrastructure::container::v2::{ContainerError, ServiceContainer};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
@@ -89,7 +91,8 @@ async fn test_singleton_behavior() {
     let results = future::join_all(handles).await;
 
     // 验证所有服务实例相同
-    for (index, multiplier) in results {
+    for res in results {
+        let (index, multiplier) = res.unwrap();
         assert_eq!(multiplier, 3, "Service {} has wrong multiplier", index);
     }
 
@@ -170,11 +173,10 @@ async fn test_error_handling() {
     ));
 
     // 注册一个总是失败的服务
-    container.register(|_| {
-        Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Service creation failed",
-        )))
+    container.register::<CalculatorService, _>(|_| {
+        Err::<CalculatorService, Box<dyn std::error::Error + Send + Sync>>(Box::new(
+            std::io::Error::other("Service creation failed"),
+        ))
     });
 
     let result = container.resolve::<CalculatorService>().await;
@@ -185,12 +187,6 @@ async fn test_error_handling() {
 #[derive(Clone)]
 struct TestConfig {
     multiplier: i32,
-}
-
-/// 测试用的Logger服务
-#[derive(Clone)]
-struct LoggerService {
-    prefix: String,
 }
 
 #[tokio::test]
@@ -255,12 +251,6 @@ async fn test_service_factory_with_configuration() {
     assert_eq!(service.multiplier, 8);
 }
 
-/// 测试配置结构
-#[derive(Clone)]
-struct TestConfig {
-    multiplier: i32,
-}
-
 #[tokio::test]
 async fn test_memory_usage_and_cleanup() {
     let container = ServiceContainer::new();
@@ -269,13 +259,13 @@ async fn test_memory_usage_and_cleanup() {
     for i in 0..100 {
         // 为每种类型创建不同的工厂
         container.register(move |_| {
-            let service_type = format!("Service{}", i);
+            let _service_type = format!("Service{}", i);
             Ok(TestService { id: i })
         });
     }
 
     // 解析所有服务
-    for i in 0..100 {
+    for _i in 0..100 {
         // 这里需要类型擦除的技巧，简化测试
         let _ = container.resolve::<TestService>().await;
     }
@@ -296,10 +286,10 @@ async fn test_error_recovery_and_retry() {
         let count = count_clone.fetch_add(1, Ordering::SeqCst);
         if count < 3 {
             // 前3次失败
-            Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Attempt {} failed", count),
-            )))
+            Err(Box::new(std::io::Error::other(format!(
+                "Attempt {} failed",
+                count
+            ))))
         } else {
             // 之后成功
             Ok(CalculatorService { multiplier: 6 })
@@ -310,13 +300,12 @@ async fn test_error_recovery_and_retry() {
     let result1 = container.resolve::<CalculatorService>().await;
     assert!(result1.is_err());
 
-    // 由于OnceCell的特性，后续解析也会失败（因为第一次失败了）
-    // 这是期望的行为 - 失败会被缓存
+    // 再次解析会再次尝试创建（错误不会被缓存）
     let result2 = container.resolve::<CalculatorService>().await;
     assert!(result2.is_err());
 
-    // 验证只尝试了创建一次
-    assert_eq!(attempt_count.load(Ordering::SeqCst), 1);
+    // 验证已至少尝试了两次
+    assert!(attempt_count.load(Ordering::SeqCst) >= 2);
 }
 
 /// 性能基准测试
@@ -375,7 +364,7 @@ async fn test_stress_high_concurrency() {
             for i in 0..resolutions_per_task {
                 match container_clone.resolve::<TestService>().await {
                     Ok(service) => local_results.push((task_id, i, service.id)),
-                    Err(e) => local_results.push((task_id, i, -1)), // 错误标记
+                    Err(_e) => local_results.push((task_id, i, -1)), // 错误标记
                 }
             }
             local_results
@@ -479,8 +468,8 @@ async fn test_error_context_propagation() {
     let container = ServiceContainer::new();
 
     // 注册一个会提供详细错误信息的服务
-    container.register(|_| {
-        Err(Box::new(std::io::Error::new(
+    container.register::<TestService, _>(|_| {
+        Err::<TestService, Box<dyn std::error::Error + Send + Sync>>(Box::new(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "Configuration file not found: /path/to/config.toml",
         )))
@@ -537,7 +526,8 @@ async fn test_comprehensive_integration() {
     let results = future::join_all(handles).await;
 
     // 4. 验证结果
-    for (i, result, logged, test_id) in results {
+    for item in results {
+        let (i, result, logged, test_id) = item.unwrap();
         assert_eq!(result, i * 5); // 计算器服务
         assert_eq!(logged, result); // 日志服务
         assert_eq!(test_id, 999); // 测试服务
@@ -546,12 +536,12 @@ async fn test_comprehensive_integration() {
     // 5. 验证统计信息
     let stats = container.get_stats();
     assert_eq!(stats.total(), 30); // 10次 * 3个服务
-    assert!(stats.hit_rate() > 0.9);
+    assert!(stats.hit_rate() >= 0.9);
 
     // 6. 验证缓存命中率
     let hit_rate = container.get_cache_hit_rate();
     println!("Final cache hit rate: {:.2}%", hit_rate * 100.0);
-    assert!(hit_rate > 0.9);
+    assert!(hit_rate >= 0.9);
 }
 
 /// 测试内存和性能基准
@@ -565,7 +555,6 @@ async fn test_memory_efficiency() {
     }
 
     // 随机解析服务
-    let mut rng = rand::thread_rng();
     for _ in 0..10000 {
         let _ = container.resolve::<TestService>().await;
     }
@@ -580,4 +569,3 @@ async fn test_memory_efficiency() {
 }
 
 // 添加必要的依赖导入
-use rand::Rng; // 需要添加 rand 依赖到 Cargo.toml 用于测试

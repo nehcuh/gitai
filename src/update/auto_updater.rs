@@ -242,7 +242,7 @@ impl AutoUpdater {
                 let url = url.clone();
                 async move {
                     // 支持 file:// 与 http(s):// -> 获取 Vec<u8>
-let data: Vec<u8> = if let Some(path) = url.strip_prefix("file://") {
+                    let data: Vec<u8> = if let Some(path) = url.strip_prefix("file://") {
                         std::fs::read(path).map_err(UpdateError::Io)?
                     } else {
                         let resp = reqwest::get(&url).await.map_err(UpdateError::from)?;

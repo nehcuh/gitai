@@ -6,7 +6,8 @@
 //! - 文件跟踪和忽略规则处理
 //! - 提交和分支操作
 
-use gitai::error::{GitAIError, GitError};
+#![allow(clippy::uninlined_format_args, clippy::print_stdout)]
+
 use gitai::git;
 use std::path::Path;
 

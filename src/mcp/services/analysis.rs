@@ -170,7 +170,7 @@ impl AnalysisService {
         for file_path in &code_files {
             debug!("🔍 分析文件: {}", file_path.display());
 
-match self.analyze_single_file(file_path).await {
+            match self.analyze_single_file(file_path).await {
                 Ok(result) => {
                     total_summary.total_lines += result.summary.total_lines;
                     total_summary.code_lines += result.summary.code_lines;

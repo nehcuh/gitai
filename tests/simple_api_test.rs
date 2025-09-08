@@ -71,11 +71,14 @@ async fn test_simple_scoped_registration() {
         })
         .await;
 
+    // 启动一个作用域以解析作用域服务
+    container.begin_scope().await;
+
     // 解析服务
     let service1 = container.resolve::<SimpleService>().await.unwrap();
     let service2 = container.resolve::<SimpleService>().await.unwrap();
 
-    // 验证作用域行为：在当前实现中，作用域服务类似单例
+    // 验证作用域行为：在当前实现中，作用域服务在同一作用域内表现为单例
     assert!(Arc::ptr_eq(&service1, &service2));
     assert_eq!(service1.value, 200);
 }
@@ -110,9 +113,12 @@ async fn test_simple_api_error_handling() {
     container
         .register_singleton_simple(|| {
             Err::<SimpleService, _>(
-                gitai::infrastructure::container::ContainerError::ServiceCreationFailed(
-                    "Test error".to_string(),
-                ),
+                gitai::infrastructure::container::ContainerError::ServiceCreationFailed {
+                    service_type: "SimpleService".to_string(),
+                    service_name: Some("SimpleService".to_string()),
+                    reason: "Test error".to_string(),
+                    source_error: None,
+                },
             )
         })
         .await;

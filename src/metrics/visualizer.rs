@@ -189,7 +189,7 @@ impl TrendVisualizer {
             "|------|--------|--------|--------|------|--------|"
         )?;
 
-for trend in analysis.metric_trends.values() {
+        for trend in analysis.metric_trends.values() {
             let trend_symbol = match trend.trend {
                 Trend::Improving => "↗️",
                 Trend::Stable => "→",
