@@ -7,7 +7,7 @@
 
 #![allow(dead_code, clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::ServiceContainer;
+use gitai::infrastructure::container::v2::ServiceContainer;
 use std::sync::Arc;
 
 // 示例服务结构
@@ -147,19 +147,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\n6️⃣ 演示统计功能");
-    let stats = container.get_stats().await;
+    let stats = container.get_stats();
     println!("容器统计信息:");
-    println!("   📊 总解析次数: {}", stats.total_resolutions);
-    println!("   📋 注册服务数量: {}", stats.registered_services);
-    println!("   🔥 活跃单例数量: {}", stats.active_singletons);
-    println!("   🎯 缓存命中率: {:.1}%", stats.cache_hit_rate());
-    println!("   ⚡ 瞬态服务创建: {}", stats.transient_creations);
-    println!("   🎯 循环依赖检测: {}", stats.circular_dependency_checks);
-
-    println!(
-        "\n🚀 性能摘要: {}",
-        container.get_performance_summary().await
-    );
+    println!("   📊 总解析次数: {}", stats.total());
+    println!("   🎯 缓存命中率: {:.1}%", stats.hit_rate() * 100.0);
+    println!("   ✅ 命中: {}, ❌ 未命中: {}", stats.cache_hits, stats.cache_misses);
 
     println!("\n✅ 示例完成！");
     println!("当前架构提供了完整的DI功能，包括统计监控。");
@@ -188,14 +180,9 @@ async fn test_error_handling() {
     container
         .register_singleton_simple(
             || -> Result<Config, gitai::infrastructure::container::ContainerError> {
-                Err(
-                    gitai::infrastructure::container::ContainerError::ServiceCreationFailed {
-                        service_type: "Config".to_string(),
-                        service_name: Some("Config".to_string()),
-                        reason: "配置错误".to_string(),
-                        source_error: None,
-                    },
-                )
+                Err(gitai::infrastructure::container::ContainerError::CreationFailed(
+                    "配置错误".to_string(),
+                ))
             },
         )
         .await;
@@ -209,7 +196,7 @@ async fn test_concurrent_usage() {
     let container = ServiceContainer::new();
 
     container
-        .register_singleton(|_container| {
+        .register_singleton_simple(|| {
             Ok(Config {
                 app_name: "ConcurrentApp".to_string(),
                 version: "1.0.0".to_string(),

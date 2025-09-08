@@ -2,32 +2,27 @@
 
 #![allow(clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::{ContainerError, ServiceContainer, ServiceProvider};
+use gitai::infrastructure::container::v2::{ContainerError, ServiceContainer};
 
 #[derive(Clone, Debug, PartialEq)]
 struct TestService {
     value: i32,
 }
 
-struct SimpleProvider;
-
-impl ServiceProvider for SimpleProvider {
-    type Service = TestService;
-
-    fn create(&self, _container: &ServiceContainer) -> Result<Self::Service, ContainerError> {
-        Ok(TestService { value: 123 })
-    }
-}
+// 原始 Provider 结构删除，使用闭包模拟原始 API
 
 #[tokio::test]
 async fn test_original_api_works() {
     println!("=== 测试原始API ===");
     let container = ServiceContainer::new();
 
-    // 使用原始API注册
-    println!("使用原始API注册服务...");
-    container.register_singleton(SimpleProvider).await;
-    println!("原始API注册完成");
+    // 使用“原始API”风格（带容器参数的闭包）注册
+    println!("使用原始API风格注册服务...");
+    let provider = |_c: &ServiceContainer| -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(TestService { value: 123 })
+    };
+    container.register::<TestService, _>(provider);
+    println!("原始API风格注册完成");
 
     // 解析服务
     println!("尝试解析服务...");
@@ -76,10 +71,11 @@ async fn test_closure_api_works() {
 
     // 使用闭包直接注册
     println!("使用闭包直接注册服务...");
-    let provider = |_container: &ServiceContainer| -> Result<TestService, ContainerError> {
-        Ok(TestService { value: 789 })
-    };
-    container.register_singleton(provider).await;
+    let provider = |_container: &ServiceContainer| -> Result<
+        TestService,
+        Box<dyn std::error::Error + Send + Sync>,
+    > { Ok(TestService { value: 789 }) };
+    container.register::<TestService, _>(provider);
     println!("闭包API注册完成");
 
     // 解析服务

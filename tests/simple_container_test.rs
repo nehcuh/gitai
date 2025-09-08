@@ -4,7 +4,7 @@
 
 #![allow(clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::{ContainerError, ServiceContainer, ServiceProvider};
+use gitai::infrastructure::container::v2::{ContainerError, ServiceContainer};
 use std::sync::Arc;
 
 /// 测试用的简单服务
@@ -20,40 +20,16 @@ struct ComplexService {
     id: u64,
 }
 
-/// 简单的服务提供者实现
-struct SimpleServiceProvider;
-
-impl ServiceProvider for SimpleServiceProvider {
-    type Service = SimpleService;
-
-    fn create(&self, _container: &ServiceContainer) -> Result<Self::Service, ContainerError> {
-        Ok(SimpleService { value: 42 })
-    }
-}
-
-/// 简单的复杂服务提供者
-struct ComplexServiceProvider {
-    name: String,
-    id: u64,
-}
-
-impl ServiceProvider for ComplexServiceProvider {
-    type Service = ComplexService;
-
-    fn create(&self, _container: &ServiceContainer) -> Result<Self::Service, ContainerError> {
-        Ok(ComplexService {
-            name: self.name.clone(),
-            id: self.id,
-        })
-    }
-}
+// 不再使用 ServiceProvider trait，改用简化 API 注册
 
 #[tokio::test]
 async fn test_basic_service_registration() {
     let container = ServiceContainer::new();
 
     // 注册一个简单的服务
-    container.register_singleton(SimpleServiceProvider).await;
+    container
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 42 }))
+        .await;
 
     // 解析服务
     let service = container.resolve::<SimpleService>().await.unwrap();
@@ -67,7 +43,9 @@ async fn test_singleton_behavior() {
     let container = ServiceContainer::new();
 
     // 注册单例服务
-    container.register_singleton(SimpleServiceProvider).await;
+    container
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 42 }))
+        .await;
 
     // 多次解析服务
     let service1 = container.resolve::<SimpleService>().await.unwrap();
@@ -84,11 +62,15 @@ async fn test_multiple_service_types() {
     let container = ServiceContainer::new();
 
     // 注册多个不同类型的服务
-    container.register_singleton(SimpleServiceProvider).await;
     container
-        .register_singleton(ComplexServiceProvider {
-            name: "TestService".to_string(),
-            id: 456,
+        .register_singleton_simple(|| Ok::<_, ContainerError>(SimpleService { value: 42 }))
+        .await;
+    container
+        .register_singleton_simple(|| {
+            Ok::<_, ContainerError>(ComplexService {
+                name: "TestService".to_string(),
+                id: 456,
+            })
         })
         .await;
 

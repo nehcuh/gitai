@@ -2,7 +2,7 @@
 
 #![allow(clippy::uninlined_format_args, clippy::print_stdout)]
 
-use gitai::infrastructure::container::{ContainerError, ServiceContainer};
+use gitai::infrastructure::container::v2::{ContainerError, ServiceContainer};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -165,12 +165,7 @@ async fn demo_error_handling() {
     // 注册一个总是失败的服务
     container
         .register_singleton_simple(|| -> Result<SimpleService, ContainerError> {
-            Err(ContainerError::ServiceCreationFailed {
-                service_type: "SimpleService".to_string(),
-                service_name: Some("SimpleService".to_string()),
-                reason: "配置错误".to_string(),
-                source_error: None,
-            })
+            Err(ContainerError::CreationFailed("配置错误".to_string()))
         })
         .await;
 

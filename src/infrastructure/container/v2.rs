@@ -370,6 +370,40 @@ impl ServiceContainer {
         }
     }
 
+    // ===== Back-compat simple registration APIs (async signatures) =====
+    /// 注册简单的瞬态服务（不需要容器） - 与 v1 对齐（async）
+    pub async fn register_transient_simple<T, F>(&self, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> Result<T, ContainerError> + Send + Sync + 'static,
+    {
+        self.register_with::<T, _>(ServiceLifetime::Transient, move |_| {
+            factory().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        });
+    }
+
+    /// 注册简单的单例服务（不需要容器） - 与 v1 对齐（async）
+    pub async fn register_singleton_simple<T, F>(&self, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> Result<T, ContainerError> + Send + Sync + 'static,
+    {
+        self.register_with::<T, _>(ServiceLifetime::Singleton, move |_| {
+            factory().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        });
+    }
+
+    /// 注册简单的作用域服务（不需要容器） - 与 v1 对齐（async）
+    pub async fn register_scoped_simple<T, F>(&self, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> Result<T, ContainerError> + Send + Sync + 'static,
+    {
+        self.register_with::<T, _>(ServiceLifetime::Scoped, move |_| {
+            factory().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        });
+    }
+
     /// 检查服务是否已注册
     pub fn is_registered<T: 'static>(&self) -> bool {
         self.registrations.contains_key(&TypeId::of::<T>())
