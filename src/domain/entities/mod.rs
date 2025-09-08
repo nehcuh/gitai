@@ -8,7 +8,6 @@ pub mod scan;
 pub mod common;
 
 
-use serde::{Serialize, Deserialize};
 use std::fmt;
 
 /// 聚合根trait

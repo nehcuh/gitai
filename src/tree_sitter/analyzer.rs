@@ -959,7 +959,7 @@ mod tests {
         
         // 使用可用的语言进行测试，优先使用Java，否则使用Rust
         #[cfg(feature = "tree-sitter-java")]
-        let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
         let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), not(feature = "tree-sitter-rust")))]
@@ -994,7 +994,7 @@ mod tests {
         // Rust (should always be available)
         #[cfg(feature = "tree-sitter-rust")]
         {
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("///"));
             assert!(analyzer.is_doc_comment("//!"));
             assert!(!analyzer.is_doc_comment("//"));
@@ -1003,7 +1003,7 @@ mod tests {
         // Python
         #[cfg(feature = "tree-sitter-python")]
         {
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Python, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("\"\"\"docstring\"\"\""));
             assert!(analyzer.is_doc_comment("'''docstring'''"));
             assert!(!analyzer.is_doc_comment("# comment"));
@@ -1012,7 +1012,7 @@ mod tests {
         // Java
         #[cfg(feature = "tree-sitter-java")]
         {
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
             assert!(analyzer.is_doc_comment("/**"));
             assert!(!analyzer.is_doc_comment("/*"));
             assert!(!analyzer.is_doc_comment("//"));
@@ -1026,7 +1026,7 @@ mod tests {
         // 仅测试可用的语言
         #[cfg(feature = "tree-sitter-java")]
         {
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
 
         // 创建测试用的summary
         let mut summary = StructuralSummary {
@@ -1097,7 +1097,7 @@ mod tests {
         // 如果Java不可用，测试Rust
         #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
         {
-            let mut analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
             let summary = StructuralSummary {
                 language: "rust".to_string(),
                 language_summaries: std::collections::HashMap::new(),

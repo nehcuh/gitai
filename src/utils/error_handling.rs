@@ -192,7 +192,6 @@ macro_rules! handle_scan_error {
 
 /// 特定场景的便捷函数
 pub mod convenience {
-    use super::*;
 
     /// 安全解析数字字符串
     pub fn safe_parse_number<T>(s: &str, default: T, context: &str) -> T 

@@ -381,7 +381,7 @@ struct ScopeManager {
     /// 当前激活的作用域栈
     active_scope_stack: Arc<RwLock<Vec<uuid::Uuid>>>,
     /// 根作用域ID
-    root_scope_id: Arc<RwLock<Option<uuid::Uuid>>>,
+    _root_scope_id: Arc<RwLock<Option<uuid::Uuid>>>,
     /// 作用域实例缓存 (作用域ID -> 服务实例)
     scope_instances: Arc<RwLock<HashMap<uuid::Uuid, Arc<RwLock<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>>>>>,
 }
@@ -392,7 +392,7 @@ impl ScopeManager {
         Self {
             scopes: Arc::new(RwLock::new(HashMap::new())),
             active_scope_stack: Arc::new(RwLock::new(Vec::new())),
-            root_scope_id: Arc::new(RwLock::new(None)),
+            _root_scope_id: Arc::new(RwLock::new(None)),
             scope_instances: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -403,7 +403,6 @@ impl ScopeManager {
         parent_id: Option<uuid::Uuid>
     ) -> Result<uuid::Uuid, ContainerError> {
         let mut scopes = self.scopes.write().await;
-        let mut scope_stack = self.active_scope_stack.write().await;
         
         // 验证父作用域
         if let Some(parent) = parent_id {
