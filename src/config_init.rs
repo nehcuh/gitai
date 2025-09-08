@@ -324,7 +324,7 @@ impl ConfigInitializer {
             config_version: "1.0.0".to_string(),
             last_update_check: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_else(|_| std::time::Duration::from_secs(0))
                 .as_secs(),
             gitai_version: env!("CARGO_PKG_VERSION").to_string(),
         };
