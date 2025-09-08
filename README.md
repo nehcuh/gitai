@@ -355,6 +355,49 @@ GitAI：即时辅助
 - **可选阻止机制**：可配置在发现严重安全问题时阻止合并 (`--block-on-critical`)
 - **上下文感知建议**：基于具体问题类型提供定制化的安全改进建议
 
+## 🧩 内置 DI 容器（v2）
+
+- 生命周期：Singleton / Transient / Scoped
+- 简化注册 API：register_singleton_simple / register_transient_simple / register_scoped_simple
+- 统计：同步获取（total/hit_rate/cache_hits/cache_misses）
+
+示例：
+
+```rust path=null start=null
+use gitai::infrastructure::container::ServiceContainer;
+
+#[derive(Clone)]
+struct Config { name: String }
+
+#[derive(Clone)]
+struct Scoped { id: u32 }
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let container = ServiceContainer::new();
+
+    // 单例注册 + 解析
+    container.register_singleton_simple(|| Ok(Config { name: "MyApp".into() })).await;
+    let cfg = container.resolve::<Config>().await?;
+    assert_eq!(cfg.name, "MyApp");
+
+    // 作用域注册 + 解析
+    container.begin_scope().await;
+    container.register_scoped_simple(|| Ok(Scoped { id: 1 })).await;
+    let s1 = container.resolve::<Scoped>().await?;
+    let s2 = container.resolve::<Scoped>().await?;
+    assert_eq!(s1.id, s2.id);
+
+    // 统计
+    let stats = container.get_stats();
+    println!("total={}, hit_rate={:.1}%", stats.total(), stats.hit_rate() * 100.0);
+
+    Ok(())
+}
+```
+
+> 更详细的架构与用法见 docs/ARCHITECTURE.md 的“依赖注入容器（v2）”章节。
+
 ## 🚀 快速开始
 
 ### 安装
@@ -907,12 +950,11 @@ curl http://localhost:11434/api/tags
 
 **Q: Tree-sitter 分析失败**
 ```bash
-# Tree-sitter 功能尚在开发中
-# 当前可使用基础 AI 分析
-gitai review
+# 启用 Tree-sitter 结构分析
+gitai review --tree-sitter
 
-# 启用详细日志调试
-RUST_LOG=debug gitai review
+# 启用详细日志调试（包含 Tree-sitter 模块）
+RUST_LOG=debug gitai review --tree-sitter
 ```
 
 **Q: 提交信息生成质量不佳**
