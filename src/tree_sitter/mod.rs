@@ -1,4 +1,5 @@
 pub mod analyzer;
+// Note: analyzer.rs has been refactored into analyzer/ directory
 pub mod cache;
 pub mod custom_queries;
 pub mod queries;
