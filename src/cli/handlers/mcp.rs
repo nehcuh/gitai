@@ -37,19 +37,19 @@ async fn handle_mcp(config: &Config, transport: &str, addr: &str) -> Result<()> 
         "stdio" => {
             println!("🔌 使用 stdio 传输");
             debug!("Starting MCP server with stdio transport");
-            mcp::bridge::start_mcp_server(config.clone()).await
+            mcp::bridge::start_mcp_server(config.clone()).await.map_err(|e| anyhow::anyhow!(e.to_string()))
         }
         "tcp" => {
             println!("🌐 监听地址: {}", addr);
             eprintln!("⚠️  TCP 传输暂未实现");
             debug!("TCP transport requested but not implemented");
-            Err("TCP transport not implemented".into())
+            Err(anyhow::anyhow!("TCP transport not implemented"))
         }
         "sse" => {
             println!("🌐 监听地址: {}", addr);
             eprintln!("⚠️  SSE 传输暂未实现");
             debug!("SSE transport requested but not implemented");
-            Err("SSE transport not implemented".into())
+            Err(anyhow::anyhow!("SSE transport not implemented"))
         }
         _ => {
             eprintln!("❌ 不支持的传输协议: {}", transport);

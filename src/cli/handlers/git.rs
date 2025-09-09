@@ -12,7 +12,7 @@ pub async fn handle_git_with_ai(config: &Config, git_args: &[String]) -> Result<
     info!("Executing git command with AI explanation: {}", git_args.join(" "));
     
     // 执行Git命令
-    let output = git::run_git(git_args)?;
+    let output = git::run_git(git_args).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     print!("{output}");
     debug!("Git command output: {}", output.trim());
 
@@ -44,7 +44,7 @@ pub async fn handle_git_with_ai(config: &Config, git_args: &[String]) -> Result<
 pub async fn handle_git(git_args: &[String]) -> Result<()> {
     info!("Executing git command: {}", git_args.join(" "));
     
-    let output = git::run_git(git_args)?;
+    let output = git::run_git(git_args).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     print!("{output}");
     debug!("Git command output: {}", output.trim());
     
@@ -156,7 +156,7 @@ pub async fn handle_command(
                 if use_ai {
                     handle_git_with_ai(config, git_args).await.map_err(|e| e.into())
                 } else {
-                    let output = gitai::git::run_git(git_args)?;
+                    let output = gitai::git::run_git(git_args).map_err(|e| anyhow::anyhow!(e.to_string()))?;
                     print!("{output}");
                     Ok(())
                 }
@@ -164,7 +164,7 @@ pub async fn handle_command(
             
             #[cfg(not(feature = "ai"))]
             {
-                let output = gitai::git::run_git(git_args)?;
+                let output = gitai::git::run_git(git_args).map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 print!("{output}");
                 Ok(())
             }

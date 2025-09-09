@@ -64,7 +64,7 @@ async fn handle_graph_export(
     info!("Exporting dependency graph for path: {}", path.display());
     debug!("Using threshold: {}", threshold);
     
-    let dot = export_dot_string(path, threshold).await?;
+    let dot = export_dot_string(path, threshold).await.map_err(|e| anyhow::anyhow!(e.to_string()))?;
     
     if let Some(out) = output {
         std::fs::write(out, dot)?;
@@ -117,7 +117,7 @@ async fn handle_graph_summary(
         path_samples,
         path_max_hops,
     )
-    .await?;
+    .await.map_err(|e| anyhow::anyhow!(e.to_string()))?;
     
     if let Some(out) = output {
         std::fs::write(out, &summary)?;

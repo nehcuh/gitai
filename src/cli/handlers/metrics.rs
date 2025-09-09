@@ -34,7 +34,8 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
 
             // 检查是否有代码变化（除非强制记录）
             if !force {
-                let status = git::run_git(&["status".to_string(), "--porcelain".to_string()])?;
+                let status = git::run_git(&["status".to_string(), "--porcelain".to_string()])
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 if status.trim().is_empty() {
                     println!("ℹ️  没有检测到代码变化");
                     println!("💡 使用 --force 强制记录快照");
@@ -43,11 +44,13 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             }
 
             // 创建质量追踪器
-            let mut tracker = QualityTracker::new()?;
+            let mut tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 分析当前代码
             println!("🔍 分析代码结构...");
-            let mut manager = TreeSitterManager::new().await?;
+            let mut manager = TreeSitterManager::new().await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 获取当前目录的代码文件并分析
             let mut summary = gitai::tree_sitter::StructuralSummary::default();
@@ -73,7 +76,8 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             let insights = InsightsGenerator::generate(&summary, None);
 
             // 记录快照
-            let mut snapshot = tracker.record_snapshot(&summary, &insights)?;
+            let mut snapshot = tracker.record_snapshot(&summary, &insights)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 添加标签
             if !tags.is_empty() {
@@ -94,17 +98,21 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             info!("Analyzing quality trends for {} days in {} format", days.unwrap_or(30), format);
             println!("📈 分析质量趋势...");
 
-            let tracker = QualityTracker::new()?;
-            let analysis = tracker.analyze_trends(*days)?;
+            let tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let analysis = tracker.analyze_trends(*days)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let result = match format.as_str() {
                 "json" => serde_json::to_string_pretty(&analysis)?,
                 "markdown" | "html" => {
                     let visualizer = gitai::metrics::visualizer::TrendVisualizer::new();
                     if format == "html" {
-                        visualizer.generate_html_report(&analysis, tracker.get_snapshots())?
+                        visualizer.generate_html_report(&analysis, tracker.get_snapshots())
+                            .map_err(|e| anyhow::anyhow!(e.to_string()))?
                     } else {
-                        visualizer.generate_report(&analysis, tracker.get_snapshots())?
+                        visualizer.generate_report(&analysis, tracker.get_snapshots())
+                            .map_err(|e| anyhow::anyhow!(e.to_string()))?
                     }
                 }
                 _ => {
@@ -135,14 +143,18 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             info!("Generating quality report (html: {})", html);
             println!("📄 生成质量报告...");
 
-            let tracker = QualityTracker::new()?;
+            let tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let report = if *html {
-                let analysis = tracker.analyze_trends(None)?;
+                let analysis = tracker.analyze_trends(None)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 let visualizer = gitai::metrics::visualizer::TrendVisualizer::new();
-                visualizer.generate_html_report(&analysis, tracker.get_snapshots())?
+                visualizer.generate_html_report(&analysis, tracker.get_snapshots())
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?
             } else {
-                tracker.generate_report(output.as_deref())?
+                tracker.generate_report(output.as_deref())
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?
             };
 
             if let Some(output_path) = output {
@@ -158,7 +170,8 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
         MetricsAction::List { limit, branch, format } => {
             info!("Listing quality snapshots (limit: {}, format: {})", limit, format);
             
-            let tracker = QualityTracker::new()?;
+            let tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let snapshots = tracker.get_snapshots();
 
             // 过滤分支
@@ -167,6 +180,8 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             } else {
                 snapshots.iter().collect()
             };
+            
+            let total_filtered = filtered.len();
 
             match format.as_str() {
                 "json" => {
@@ -192,7 +207,55 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
                 }
             }
             
-            info!("Listed {} snapshots", filtered.len().min(*limit));
+            info!("Listed {} snapshots", total_filtered.min(*limit));
+            Ok(())
+        }
+        MetricsAction::Compare { from, to, format } => {
+            let to_str = to.as_ref().map_or("latest".to_string(), |s| s.clone());
+            info!("Comparing snapshots: {} vs {}", from, to_str);
+            println!("📊 比较质量快照...");
+            
+            let tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            
+            // TODO: Implement comparison logic
+            println!("⚠️  快照比较功能正在开发中");
+            println!("   From: {}", from);
+            println!("   To: {}", to_str);
+            println!("   Format: {}", format);
+            
+            Ok(())
+        }
+        MetricsAction::Clean { keep_days, yes } => {
+            info!("Cleaning old snapshots (keep_days: {}, confirmed: {})", keep_days, yes);
+            println!("🧹 清理旧快照...");
+            
+            if !yes {
+                println!("ℹ️  需要使用 --yes 确认清理操作");
+                return Ok(());
+            }
+            
+            // TODO: Implement cleanup logic
+            println!("⚠️  清理功能正在开发中");
+            println!("   保留最近 {} 天的数据", keep_days);
+            
+            Ok(())
+        }
+        MetricsAction::Export { format, output, branches } => {
+            info!("Exporting metrics in {} format", format);
+            println!("📤 导出质量度量...");
+            
+            let tracker = QualityTracker::new()
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            
+            // TODO: Implement export logic
+            println!("⚠️  导出功能正在开发中");
+            println!("   Format: {}", format);
+            println!("   Output: {}", output.display());
+            if !branches.is_empty() {
+                println!("   Branches: {}", branches.join(", "));
+            }
+            
             Ok(())
         }
     }

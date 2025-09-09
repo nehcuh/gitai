@@ -6,10 +6,13 @@ pub mod unified_analyzer;
 
 use cache::{CacheKey, TreeSitterCache};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 use tree_sitter::{Language, Parser};
 
 /// 支持的编程语言
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SupportedLanguage {
     Java,
     Rust,
@@ -160,6 +163,214 @@ impl TreeSitterManager {
             cache,
         })
     }
+    
+    /// 并发分析多个文件
+    /// 
+    /// # Arguments
+    /// * `file_paths` - 要分析的文件路径列表
+    /// * `max_concurrent` - 最大并发数（默认为 4）
+    /// 
+    /// # Returns
+    /// 返回每个文件的分析结果，包含文件路径和分析摘要
+    pub async fn analyze_files_concurrent(
+        &self,
+        file_paths: Vec<PathBuf>,
+        max_concurrent: Option<usize>,
+    ) -> Result<Vec<FileAnalysisResult>, Box<dyn std::error::Error + Send + Sync>> {
+        use futures_util::stream::{self, StreamExt};
+        
+        let max_concurrent = max_concurrent.unwrap_or(4);
+        let semaphore = Arc::new(Semaphore::new(max_concurrent));
+        let start_time = std::time::Instant::now();
+        
+        log::info!(
+            "开始并发分析 {} 个文件，最大并发数: {}",
+            file_paths.len(),
+            max_concurrent
+        );
+        
+        // 使用 stream 并发处理文件
+        let results: Vec<FileAnalysisResult> = stream::iter(file_paths)
+            .map(|path| {
+                let sem = semaphore.clone();
+                async move {
+                    // 获取信号量许可
+                    let _permit = sem.acquire().await.ok()?;
+                    
+                    // 读取文件内容
+                    let content = tokio::fs::read_to_string(&path).await.ok()?;
+                    
+                    // 推断语言
+                    let extension = path.extension()?.to_str()?;
+                    let language = SupportedLanguage::from_extension(extension)?;
+                    
+                    // 为每个任务创建独立的 TreeSitterManager 实例以避免并发问题
+                    let mut manager = TreeSitterManager::new().await.ok()?;
+                    
+                    // 分析文件
+                    let file_start = std::time::Instant::now();
+                    let summary = manager.analyze_structure(&content, language).ok()?;
+                    let analysis_time = file_start.elapsed().as_secs_f64();
+                    
+                    log::debug!(
+                        "文件 {} 分析完成，耗时: {:.2}秒",
+                        path.display(),
+                        analysis_time
+                    );
+                    
+                    Some(FileAnalysisResult {
+                        file_path: path,
+                        language,
+                        summary,
+                        analysis_time,
+                    })
+                }
+            })
+            .buffer_unordered(max_concurrent)
+            .filter_map(|result| async move { result })
+            .collect()
+            .await;
+        
+        let total_time = start_time.elapsed().as_secs_f64();
+        let files_analyzed = results.len();
+        let throughput = files_analyzed as f64 / total_time;
+        
+        log::info!(
+            "并发分析完成: {} 个文件成功分析，总耗时: {:.2}秒，吞吐量: {:.2} 文件/秒",
+            files_analyzed,
+            total_time,
+            throughput
+        );
+        
+        // 生成性能统计
+        if files_analyzed > 0 {
+            let avg_time = total_time / files_analyzed as f64;
+            let max_time = results
+                .iter()
+                .map(|r| r.analysis_time)
+                .fold(0.0, f64::max);
+            let min_time = results
+                .iter()
+                .map(|r| r.analysis_time)
+                .fold(f64::MAX, f64::min);
+                
+            log::info!(
+                "性能统计 - 平均: {:.3}秒, 最快: {:.3}秒, 最慢: {:.3}秒",
+                avg_time,
+                min_time,
+                max_time
+            );
+        }
+        
+        Ok(results)
+    }
+    
+    /// 分析目录中的所有代码文件（并发）
+    pub async fn analyze_directory_concurrent(
+        &self,
+        dir_path: &Path,
+        language_filter: Option<SupportedLanguage>,
+        max_concurrent: Option<usize>,
+    ) -> Result<DirectoryAnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+        use walkdir::WalkDir;
+        
+        let mut file_paths = Vec::new();
+        
+        // 收集所有需要分析的文件
+        for entry in WalkDir::new(dir_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.path();
+            
+            // 跳过隐藏文件和常见的排除目录
+            if path.components().any(|c| {
+                c.as_os_str()
+                    .to_str()
+                    .map(|s| s.starts_with('.') || s == "target" || s == "node_modules")
+                    .unwrap_or(false)
+            }) {
+                continue;
+            }
+            
+            // 检查文件扩展名
+            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if let Some(lang) = SupportedLanguage::from_extension(ext) {
+                    // 应用语言过滤器
+                    if language_filter.is_none() || language_filter == Some(lang) {
+                        file_paths.push(path.to_path_buf());
+                    }
+                }
+            }
+        }
+        
+        log::info!(
+            "在目录 {} 中找到 {} 个代码文件",
+            dir_path.display(),
+            file_paths.len()
+        );
+        
+        // 并发分析所有文件
+        let file_results = self.analyze_files_concurrent(file_paths, max_concurrent).await?;
+        
+        // 按语言分组结果
+        let mut language_statistics: HashMap<String, LanguageStatistics> = HashMap::new();
+        let mut total_functions = 0;
+        let mut total_classes = 0;
+        let mut total_lines = 0;
+        
+        for result in &file_results {
+            let lang_stats = language_statistics
+                .entry(result.language.name().to_string())
+                .or_insert_with(|| LanguageStatistics {
+                    file_count: 0,
+                    function_count: 0,
+                    class_count: 0,
+                    line_count: 0,
+                    avg_analysis_time: 0.0,
+                });
+            
+            lang_stats.file_count += 1;
+            lang_stats.function_count += result.summary.functions.len();
+            lang_stats.class_count += result.summary.classes.len();
+            // 估算行数（通过函数和类的行范围）
+            let mut max_line = 0;
+            for func in &result.summary.functions {
+                if func.line_end > max_line {
+                    max_line = func.line_end;
+                }
+            }
+            for class in &result.summary.classes {
+                if class.line_end > max_line {
+                    max_line = class.line_end;
+                }
+            }
+            lang_stats.line_count += max_line;
+            
+            total_functions += result.summary.functions.len();
+            total_classes += result.summary.classes.len();
+            total_lines += max_line;
+        }
+        
+        // 计算每种语言的平均分析时间
+        for result in &file_results {
+            if let Some(lang_stats) = language_statistics.get_mut(result.language.name()) {
+                lang_stats.avg_analysis_time = 
+                    (lang_stats.avg_analysis_time * (lang_stats.file_count - 1) as f64 
+                     + result.analysis_time) / lang_stats.file_count as f64;
+            }
+        }
+        
+        Ok(DirectoryAnalysisResult {
+            directory: dir_path.to_path_buf(),
+            language_statistics,
+            total_files: file_results.len(),
+            total_functions,
+            total_classes,
+            total_lines,
+        })
+    }
 
     /// 获取指定语言的解析器
     pub fn get_parser(&mut self, language: SupportedLanguage) -> Option<&mut Parser> {
@@ -235,6 +446,51 @@ impl TreeSitterManager {
 
         Ok(result)
     }
+}
+
+/// 单个文件的分析结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FileAnalysisResult {
+    /// 文件路径
+    pub file_path: PathBuf,
+    /// 编程语言
+    pub language: SupportedLanguage,
+    /// 分析摘要
+    pub summary: StructuralSummary,
+    /// 分析耗时（秒）
+    pub analysis_time: f64,
+}
+
+/// 语言统计信息
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LanguageStatistics {
+    /// 该语言的文件数
+    pub file_count: usize,
+    /// 该语言的函数数
+    pub function_count: usize,
+    /// 该语言的类数
+    pub class_count: usize,
+    /// 该语言的代码行数
+    pub line_count: usize,
+    /// 该语言的平均分析时间（秒）
+    pub avg_analysis_time: f64,
+}
+
+/// 目录分析结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DirectoryAnalysisResult {
+    /// 目录路径
+    pub directory: PathBuf,
+    /// 按语言分组的统计结果
+    pub language_statistics: HashMap<String, LanguageStatistics>,
+    /// 总文件数
+    pub total_files: usize,
+    /// 总函数数
+    pub total_functions: usize,
+    /// 总类数
+    pub total_classes: usize,
+    /// 总代码行数
+    pub total_lines: usize,
 }
 
 /// 代码结构摘要
