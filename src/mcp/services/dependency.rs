@@ -126,13 +126,13 @@ impl DependencyService {
             return Err("未指定导出格式。请在参数中设置 format: json|dot|svg|mermaid|ascii。建议：大项目先使用 summarize_graph 获取摘要。".into());
         }
 
-        let path = Path::new(&params.path);
-
-        // 验证路径是否存在
-        if !path.exists() {
-            error!("❌ 依赖图分析路径不存在: {path}", path = params.path);
-            return Err(format!("分析路径不存在: {path}", path = params.path).into());
-        }
+        let path = match crate::utils::paths::resolve_mcp_path(&params.path, "Dependency") {
+            Ok(path) => path,
+            Err(e) => {
+                error!("❌ {}", e);
+                return Err(e.into());
+            }
+        };
 
         // 检查是否为目录
         if path.is_dir() {

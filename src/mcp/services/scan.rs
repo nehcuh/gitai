@@ -49,46 +49,12 @@ impl ScanService {
         let tool = params.tool.unwrap_or_else(|| self.default_tool.clone());
         let timeout = params.timeout.unwrap_or(self.default_timeout);
 
-        // 智能路径解析：处理相对路径和绝对路径
-        let path = if Path::new(&params.path).is_absolute() {
-            // 如果是绝对路径，直接使用
-            PathBuf::from(&params.path)
-        } else {
-            // 如果是相对路径，尝试多种解析策略
-            let relative_path = Path::new(&params.path);
-
-            // 策略1：相对于当前工作目录
-            let cwd_path = std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(relative_path);
-
-            if cwd_path.exists() {
-                cwd_path
-            } else {
-                // 策略2：相对于用户主目录的 Projects 目录（常见的项目目录）
-                if let Some(home) = dirs::home_dir() {
-                    let home_projects_path = home.join("Projects").join(relative_path);
-                    if home_projects_path.exists() {
-                        home_projects_path
-                    } else {
-                        // 策略3：如果路径看起来像 ../xxx，尝试从 gitai 项目目录解析
-                        if params.path.starts_with("../") {
-                            let gitai_path = home.join("Projects/gitai").join(relative_path);
-                            if gitai_path.exists() {
-                                gitai_path
-                            } else {
-                                // 回退到原始路径
-                                PathBuf::from(&params.path)
-                            }
-                        } else {
-                            // 回退到原始路径
-                            PathBuf::from(&params.path)
-                        }
-                    }
-                } else {
-                    // 无法获取主目录，使用原始路径
-                    PathBuf::from(&params.path)
-                }
+        // 使用统一的路径解析逻辑
+        let path = match crate::utils::paths::resolve_mcp_path(&params.path, "Scan") {
+            Ok(path) => path,
+            Err(e) => {
+                error!("❌ {}", e);
+                return Err(e.into());
             }
         };
 

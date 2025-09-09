@@ -48,13 +48,13 @@ impl AnalysisService {
             params.language, params.verbosity
         );
 
-        let path = Path::new(&params.path);
-
-        // 验证路径是否存在
-        if !path.exists() {
-            error!("❌ 分析路径不存在: {}", params.path);
-            return Err(format!("分析路径不存在: {}", params.path).into());
-        }
+        let path = match crate::utils::paths::resolve_mcp_path(&params.path, "Analysis") {
+            Ok(path) => path,
+            Err(e) => {
+                error!("❌ {}", e);
+                return Err(e.into());
+            }
+        };
 
         // 检查是否为目录
         if path.is_dir() {
