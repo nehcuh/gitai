@@ -8,7 +8,7 @@
 
 // Use modules from the library crate
 use gitai::{
-    args::{Args, Command, ConfigAction, PromptAction},
+    args::{ConfigAction, PromptAction},
     config::{self},
     git,
 };
@@ -32,7 +32,8 @@ use gitai::mcp;
 #[cfg(feature = "metrics")]
 use gitai::metrics;
 
-// Always available modules
+// Always available modules (used in legacy code)
+#[allow(unused_imports)]
 use gitai::{commit, features, review};
 
 use std::fs;
@@ -77,54 +78,33 @@ fn get_cache_dir() -> Result<PathBuf> {
     Ok(cache_dir)
 }
 
-// mod cli;  // Temporarily disabled due to compilation errors
+mod cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Temporarily use legacy main while CLI handlers are being developed
-    legacy_main().await
+    init_logger();
+    
+    let args = gitai::args::Args::parse();
+    let mut app = cli::CliApp::new(args);
+    
+    // Initialize configuration if needed
+    app.initialize().await?;
+    
+    // Run the application
+    app.run().await
 }
 
-// 保留原有的处理函数作为后备，直到完全迁移完成
+// legacy_main 不再需要，所有命令由 cli::CliApp 处理
 #[allow(dead_code)]
 async fn legacy_main() -> Result<()> {
-    init_logger();
-    let args = Args::parse();
+    unreachable!("legacy_main 已废弃，使用 CliApp::run() 处理所有命令")
+}
 
-    // 处理 Init 命令（不需要配置）
-    if let Command::Init {
-        config_url,
-        offline,
-        resources_dir,
-        dev,
-        download_resources,
-    } = &args.command
-    {
-        return handle_init(
-            config_url.clone(),
-            *offline || args.offline,
-            resources_dir.clone(),
-            *dev,
-            *download_resources,
-        )
-        .await;
-    }
+// 以下保留的辅助函数在需要时可迁移到相应 handler 或 utils 模块
 
-    // 加载配置文件，提供友好错误信息
-    let config = match config::Config::load() {
-        Ok(config) => {
-            log::debug!("配置文件加载成功");
-            config
-        }
-        Err(e) => {
-            eprintln!("❌ 配置加载失败: {e}");
-            eprintln!("💡 提示: 请检查 ~/.config/gitai/config.toml 文件");
-            eprintln!("💡 可以使用 'gitai init' 初始化配置");
-            return Err(format!("配置加载失败: {e}").into());
-        }
-    };
-
-    match args.command {
+// Legacy command handling code has been migrated to cli::handlers module
+// The following commented code can be removed once all handlers are verified
+/*
         Command::Review {
             language,
             format,
@@ -334,6 +314,7 @@ async fn legacy_main() -> Result<()> {
 
     Ok(())
 }
+*/
 
 async fn handle_graph_export(
     path: &std::path::Path,

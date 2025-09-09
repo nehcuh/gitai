@@ -1,6 +1,7 @@
 use anyhow::Result;
 use log::{debug, info};
 use std::path::PathBuf;
+use std::fs;
 
 use gitai::args::Command;
 use gitai::config::Config;
@@ -64,7 +65,7 @@ async fn handle_scan(
     _full: bool,
     _remote: bool,
     update_rules: bool,
-    _format: &str,
+    format: &str,
     output: Option<PathBuf>,
     _translate: bool,
     auto_install: bool,
@@ -73,39 +74,129 @@ async fn handle_scan(
     timeout: Option<u64>,
     benchmark: bool,
 ) -> Result<()> {
-    info!("Executing security scan with tool: {}", tool);
+    use serde_json;
     
-    let mut scan_config = scan::ScanConfig::from_config(config);
-    
-    if let Some(timeout_val) = timeout {
-        scan_config.timeout = Some(timeout_val);
-        debug!("Set scan timeout to {} seconds", timeout_val);
+    let show_progress = format != "json";
+
+    if show_progress {
+        println!("🔍 正在扫描: {}", path.display());
     }
-    
-    if let Some(language) = lang {
-        scan_config.language = Some(language.to_string());
-        debug!("Filtering scan for language: {}", language);
+
+    // 确保扫描工具已安装
+    // 将 'security' 映射为 'opengrep' 以保持向后兼容性
+    let normalized_tool = match tool {
+        "security" => "opengrep",
+        other => other,
+    };
+
+    if (normalized_tool == "opengrep" || normalized_tool == "auto")
+        && !scan::is_opengrep_installed()
+    {
+        if auto_install {
+            if show_progress {
+                println!("🔧 未检测到 OpenGrep，正在自动安装...");
+            }
+            if let Err(e) = scan::install_opengrep() {
+                return Err(anyhow::anyhow!("OpenGrep 安装失败: {}", e));
+            }
+        } else {
+            return Err(anyhow::anyhow!("未检测到 OpenGrep，请先安装或使用 --auto-install 进行自动安装"));
+        }
     }
-    
-    scan_config.update_rules = update_rules;
-    scan_config.auto_install = auto_install;
-    scan_config.benchmark = benchmark;
-    scan_config.save_history = !no_history;
-    scan_config.output = output;
-    
+
+    // 更新规则（如果需要）
     if update_rules {
-        debug!("Will update scan rules");
+        if show_progress {
+            println!("🔄 正在更新扫描规则...");
+        }
+        #[cfg(feature = "update-notifier")]
+        {
+            use gitai::update::AutoUpdater;
+            let updater = AutoUpdater::new(config.clone());
+            if let Err(e) = updater.update_scan_rules().await {
+                eprintln!("⚠️ 规则更新失败: {}", e);
+            }
+        }
+        #[cfg(not(feature = "update-notifier"))]
+        {
+            eprintln!("ℹ️  update-notifier 功能未启用，跳过规则更新。");
+        }
     }
-    
-    if auto_install {
-        debug!("Will auto-install scan tools if needed");
+
+    // 执行扫描
+    let result = if normalized_tool == "opengrep" || normalized_tool == "auto" {
+        let include_version = show_progress && !benchmark;
+        scan::run_opengrep_scan(config, path, lang, timeout, include_version)
+            .map_err(|e| anyhow::anyhow!("Scan failed: {}", e))?
+    } else {
+        return Err(anyhow::anyhow!(
+            "不支持的扫描工具: {} (支持的工具: opengrep, security, auto)",
+            tool
+        ));
+    };
+
+    // 保存扫描历史（无论输出格式）
+    if !(no_history || benchmark) {
+        let cache_dir = get_cache_dir()?;
+        let history_dir = cache_dir.join("scan_history");
+        if let Err(e) = fs::create_dir_all(&history_dir) {
+            eprintln!("⚠️ 无法创建扫描历史目录: {}", e);
+        }
+        let ts = chrono::Utc::now().format("%Y%m%d%H%M%S");
+        let history_file = history_dir.join(format!("scan_{}_{}.json", result.tool, ts));
+        if let Ok(json) = serde_json::to_string(&result) {
+            if let Err(e) = fs::write(&history_file, json) {
+                eprintln!("⚠️ 写入扫描历史失败: {}", e);
+            }
+        }
     }
-    
-    if benchmark {
-        debug!("Running in benchmark mode");
+
+    // 输出结果
+    if format == "json" {
+        let json = serde_json::to_string_pretty(&result)?;
+        if let Some(output_path) = output {
+            fs::write(output_path, json)?;
+        } else {
+            println!("{}", json);
+        }
+    } else {
+        if show_progress {
+            println!("📊 扫描结果:");
+            println!("  工具: {}", result.tool);
+            println!("  版本: {}", result.version);
+            println!("  执行时间: {:.2}s", result.execution_time);
+
+            if !result.findings.is_empty() {
+                println!("  发现问题: {}", result.findings.len());
+                for finding in result.findings.iter().take(5) {
+                    println!(
+                        "    - {} ({}:{})",
+                        finding.title,
+                        finding.file_path.display(),
+                        finding.line
+                    );
+                }
+                if result.findings.len() > 5 {
+                    println!("    ... 还有 {} 个问题", result.findings.len() - 5);
+                }
+            } else {
+                println!("  ✅ 未发现问题");
+            }
+        }
     }
-    
-    scan::execute_scan(path, tool, scan_config).await
+
+    Ok(())
+}
+
+/// 获取缓存目录
+fn get_cache_dir() -> Result<PathBuf> {
+    let cache_dir = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".cache")
+        .join("gitai");
+
+    fs::create_dir_all(&cache_dir)?;
+    Ok(cache_dir)
 }
 
 /// Handler for scan history display

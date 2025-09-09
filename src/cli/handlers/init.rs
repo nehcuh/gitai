@@ -95,20 +95,78 @@ pub async fn handle_init(
 
 /// Download Tree-sitter resources
 async fn download_tree_sitter_resources() -> Result<()> {
-    // Implementation would call actual resource download logic
-    // This is a placeholder that maintains the same interface
-    debug!("Downloading Tree-sitter resources");
-    // TODO: Implement actual tree-sitter resource download
-    Ok(())
+    // 检查是否启用了任意 Tree-sitter 语言支持
+    #[cfg(any(
+        feature = "tree-sitter-rust",
+        feature = "tree-sitter-java",
+        feature = "tree-sitter-python",
+        feature = "tree-sitter-javascript",
+        feature = "tree-sitter-typescript",
+        feature = "tree-sitter-go",
+        feature = "tree-sitter-c",
+        feature = "tree-sitter-cpp"
+    ))]
+    {
+        match gitai::tree_sitter::TreeSitterManager::new().await {
+            Ok(_) => {
+                info!("Tree-sitter 资源初始化成功");
+                Ok(())
+            }
+            Err(e) => {
+                log::warn!("Tree-sitter 资源初始化失败: {e}");
+                Err(anyhow::anyhow!("Tree-sitter 资源下载失败: {e}"))
+            }
+        }
+    }
+    #[cfg(not(any(
+        feature = "tree-sitter-rust",
+        feature = "tree-sitter-java",
+        feature = "tree-sitter-python",
+        feature = "tree-sitter-javascript",
+        feature = "tree-sitter-typescript",
+        feature = "tree-sitter-go",
+        feature = "tree-sitter-c",
+        feature = "tree-sitter-cpp"
+    )))]
+    {
+        info!("Tree-sitter 功能未启用，跳过资源下载");
+        Ok(())
+    }
 }
 
 /// Download OpenGrep resources
-async fn download_opengrep_resources(_config_path: &PathBuf) -> Result<()> {
-    // Implementation would call actual resource download logic
-    // This is a placeholder that maintains the same interface
-    debug!("Downloading OpenGrep resources");
-    // TODO: Implement actual OpenGrep resource download
-    Ok(())
+async fn download_opengrep_resources(config_path: &PathBuf) -> Result<()> {
+    #[cfg(feature = "security")]
+    {
+        use gitai::resource_manager::{load_resource_config, ResourceManager};
+
+        // 尝试加载资源配置
+        match load_resource_config(config_path) {
+            Ok(resource_config) => {
+                let manager = ResourceManager::new(resource_config)?;
+                match manager.update_all().await {
+                    Ok(_) => {
+                        info!("OpenGrep 规则资源更新成功");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        log::warn!("OpenGrep 规则资源更新失败: {}", e);
+                        Err(anyhow::anyhow!("OpenGrep 规则下载失败: {}", e))
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("无法加载资源配置: {}", e);
+                // 不将此视为错误，因为可能配置还未完全设置
+                Ok(())
+            }
+        }
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        info!("安全扫描功能未启用，跳过 OpenGrep 规则下载");
+        Ok(())
+    }
 }
 
 /// Handler for init command with Command enum
