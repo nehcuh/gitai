@@ -145,31 +145,31 @@ pub fn resolve_config_path(path: &str) -> PathBuf {
 }
 
 /// MCP服务通用路径解析函数
-/// 
+///
 /// 支持：
 /// - 绝对路径直接使用
 /// - 相对路径多策略解析
 /// - ~符号展开
 /// - 路径存在性验证
-/// 
+///
 /// # 参数
 /// - `input_path`: 输入的路径字符串
 /// - `service_name`: 服务名称（用于错误信息）
-/// 
+///
 /// # 返回
 /// - `Ok(PathBuf)`: 解析后的绝对路径
 /// - `Err(String)`: 错误信息
-/// 
+///
 /// # Examples
 /// ```
 /// use gitai::utils::paths::resolve_mcp_path;
-/// 
+///
 /// // 绝对路径
 /// let abs_path = resolve_mcp_path("/usr/local/bin", "Test").unwrap();
-/// 
+///
 /// // 相对路径
 /// let rel_path = resolve_mcp_path("./src", "Test").unwrap();
-/// 
+///
 /// // ~符号展开
 /// let home_path = resolve_mcp_path("~/Documents", "Test").unwrap();
 /// ```
@@ -178,10 +178,10 @@ pub fn resolve_mcp_path(input_path: &str, service_name: &str) -> Result<PathBuf,
     if input_path.trim().is_empty() {
         return Err(format!("{}: 路径不能为空", service_name));
     }
-    
+
     // 1. 首先展开~符号
     let expanded_path = expand_user(input_path);
-    
+
     // 2. 智能路径解析逻辑（基于Scan服务）
     if expanded_path.is_absolute() {
         // 绝对路径直接使用，但需要验证存在性
@@ -206,18 +206,18 @@ fn resolve_relative_path(relative_path: &Path, service_name: &str) -> Result<Pat
     let cwd_path = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(relative_path);
-    
+
     if cwd_path.exists() {
         return Ok(cwd_path);
     }
-    
+
     // 策略2：相对于用户主目录的Projects目录
     if let Some(home) = dirs::home_dir() {
         let home_projects_path = home.join("Projects").join(relative_path);
         if home_projects_path.exists() {
             return Ok(home_projects_path);
         }
-        
+
         // 策略3：处理 ../xxx 形式的路径
         if relative_path.to_string_lossy().starts_with("../") {
             let gitai_path = home.join("Projects/gitai").join(relative_path);
@@ -226,7 +226,7 @@ fn resolve_relative_path(relative_path: &Path, service_name: &str) -> Result<Pat
             }
         }
     }
-    
+
     // 所有策略都失败，返回错误
     Err(format!(
         "{}: 无法解析相对路径 '{}'，请使用绝对路径",
@@ -373,7 +373,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let abs_path = temp_dir.path().join("test.txt");
         fs::write(&abs_path, "test").unwrap();
-        
+
         let result = resolve_mcp_path(abs_path.to_str().unwrap(), "Test");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), abs_path);
@@ -383,7 +383,7 @@ mod tests {
     fn test_resolve_mcp_path_absolute_nonexistent() {
         let temp_dir = TempDir::new().unwrap();
         let nonexistent_path = temp_dir.path().join("nonexistent.txt");
-        
+
         let result = resolve_mcp_path(nonexistent_path.to_str().unwrap(), "Test");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("路径不存在"));
@@ -393,17 +393,20 @@ mod tests {
     fn test_resolve_mcp_path_relative_cwd() {
         let temp_dir = TempDir::new().unwrap();
         let old_dir = std::env::current_dir().unwrap();
-        
+
         std::env::set_current_dir(&temp_dir).unwrap();
         let rel_path = "test.txt";
         fs::write(temp_dir.path().join(rel_path), "test").unwrap();
-        
+
         let result = resolve_mcp_path(rel_path, "Test");
         assert!(result.is_ok());
         let resolved_path = result.unwrap();
         // 使用 canonicalize 来规范化路径比较
-        assert_eq!(resolved_path.canonicalize().unwrap(), temp_dir.path().join(rel_path).canonicalize().unwrap());
-        
+        assert_eq!(
+            resolved_path.canonicalize().unwrap(),
+            temp_dir.path().join(rel_path).canonicalize().unwrap()
+        );
+
         std::env::set_current_dir(old_dir).unwrap();
     }
 
@@ -412,19 +415,19 @@ mod tests {
         // 创建一个实际的测试文件
         let temp_dir = TempDir::new().unwrap();
         let home = temp_dir.path();
-        
+
         // 临时设置主目录环境变量来测试
         std::env::set_var("HOME", home.to_string_lossy().as_ref());
-        
+
         let test_file = home.join("test_file.txt");
         fs::write(&test_file, "test content").unwrap();
-        
+
         let result = resolve_mcp_path("~/test_file.txt", "Test");
         assert!(result.is_ok());
         let resolved_path = result.unwrap();
         assert!(resolved_path.is_absolute());
         assert_eq!(resolved_path, test_file);
-        
+
         // 清理环境变量
         std::env::remove_var("HOME");
     }

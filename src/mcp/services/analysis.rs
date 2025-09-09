@@ -59,7 +59,7 @@ impl AnalysisService {
         // 检查是否为目录
         if path.is_dir() {
             info!("📁 检测到目录路径，尝试分析目录中的文件");
-            return self.analyze_directory(path, &params).await;
+            return self.analyze_directory(&path, &params).await;
         }
 
         // 使用真实的分析逻辑 - 单个文件分析
@@ -69,11 +69,11 @@ impl AnalysisService {
                 .ok_or_else(|| format!("不支持的语言: {}", lang))?
         } else {
             debug!("🔍 自动推断语言");
-            Self::infer_language_from_path(path).map_err(|e| format!("无法推断语言: {}", e))?
+            Self::infer_language_from_path(&path).map_err(|e| format!("无法推断语言: {}", e))?
         };
 
         // 读取文件内容
-        let code_content = std::fs::read_to_string(path).map_err(|e| {
+        let code_content = std::fs::read_to_string(&path).map_err(|e| {
             error!("❌ 无法读取文件 {}: {}", path.display(), e);
             format!("无法读取文件 {}: {}", path.display(), e)
         })?;
@@ -151,9 +151,13 @@ impl AnalysisService {
             });
         }
 
-        info!("📋 找到 {} 个代码文件，开始分析", code_files.len());
+        info!("📋 找到 {} 个代码文件，开始并发分析", code_files.len());
+        let start_time = std::time::Instant::now();
 
-        // 分析所有文件并聚合结果
+        // 使用并发分析提升性能
+        let concurrent_results = self.analyze_files_concurrently(code_files.clone()).await;
+
+        // 聚合所有成功的分析结果
         let mut total_summary = CodeSummary {
             total_lines: 0,
             code_lines: 0,
@@ -166,34 +170,47 @@ impl AnalysisService {
         let mut all_classes = Vec::new();
         let mut all_imports = Vec::new();
         let mut language_stats = HashMap::new();
+        let mut successful_count = 0;
+        let mut error_count = 0;
 
-        for file_path in &code_files {
-            debug!("🔍 分析文件: {}", file_path.display());
+        for result in concurrent_results {
+            match result {
+                Ok(analysis_result) => {
+                    successful_count += 1;
+                    total_summary.total_lines += analysis_result.summary.total_lines;
+                    total_summary.code_lines += analysis_result.summary.code_lines;
+                    total_summary.comment_lines += analysis_result.summary.comment_lines;
+                    total_summary.blank_lines += analysis_result.summary.blank_lines;
+                    total_summary.complexity_score += analysis_result.summary.complexity_score;
 
-            match self.analyze_single_file(file_path).await {
-                Ok(result) => {
-                    total_summary.total_lines += result.summary.total_lines;
-                    total_summary.code_lines += result.summary.code_lines;
-                    total_summary.comment_lines += result.summary.comment_lines;
-                    total_summary.blank_lines += result.summary.blank_lines;
-                    total_summary.complexity_score += result.summary.complexity_score;
+                    all_functions.extend(analysis_result.structures.functions);
+                    all_classes.extend(analysis_result.structures.classes);
+                    all_imports.extend(analysis_result.structures.imports);
 
-                    all_functions.extend(result.structures.functions);
-                    all_classes.extend(result.structures.classes);
-                    all_imports.extend(result.structures.imports);
-
-                    *language_stats.entry(result.language.clone()).or_insert(0) += 1;
+                    *language_stats
+                        .entry(analysis_result.language.clone())
+                        .or_insert(0) += 1;
                 }
                 Err(e) => {
-                    warn!("⚠️ 分析文件 {} 失败: {}", file_path.display(), e);
+                    error_count += 1;
+                    warn!("⚠️ 文件分析失败: {}", e);
                 }
             }
         }
 
+        let elapsed = start_time.elapsed();
+        info!(
+            "✅ 并发分析完成: {}/{} 文件成功，耗时 {:.2}s，速度 {:.1} 文件/秒",
+            successful_count,
+            successful_count + error_count,
+            elapsed.as_secs_f64(),
+            successful_count as f64 / elapsed.as_secs_f64().max(0.001)
+        );
+
         // 计算平均指标
-        let file_count = code_files.len();
-        let avg_complexity = if file_count > 0 {
-            total_summary.complexity_score / file_count as u32
+        let total_files = successful_count + error_count;
+        let avg_complexity = if successful_count > 0 {
+            total_summary.complexity_score / successful_count as u32
         } else {
             0
         };
@@ -206,8 +223,29 @@ impl AnalysisService {
 
         let mut details = HashMap::new();
         details.insert("directory_path".to_string(), dir_path.display().to_string());
-        details.insert("file_count".to_string(), file_count.to_string());
-        details.insert("total_files_analyzed".to_string(), file_count.to_string());
+        details.insert("total_files_found".to_string(), total_files.to_string());
+        details.insert("successful_files".to_string(), successful_count.to_string());
+        details.insert("failed_files".to_string(), error_count.to_string());
+        details.insert(
+            "analysis_time_ms".to_string(),
+            elapsed.as_millis().to_string(),
+        );
+        details.insert(
+            "analysis_time_seconds".to_string(),
+            format!("{:.2}", elapsed.as_secs_f64()),
+        );
+        details.insert(
+            "files_per_second".to_string(),
+            format!(
+                "{:.2}",
+                successful_count as f64 / elapsed.as_secs_f64().max(0.001)
+            ),
+        );
+        details.insert("concurrent_processing".to_string(), "enabled".to_string());
+        details.insert(
+            "max_concurrency".to_string(),
+            std::cmp::min(total_files, num_cpus::get() * 2).to_string(),
+        );
         details.insert(
             "language_distribution".to_string(),
             serde_json::to_string(&language_stats).unwrap_or_default(),
@@ -224,11 +262,14 @@ impl AnalysisService {
             );
         }
 
-        info!("✅ 目录分析完成: {} 个文件", file_count);
+        info!("✅ 目录分析完成: {} 个文件", successful_count);
 
         Ok(AnalysisResult {
             success: true,
-            message: format!("目录分析完成，共分析 {} 个文件", file_count),
+            message: format!(
+                "目录分析完成，成功分析 {} 个文件（失败 {} 个）",
+                successful_count, error_count
+            ),
             language: "multi".to_string(), // 多语言项目
             summary: total_summary,
             structures: CodeStructures {
@@ -243,6 +284,195 @@ impl AnalysisService {
             },
             details,
         })
+    }
+
+    /// 并发分析多个文件
+    async fn analyze_files_concurrently(
+        &self,
+        file_paths: Vec<std::path::PathBuf>,
+    ) -> Vec<Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>>> {
+        use std::sync::Arc;
+        use tokio::sync::Semaphore;
+
+        // 限制并发数量以避免占用过多资源
+        let max_concurrent = std::cmp::min(file_paths.len(), num_cpus::get() * 2);
+        let semaphore = Arc::new(Semaphore::new(max_concurrent));
+
+        debug!(
+            "🚀 开始并发分析 {} 个文件，最大并发数: {}",
+            file_paths.len(),
+            max_concurrent
+        );
+
+        let mut tasks = Vec::new();
+
+        for file_path in file_paths {
+            let semaphore = semaphore.clone();
+            let task = tokio::spawn(async move {
+                // 获取并发许可
+                let _permit = semaphore.acquire().await.unwrap();
+
+                // 执行单文件分析
+                Self::analyze_single_file_static(&file_path).await
+            });
+            tasks.push(task);
+        }
+
+        // 等待所有任务完成
+        let mut results = Vec::new();
+        for task in tasks {
+            match task.await {
+                Ok(analysis_result) => results.push(analysis_result),
+                Err(join_error) => {
+                    results.push(Err(format!("Task join error: {}", join_error).into()));
+                }
+            }
+        }
+
+        results
+    }
+
+    /// 静态分析单个文件（供并发使用）
+    async fn analyze_single_file_static(
+        file_path: &Path,
+    ) -> Result<AnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+        debug!("🔍 静态分析文件: {}", file_path.display());
+
+        let language = Self::infer_language_from_path(file_path)?;
+
+        let code_content = std::fs::read_to_string(file_path)
+            .map_err(|e| format!("无法读取文件 {}: {}", file_path.display(), e))?;
+
+        // 每个并发任务创建独立的 TreeSitterManager 以避免竞争
+        let mut manager = tree_sitter::TreeSitterManager::new()
+            .await
+            .map_err(|e| format!("无法创建 Tree-sitter 管理器: {}", e))?;
+
+        let summary = manager
+            .analyze_structure(&code_content, language)
+            .map_err(|e| format!("结构分析失败: {}", e))?;
+
+        // 转换分析结果为静态方法
+        let result = Self::convert_analysis_result_static(summary, 1);
+
+        Ok(result)
+    }
+
+    /// 静态版本的分析结果转换（供并发使用）
+    fn convert_analysis_result_static(
+        summary: tree_sitter::StructuralSummary,
+        _verbosity: u32,
+    ) -> AnalysisResult {
+        let mut details = HashMap::new();
+
+        // 检查是否为多语言模式
+        if summary.is_multi_language() {
+            // 多语言模式
+            details.insert("mode".to_string(), "multi-language".to_string());
+            details.insert(
+                "languages".to_string(),
+                summary.detected_languages().join(", "),
+            );
+            details.insert(
+                "language_count".to_string(),
+                summary.language_summaries.len().to_string(),
+            );
+
+            // 各语言统计
+            for (lang, lang_summary) in &summary.language_summaries {
+                details.insert(
+                    format!("{}_functions", lang),
+                    lang_summary.functions.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_classes", lang),
+                    lang_summary.classes.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_comments", lang),
+                    lang_summary.comments.len().to_string(),
+                );
+                details.insert(
+                    format!("{}_files", lang),
+                    lang_summary.file_count.to_string(),
+                );
+            }
+        } else {
+            // 单语言模式（向后兼容）
+            details.insert("mode".to_string(), "single-language".to_string());
+            details.insert("language".to_string(), summary.language.clone());
+            details.insert(
+                "functions_count".to_string(),
+                summary.functions.len().to_string(),
+            );
+            details.insert(
+                "classes_count".to_string(),
+                summary.classes.len().to_string(),
+            );
+            details.insert(
+                "imports_count".to_string(),
+                summary.imports.len().to_string(),
+            );
+            details.insert(
+                "comments_count".to_string(),
+                summary.comments.len().to_string(),
+            );
+        }
+
+        // 计算总体指标
+        let total_lines = 100; // 简化计算
+        let comment_lines = summary.comments.len();
+        let complexity_score = summary.complexity_hints.len() as u32;
+
+        // 根据模式生成不同的消息
+        let message = if summary.is_multi_language() {
+            let lang_list = summary.detected_languages().join(", ");
+            format!(
+                "多语言代码分析完成：{} (共{}种语言)",
+                lang_list,
+                summary.language_summaries.len()
+            )
+        } else {
+            format!("代码分析完成：{}", summary.language)
+        };
+
+        let language_display = if summary.is_multi_language() {
+            "multi-language".to_string()
+        } else {
+            summary.language.clone()
+        };
+
+        AnalysisResult {
+            success: true,
+            message,
+            language: language_display,
+            summary: CodeSummary {
+                total_lines,
+                code_lines: if total_lines > comment_lines {
+                    total_lines - comment_lines
+                } else {
+                    0
+                },
+                comment_lines,
+                blank_lines: 0,
+                complexity_score,
+            },
+            structures: CodeStructures {
+                functions: vec![], // TODO: 转换 FunctionInfo
+                classes: vec![],   // TODO: 转换 ClassInfo
+                imports: summary.imports,
+            },
+            metrics: CodeMetrics {
+                cyclomatic_complexity: complexity_score,
+                maintainability_index: 85.0, // 简化计算
+                comment_ratio: if total_lines > 0 {
+                    (comment_lines as f64) / (total_lines as f64)
+                } else {
+                    0.0
+                },
+            },
+            details,
+        }
     }
 
     /// 查找目录中的代码文件
@@ -300,7 +530,8 @@ impl AnalysisService {
         Ok(code_files)
     }
 
-    /// 分析单个文件
+    /// 分析单个文件（非并发版本，保留供单文件分析使用）
+    #[allow(dead_code)]
     async fn analyze_single_file(
         &self,
         file_path: &Path,

@@ -18,9 +18,10 @@ pub struct GitAiMcpServer {
 impl GitAiMcpServer {
     /// 创建新的 MCP 服务器
     #[allow(dead_code)]
-    pub fn new(config: Config) -> Self {
-        let manager = Arc::new(RwLock::new(crate::mcp::GitAiMcpManager::new(config)));
-        Self { manager }
+    pub async fn new(config: Config) -> crate::mcp::McpResult<Self> {
+        let mcp_manager = crate::mcp::GitAiMcpManager::new(config).await?;
+        let manager = Arc::new(RwLock::new(mcp_manager));
+        Ok(Self { manager })
     }
 }
 
@@ -100,9 +101,18 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     eprintln!("🔌 Listening on stdio...");
 
     // 创建并初始化服务管理器
-    let manager = std::sync::Arc::new(tokio::sync::RwLock::new(crate::mcp::GitAiMcpManager::new(
-        config.clone(),
-    )));
+    // 创建并初始化服务管理器
+    let mcp_manager = match crate::mcp::GitAiMcpManager::new(config.clone()).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            eprintln!("❌ 初始化 MCP 服务管理器失败: {}", e);
+            return Err(crate::mcp::execution_failed_error(format!(
+                "Failed to init MCP manager: {}",
+                e
+            )));
+        }
+    };
+    let manager = std::sync::Arc::new(tokio::sync::RwLock::new(mcp_manager));
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -139,7 +149,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                             "tools/list" => {
                                 // 动态列出服务当前提供的工具，避免工具列表与已启用服务不一致
                                 let manager_read = manager.read().await;
-                                let tools = manager_read.get_all_tools();
+                                let tools = manager_read.get_all_tools().await;
                                 let tools_json: Vec<serde_json::Value> = tools
                                     .into_iter()
                                     .map(|t| {

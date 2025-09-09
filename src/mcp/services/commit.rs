@@ -129,6 +129,18 @@ impl crate::mcp::GitAiMcpService for CommitService {
         "执行智能提交，支持 AI 生成提交信息、代码评审和 Issue 关联"
     }
 
+    fn version(&self) -> semver::Version {
+        semver::Version::parse("1.5.0").unwrap()
+    }
+
+    fn dependencies(&self) -> Vec<crate::mcp::registry::ServiceDependency> {
+        vec![crate::mcp::registry::ServiceDependency {
+            service_name: "review".to_string(),
+            version_req: semver::VersionReq::parse(">=1.0.0").unwrap(),
+            optional: true, // 因为只在启用 review 参数时才需要
+        }]
+    }
+
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
             name: "execute_commit".to_string().into(),

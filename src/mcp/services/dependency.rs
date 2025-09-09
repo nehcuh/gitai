@@ -137,11 +137,11 @@ impl DependencyService {
         // 检查是否为目录
         if path.is_dir() {
             info!("📁 检测到目录路径，分析目录中的所有代码文件");
-            return self.analyze_directory_dependencies(path, &params).await;
+            return self.analyze_directory_dependencies(&path, &params).await;
         }
 
         // 分析单个文件
-        self.analyze_file_dependencies(path, &params).await
+        self.analyze_file_dependencies(&path, &params).await
     }
 
     /// 分析单个文件的依赖关系

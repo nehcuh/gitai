@@ -452,17 +452,25 @@ mod tests {
     #[tokio::test]
     async fn test_tree_sitter_manager_creation() {
         let result = TreeSitterManager::new().await;
-        assert!(result.is_ok(), "TreeSitterManager creation should succeed");
+        assert!(result.is_ok(), "Failed to create TreeSitterManager");
 
         let mut manager = result.unwrap();
 
-        // 测试是否可以获取各种语言的解析器
+        // 测试是否可以获取已启用语言的解析器
         for lang in SupportedLanguage::all() {
             let parser = manager.get_parser(lang);
-            assert!(
-                parser.is_some(),
-                "Should be able to get parser for {lang:?}"
-            );
+            // 只有当语言启用时才期望获取到解析器
+            if lang.language().is_some() {
+                assert!(
+                    parser.is_some(),
+                    "Should be able to get parser for enabled language {lang:?}"
+                );
+            } else {
+                assert!(
+                    parser.is_none(),
+                    "Should not have parser for disabled language {lang:?}"
+                );
+            }
         }
     }
 
@@ -472,17 +480,37 @@ mod tests {
             .await
             .expect("Failed to create manager");
 
-        let result = manager.analyze_structure("", SupportedLanguage::Java);
-        assert!(result.is_ok(), "Should handle empty code gracefully");
+        // 使用第一个已启用的语言进行测试
+        let enabled_languages: Vec<_> = SupportedLanguage::all()
+            .into_iter()
+            .filter(|lang| lang.language().is_some())
+            .collect();
 
-        let summary = result.unwrap();
-        assert_eq!(summary.language, "java");
-        assert_eq!(summary.functions.len(), 0);
-        assert_eq!(summary.classes.len(), 0);
+        if !enabled_languages.is_empty() {
+            let lang = enabled_languages[0];
+            let result = manager.analyze_structure("", lang);
+            assert!(
+                result.is_ok(),
+                "Should handle empty code gracefully for {lang:?}"
+            );
+
+            let summary = result.unwrap();
+            assert_eq!(summary.language, lang.name());
+            assert_eq!(summary.functions.len(), 0);
+            assert_eq!(summary.classes.len(), 0);
+        } else {
+            println!("跳过空代码测试 - 没有启用的语言");
+        }
     }
 
     #[tokio::test]
     async fn test_analyze_simple_java_code() {
+        // 只有在 Java 支持启用时才测试
+        if SupportedLanguage::Java.language().is_none() {
+            println!("跳过 Java 代码分析测试 - Java 支持未启用");
+            return;
+        }
+
         let mut manager = TreeSitterManager::new()
             .await
             .expect("Failed to create manager");
@@ -537,6 +565,7 @@ mod tests {
             .await
             .expect("Failed to create manager");
 
+        // 只测试已启用的语言
         let test_codes = vec![
             (
                 SupportedLanguage::Java,
@@ -549,11 +578,24 @@ mod tests {
         ];
 
         for (lang, code) in test_codes {
-            let result = manager.analyze_structure(code, lang);
-            assert!(result.is_ok(), "Should successfully analyze {lang:?} code");
+            // 只测试已启用的语言
+            if lang.language().is_some() {
+                let result = manager.analyze_structure(code, lang);
+                assert!(
+                    result.is_ok(),
+                    "Should successfully analyze enabled language {lang:?} code"
+                );
 
-            let summary = result.unwrap();
-            assert_eq!(summary.language, lang.name());
+                let summary = result.unwrap();
+                assert_eq!(summary.language, lang.name());
+            } else {
+                // 对于未启用的语言，应该返回错误
+                let result = manager.analyze_structure(code, lang);
+                assert!(
+                    result.is_err(),
+                    "Should fail to analyze disabled language {lang:?} code"
+                );
+            }
         }
     }
 }

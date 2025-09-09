@@ -2,13 +2,41 @@
 // 提供安全扫描功能的 MCP 服务实现
 
 use crate::{config::Config, mcp::*};
-use log::{debug, error, info};
+#[cfg(feature = "security")]
+use crate::scan;
+use crate::scan::models::Finding;
+#[cfg(not(feature = "security"))]
+use crate::domain::interfaces::scan;
+use log::{debug, error, info, warn};
 use rmcp::model::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// 扫描服务配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanServiceConfig {
+    /// 扫描工具
+    pub tool: String,
+    /// 超时（秒）
+    pub timeout: u64,
+    /// 目标路径
+    pub path: String,
+    /// 语言过滤
+    pub lang: Option<String>,
+}
+
+impl Default for ScanServiceConfig {
+    fn default() -> Self {
+        Self {
+            tool: "opengrep".to_string(),
+            timeout: 300,
+            path: ".".to_string(),
+            lang: None,
+        }
+    }
+}
 
 /// 扫描服务
 pub struct ScanService {
@@ -111,9 +139,9 @@ impl GitAiMcpService for ScanService {
 
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
-            name: "execute_scan".into(),
-            description: "执行安全扫描，支持多语言自动检测与可选语言过滤".into(),
-            input_schema: Arc::new(self.get_scan_schema()),
+            name: "execute_scan".to_string(),
+            description: "执行安全扫描，支持多语言自动检测与可选语言过滤".to_string(),
+            input_schema: Box::new(self.get_scan_schema()),
         }]
     }
 
@@ -124,24 +152,29 @@ impl GitAiMcpService for ScanService {
     ) -> McpResult<serde_json::Value> {
         match name {
             "execute_scan" => {
-                let params: ScanParams =
-                    serde_json::from_value(arguments).map_err(|e| parse_error("scan", e))?;
+                let params: ScanParams = serde_json::from_value(arguments)
+                    .map_err(|e| parse_error("scan", e))?;
                 debug!("扫描参数: {:?}", params);
 
                 let result = self.execute_scan(params).await?;
-                let result_json =
-                    serde_json::to_value(result).map_err(|e| serialize_error("scan", e))?;
+                let result_json = serde_json::to_value(result).map_err(|e| serialize_error("scan", e))?;
                 Ok(result_json)
             }
-            _ => Err(invalid_parameters_error(format!("Unknown tool: {}", name))),
+            _ => Err(invalid_parameters_error(format!(
+                "Unknown tool: {}",
+                name
+            ))),
         }
     }
 }
 
 impl ScanService {
-    fn get_scan_schema(&self) -> serde_json::Map<String, serde_json::Value> {
-        let mut schema = serde_json::Map::new();
-        schema.insert("type".to_string(), serde_json::json!("object"));
+    fn get_scan_schema(&self) -> BTreeMap<String, serde_json::Value> {
+        let mut schema = BTreeMap::new();
+        schema.insert(
+            "type".to_string(),
+            serde_json::json!("object"),
+        );
         schema.insert(
             "properties".to_string(),
             serde_json::json!({
@@ -164,7 +197,10 @@ impl ScanService {
                 }
             }),
         );
-        schema.insert("required".to_string(), serde_json::json!(["path"]));
+        schema.insert(
+            "required".to_string(),
+            serde_json::json!(["path"]),
+        );
         schema
     }
 
@@ -189,45 +225,45 @@ impl ScanService {
 
             // 执行扫描
             info!("🔄 运行 OpenGrep 扫描...");
-            let result = crate::scan::run_opengrep_scan(config, path, lang, Some(timeout), true)
-                .map_err(|e| execution_failed_error(format!("Failed to run scan: {}", e)))?;
+            let result = crate::scan::run_opengrep_scan(
+                config,
+                path,
+                lang,
+                Some(timeout),
+                true,
+            )
+            .map_err(|e| execution_failed_error(format!("Failed to run scan: {}", e)))?;
 
             // 转换扫描结果
-            let result = self.convert_real_scan_result(result, &params);
+            let result = self.convert_scan_result(result);
             info!("✅ 安全扫描完成: {}", params.path);
             Ok(result)
         }
 
         #[cfg(not(feature = "security"))]
         {
-            info!("⚠️ 安全扫描功能未启用，返回模拟结果");
-            Ok(self.create_mock_scan_result(params))
+            error!("❌ 安全扫描功能未启用，请使用 --feature security 重新编译");
+            Err(execution_failed_error(
+                "Security scanning feature is not enabled. Please rebuild with --feature security.",
+            ))
         }
     }
 
-    #[cfg(feature = "security")]
-    fn convert_real_scan_result(
-        &self,
-        scan_result: crate::scan::ScanResult,
-        params: &ScanParams,
-    ) -> ScanResult {
+    fn convert_scan_result(&self, scan_result: scan::ScanResult) -> ScanResult {
         let mut findings = Vec::new();
 
         for finding in &scan_result.findings {
             findings.push(Finding {
                 title: finding.title.clone(),
                 file_path: finding.file_path.to_string_lossy().to_string(),
-                line: finding.line as u32,
+                line: finding.line,
                 severity: match finding.severity.as_str() {
                     "ERROR" | "error" => Severity::Error,
                     "WARNING" | "warning" => Severity::Warning,
                     "INFO" | "info" => Severity::Info,
                     _ => Severity::Info,
                 },
-                rule_id: finding
-                    .rule_id
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
+                rule_id: finding.rule_id.clone().unwrap_or_else(|| "unknown".to_string()),
                 description: "发现安全问题的代码段".to_string(),
                 suggestion: None,
                 code_snippet: finding.code_snippet.clone(),
@@ -249,6 +285,15 @@ impl ScanService {
                 rules_info.total_rules.to_string(),
             );
             details.insert("rules_dir".to_string(), rules_info.dir.clone());
+            details.insert(
+                "rules_summary".to_string(),
+                format!(
+                    "{} 语言, {} 规则, {} 文件",
+                    rules_info.languages.len(),
+                    rules_info.total_rules,
+                    rules_info.files.len()
+                ),
+            );
             true
         } else {
             details.insert("rules_summary".to_string(), "未加载规则".to_string());
@@ -270,7 +315,7 @@ impl ScanService {
             .count();
 
         let success = scan_result.error.is_none();
-
+        
         let message = if let Some(error) = &scan_result.error {
             format!("扫描失败: {}", error)
         } else if findings.is_empty() && has_valid_rules {
@@ -287,6 +332,7 @@ impl ScanService {
             )
         };
 
+        // 创建最终结果
         ScanResult {
             success,
             message,
@@ -297,42 +343,11 @@ impl ScanService {
             findings,
             details,
             execution_time: scan_result.execution_time,
-            path: params.path.clone(),
+            path: scan_result.findings.first().map_or_else(
+                || ".".to_string(),
+                |f| f.file_path.parent().unwrap_or_else(|| Path::new(".")).to_string_lossy().to_string(),
+            ),
             tool: scan_result.tool,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::from_secs(0))
-                .as_secs() as i64,
-        }
-    }
-
-    #[cfg(not(feature = "security"))]
-    fn create_mock_scan_result(&self, params: ScanParams) -> ScanResult {
-        let mut details = HashMap::new();
-        let tool_name = params
-            .tool
-            .clone()
-            .unwrap_or_else(|| "opengrep".to_string());
-        details.insert("tool".to_string(), tool_name.clone());
-        details.insert("version".to_string(), "mock".to_string());
-        details.insert("execution_time".to_string(), "0.1s".to_string());
-        details.insert(
-            "note".to_string(),
-            "安全扫描功能未启用，这是一个模拟结果".to_string(),
-        );
-
-        ScanResult {
-            success: true,
-            message: "安全扫描功能未启用。要启用实际扫描功能，请使用 --features security 重新编译"
-                .to_string(),
-            total_issues: 0,
-            error_count: 0,
-            warning_count: 0,
-            info_count: 0,
-            findings: Vec::new(),
-            details,
-            execution_time: 0.1,
-            tool: tool_name,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or(Duration::from_secs(0))

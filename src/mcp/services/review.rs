@@ -219,6 +219,25 @@ impl crate::mcp::GitAiMcpService for ReviewService {
         "执行代码评审，支持多语言 Tree-sitter 结构分析、安全扫描和 Issue 关联"
     }
 
+    fn version(&self) -> semver::Version {
+        semver::Version::parse("2.0.0").unwrap()
+    }
+
+    fn dependencies(&self) -> Vec<crate::mcp::registry::ServiceDependency> {
+        vec![
+            crate::mcp::registry::ServiceDependency {
+                service_name: "analysis".to_string(),
+                version_req: semver::VersionReq::parse(">=1.0.0").unwrap(),
+                optional: false,
+            },
+            crate::mcp::registry::ServiceDependency {
+                service_name: "scan".to_string(),
+                version_req: semver::VersionReq::parse(">=1.0.0").unwrap(),
+                optional: true,
+            },
+        ]
+    }
+
     fn tools(&self) -> Vec<Tool> {
         vec![Tool {
             name: "execute_review".to_string().into(),

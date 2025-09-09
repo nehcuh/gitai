@@ -69,8 +69,28 @@ GitAI不是强制性的开发流程，而是一组独立的辅助工具，每个
 
 ## 1. 模块与职责
 
+### CLI 模块化架构（2025-01-09 更新）
+
 - src/main.rs
-  - 启动、解析 CLI、加载配置、路由到各子命令
+  - 精简的入口点，仅负责创建和运行 CliApp
+- src/cli/mod.rs
+  - CLI 应用主控制器，负责命令分发和全局初始化
+- src/cli/handlers/
+  - 模块化的命令处理器（12个独立处理器）：
+    - review.rs: 代码评审命令
+    - commit.rs: 智能提交命令
+    - scan.rs: 安全扫描命令
+    - prompts.rs: 提示词管理
+    - init.rs: 配置初始化
+    - git.rs: Git 代理与 AI 解释
+    - config.rs: 配置管理
+    - update.rs: 更新检查
+    - metrics.rs: 质量度量
+    - mcp.rs: MCP 服务器
+    - graph.rs: 架构图生成
+    - features.rs: 功能特性列表
+
+### 核心模块
 - src/args.rs
   - CLI 参数定义（Review/Scan/ScanHistory/Prompts/Commit/Update/Git 代理/MCP）
 - src/config.rs
@@ -97,12 +117,20 @@ GitAI不是强制性的开发流程，而是一组独立的辅助工具，每个
 - src/mcp/*
   - MCP (Model Context Protocol) 服务器实现
     - mod.rs: MCP服务管理器、错误处理、性能统计
+    - manager.rs: MCP管理器，集成服务注册表
+    - registry.rs: 服务注册表，支持依赖管理和版本控制
     - bridge.rs: MCP协议桥接，支持stdio传输
-    - services/: 四个核心MCP服务实现
+    - services/: 核心MCP服务实现
       - review.rs: 代码评审服务
       - commit.rs: 智能提交服务
       - scan.rs: 安全扫描服务
-      - analysis.rs: 代码分析服务
+      - analysis.rs: 代码分析服务（支持并发）
+      - deviation.rs: 偏离度分析服务
+- src/tree_sitter/*
+  - Tree-sitter 多语言结构分析
+    - mod.rs: TreeSitterManager 管理器
+    - 支持 8 种语言的并发分析
+    - 线程安全的缓存实现
 
 ## 2. CLI 契约（核心）
 
@@ -509,9 +537,60 @@ default_timeout = 300
 }
 ```
 
-## 9. 后续演进（简述）
+## 11. 最近改进（2025-01-09）
 
-- 恢复并接入 Tree‑sitter（最小可用：结构摘要注入 prompt）
-- 完成 prompts.update 真实源同步（git/URL），含重试与校验
-- 加 smoke tests 与基准章节的自动化脚本
+### CLI 模块化重构
+
+将原本 1374 行的 main.rs 重构为模块化架构：
+
+- **精简入口点**：main.rs 仅创建和运行 CliApp
+- **命令处理器**：12 个独立的 handler 模块，每个负责一种命令
+- **统一接口**：所有 handler 实现异步 handle_command 接口
+- **特性门控**：清晰的特性条件编译和错误处理
+
+### MCP 服务注册表
+
+实现了完整的服务注册和依赖管理系统：
+
+- **动态注册**：服务可以动态注册和注销
+- **依赖管理**：支持服务间的依赖关系和版本控制
+- **拓扑排序**：根据依赖关系自动确定启动顺序
+- **事件通知**：服务状态变化的事件通知机制
+- **健康检查**：内置健康检查接口
+
+### Tree-sitter 并发优化
+
+实现了多文件并行分析能力：
+
+- **并行处理**：使用 tokio 任务并行分析多个文件
+- **资源控制**：Semaphore 信号量限制并发数
+- **性能指标**：记录分析时间、文件数、吞吐量
+- **线程安全**：每个任务使用独立的 TreeSitterManager
+
+### 测试套件完善
+
+- **MCP 集成测试**：覆盖功能、错误处理、并发场景
+- **并发测试**：验证并发分析的正确性和性能
+- **全部通过**：修复所有失败的测试，零警告
+
+### 文档体系重组
+
+- **结构优化**：按目的分类（getting-started, architecture, features, development, api）
+- **档案归档**：将过时文档移到 archive/historical
+- **索引更新**：创建综合文档索引 docs/README.md
+- **贡献指南**：新增 CONTRIBUTING.md 指导开发者参与
+
+### 代码质量提升
+
+- **编译警告**：清理所有编译警告和未使用的导入
+- **错误处理**：统一使用 anyhow 和自定义错误类型
+- **格式统一**：修复所有 clippy 提示的代码风格问题
+
+## 12. 后续演进（简述）
+
+- 持续优化 TreeSitterManager 线程安全（解析器池）
+- 完善 API 文档和开发者指南
+- 提高单元测试覆盖率到 80%
+- 添加性能基准测试套件
+- 实现 TCP/SSE 传输协议支持
 

@@ -77,10 +77,18 @@ fn get_cache_dir() -> Result<PathBuf> {
     Ok(cache_dir)
 }
 
+// mod cli;  // Temporarily disabled due to compilation errors
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logger();
+    // Temporarily use legacy main while CLI handlers are being developed
+    legacy_main().await
+}
 
+// 保留原有的处理函数作为后备，直到完全迁移完成
+#[allow(dead_code)]
+async fn legacy_main() -> Result<()> {
+    init_logger();
     let args = Args::parse();
 
     // 处理 Init 命令（不需要配置）

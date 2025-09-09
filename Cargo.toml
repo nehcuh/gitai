@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [features]
 # 默认功能
-default = ["ai", "tree-sitter-rust", "tree-sitter-python", "tree-sitter-javascript"]
+default = ["ai", "tree-sitter-rust", "tree-sitter-python", "tree-sitter-javascript", "security"]
 
 # 完整功能
 full = [
@@ -88,10 +88,12 @@ parking_lot = "0.12"
 async-trait = "0.1.86"
 lazy_static = "1.5"
 chrono = { version = "0.4.40", features = ["serde"] }
+semver = { version = "1.0", features = ["serde"] }
 walkdir = "2.5.0"
 tempfile = "3.20.0"
 rand = "0.8"
 uuid = { version = "1.0", features = ["v4"] }
+num_cpus = "1.16"
 
 # 缓存和哈希
 lru = "0.12"
@@ -138,6 +140,8 @@ dashmap = "5.5"
 tempfile = "3.20.0"
 criterion = "0.5"
 rand = "0.8"
+tokio-test = "0.4"
+futures = "0.3"
 
 [[bench]]
 name = "architectural_impact_bench"

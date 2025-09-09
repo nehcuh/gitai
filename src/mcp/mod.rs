@@ -4,13 +4,156 @@
 // 使得 GitAI 可以作为 MCP 服务器被 LLM 调用
 
 pub mod bridge;
+pub mod manager;
+pub mod registry;
 pub mod services;
 
-use log::{debug, error, info, warn};
+use log::info;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+// 重新导出核心类型
+pub use rmcp::{
+    model::{Implementation, Tool},
+    service::ServiceError,
+};
+
+// 类型别名
+pub type McpResult<T> = Result<T, McpError>;
+
+/// GitAI MCP 错误类型
+#[derive(Debug, Clone)]
+pub enum McpError {
+    /// 参数验证错误
+    InvalidParameters(String),
+    /// 服务执行错误
+    ExecutionFailed(String),
+    /// 配置错误
+    ConfigurationError(String),
+    /// 文件操作错误
+    FileOperationError(String),
+    /// 网络错误
+    NetworkError(String),
+    /// 外部工具错误
+    ExternalToolError(String),
+    /// 权限错误
+    PermissionError(String),
+    /// 超时错误
+    TimeoutError(String),
+    /// 未知错误
+    Unknown(String),
+}
+
+impl std::fmt::Display for McpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            McpError::InvalidParameters(msg) => write!(f, "Invalid parameters: {}", msg),
+            McpError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
+            McpError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            McpError::FileOperationError(msg) => write!(f, "File operation error: {}", msg),
+            McpError::NetworkError(msg) => write!(f, "Network error: {}", msg),
+            McpError::ExternalToolError(msg) => write!(f, "External tool error: {}", msg),
+            McpError::PermissionError(msg) => write!(f, "Permission error: {}", msg),
+            McpError::TimeoutError(msg) => write!(f, "Timeout error: {}", msg),
+            McpError::Unknown(msg) => write!(f, "Unknown error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for McpError {}
+
+impl From<McpError> for ServiceError {
+    fn from(err: McpError) -> Self {
+        ServiceError::Transport(std::io::Error::other(err.to_string()))
+    }
+}
+
+impl From<serde_json::Error> for McpError {
+    fn from(err: serde_json::Error) -> Self {
+        McpError::InvalidParameters(format!("JSON parsing error: {}", err))
+    }
+}
+
+impl From<std::io::Error> for McpError {
+    fn from(err: std::io::Error) -> Self {
+        match err.kind() {
+            std::io::ErrorKind::NotFound => {
+                McpError::FileOperationError(format!("File not found: {}", err))
+            }
+            std::io::ErrorKind::PermissionDenied => {
+                McpError::PermissionError(format!("Permission denied: {}", err))
+            }
+            std::io::ErrorKind::TimedOut => McpError::TimeoutError(format!("Timeout: {}", err)),
+            _ => McpError::FileOperationError(format!("IO error: {}", err)),
+        }
+    }
+}
+
+impl From<tokio::time::error::Elapsed> for McpError {
+    fn from(err: tokio::time::error::Elapsed) -> Self {
+        McpError::TimeoutError(format!("Operation timeout: {}", err))
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for McpError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        McpError::ExternalToolError(format!("External service error: {}", err))
+    }
+}
+
+// 错误创建辅助函数
+#[allow(dead_code)]
+pub fn invalid_parameters_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::InvalidParameters(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn execution_failed_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::ExecutionFailed(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn configuration_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::ConfigurationError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn file_operation_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::FileOperationError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn network_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::NetworkError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn external_tool_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::ExternalToolError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn permission_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::PermissionError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn timeout_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::TimeoutError(msg.into())
+}
+
+#[allow(dead_code)]
+pub fn unknown_error<T: Into<String>>(msg: T) -> McpError {
+    McpError::Unknown(msg.into())
+}
+
+// 向后兼容的辅助函数
+#[allow(dead_code)]
+pub fn service_error(msg: String) -> ServiceError {
+    ServiceError::Transport(std::io::Error::other(msg))
+}
 
 /// 性能统计结构
 #[derive(Debug, Clone)]
@@ -176,152 +319,6 @@ impl PerformanceCollector {
     }
 }
 
-// 重新导出核心类型
-pub use rmcp::{
-    model::{Implementation, Tool},
-    service::ServiceError,
-};
-
-// 类型别名
-pub type McpResult<T> = Result<T, McpError>;
-
-/// GitAI MCP 错误类型
-#[derive(Debug, Clone)]
-pub enum McpError {
-    /// 参数验证错误
-    InvalidParameters(String),
-    /// 服务执行错误
-    ExecutionFailed(String),
-    /// 配置错误
-    ConfigurationError(String),
-    /// 文件操作错误
-    FileOperationError(String),
-    /// 网络错误
-    NetworkError(String),
-    /// 外部工具错误
-    ExternalToolError(String),
-    /// 权限错误
-    PermissionError(String),
-    /// 超时错误
-    TimeoutError(String),
-    /// 未知错误
-    Unknown(String),
-}
-
-impl std::fmt::Display for McpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            McpError::InvalidParameters(msg) => write!(f, "Invalid parameters: {}", msg),
-            McpError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
-            McpError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
-            McpError::FileOperationError(msg) => write!(f, "File operation error: {}", msg),
-            McpError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            McpError::ExternalToolError(msg) => write!(f, "External tool error: {}", msg),
-            McpError::PermissionError(msg) => write!(f, "Permission error: {}", msg),
-            McpError::TimeoutError(msg) => write!(f, "Timeout error: {}", msg),
-            McpError::Unknown(msg) => write!(f, "Unknown error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for McpError {}
-
-impl From<McpError> for ServiceError {
-    fn from(err: McpError) -> Self {
-        ServiceError::Transport(std::io::Error::other(err.to_string()))
-    }
-}
-
-impl From<serde_json::Error> for McpError {
-    fn from(err: serde_json::Error) -> Self {
-        McpError::InvalidParameters(format!("JSON parsing error: {}", err))
-    }
-}
-
-impl From<std::io::Error> for McpError {
-    fn from(err: std::io::Error) -> Self {
-        match err.kind() {
-            std::io::ErrorKind::NotFound => {
-                McpError::FileOperationError(format!("File not found: {}", err))
-            }
-            std::io::ErrorKind::PermissionDenied => {
-                McpError::PermissionError(format!("Permission denied: {}", err))
-            }
-            std::io::ErrorKind::TimedOut => McpError::TimeoutError(format!("Timeout: {}", err)),
-            _ => McpError::FileOperationError(format!("IO error: {}", err)),
-        }
-    }
-}
-
-impl From<tokio::time::error::Elapsed> for McpError {
-    fn from(err: tokio::time::error::Elapsed) -> Self {
-        McpError::TimeoutError(format!("Operation timeout: {}", err))
-    }
-}
-
-// 错误创建辅助函数
-#[allow(dead_code)]
-pub fn invalid_parameters_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::InvalidParameters(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn execution_failed_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::ExecutionFailed(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn configuration_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::ConfigurationError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn file_operation_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::FileOperationError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn network_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::NetworkError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn external_tool_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::ExternalToolError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn permission_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::PermissionError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn timeout_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::TimeoutError(msg.into())
-}
-
-#[allow(dead_code)]
-pub fn unknown_error<T: Into<String>>(msg: T) -> McpError {
-    McpError::Unknown(msg.into())
-}
-
-// 向后兼容的辅助函数
-#[allow(dead_code)]
-pub fn service_error(msg: String) -> ServiceError {
-    ServiceError::Transport(std::io::Error::other(msg))
-}
-
-/// GitAI MCP 服务管理器
-pub struct GitAiMcpManager {
-    /// GitAI 配置
-    #[allow(dead_code)]
-    config: crate::config::Config,
-    /// 活跃的服务实例
-    services: std::collections::HashMap<String, Box<dyn GitAiMcpService + Send + Sync>>,
-    /// 性能统计收集器
-    performance_collector: Arc<PerformanceCollector>,
-}
-
 /// GitAI MCP 服务 trait
 #[async_trait::async_trait]
 pub trait GitAiMcpService: Send + Sync {
@@ -330,6 +327,16 @@ pub trait GitAiMcpService: Send + Sync {
 
     /// 服务描述
     fn description(&self) -> &str;
+
+    /// 获取服务版本
+    fn version(&self) -> semver::Version {
+        semver::Version::parse("1.0.0").unwrap()
+    }
+
+    /// 获取服务依赖列表
+    fn dependencies(&self) -> Vec<registry::ServiceDependency> {
+        Vec::new()
+    }
 
     /// 获取服务提供的工具列表
     fn tools(&self) -> Vec<Tool>;
@@ -342,126 +349,32 @@ pub trait GitAiMcpService: Send + Sync {
     ) -> McpResult<serde_json::Value>;
 }
 
+/// GitAI MCP 服务管理器
+pub struct GitAiMcpManager {
+    /// 管理的服务注册表
+    managed_registry: manager::ManagedServiceRegistry,
+    /// 性能统计收集器
+    performance_collector: Arc<PerformanceCollector>,
+}
+
 impl GitAiMcpManager {
     /// 创建新的 MCP 服务管理器
-    pub fn new(config: crate::config::Config) -> Self {
+    pub async fn new(config: crate::config::Config) -> McpResult<Self> {
         info!("🔧 初始化 GitAI MCP 服务管理器");
-        let mut services: std::collections::HashMap<
-            String,
-            Box<dyn GitAiMcpService + Send + Sync>,
-        > = std::collections::HashMap::new();
+
+        let managed_registry = manager::ManagedServiceRegistry::new(config).await?;
         let performance_collector = Arc::new(PerformanceCollector::new());
 
-        // 根据配置初始化服务
-        if let Some(mcp_config) = &config.mcp {
-            if mcp_config.enabled {
-                info!("📋 启用 MCP 服务: {:?}", mcp_config.services.enabled);
-                for service_name in &mcp_config.services.enabled {
-                    debug!("🔧 正在初始化服务: {}", service_name);
-                    match service_name.as_str() {
-                        "review" => match services::ReviewService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "review".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'review' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'review' 初始化失败: {}", e);
-                            }
-                        },
-                        "commit" => match services::CommitService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "commit".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'commit' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'commit' 初始化失败: {}", e);
-                            }
-                        },
-                        "scan" => match services::ScanService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "scan".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'scan' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'scan' 初始化失败: {}", e);
-                            }
-                        },
-                        "analysis" => match services::AnalysisService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "analysis".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'analysis' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'analysis' 初始化失败: {}", e);
-                            }
-                        },
-                        "dependency" => match services::DependencyService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "dependency".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'dependency' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'dependency' 初始化失败: {}", e);
-                            }
-                        },
-                        "deviation" => match services::DeviationService::new(config.clone()) {
-                            Ok(service) => {
-                                services.insert(
-                                    "deviation".to_string(),
-                                    Box::new(service) as Box<dyn GitAiMcpService + Send + Sync>,
-                                );
-                                info!("✅ 服务 'deviation' 初始化成功");
-                            }
-                            Err(e) => {
-                                error!("❌ 服务 'deviation' 初始化失败: {}", e);
-                            }
-                        },
-                        _ => {
-                            warn!("⚠️  未知的服务名称: {}", service_name);
-                        }
-                    }
-                }
-                info!(
-                    "🎯 MCP 服务管理器初始化完成，共注册 {} 个服务",
-                    services.len()
-                );
-            } else {
-                info!("ℹ️  MCP 服务已禁用");
-            }
-        } else {
-            info!("ℹ️  未找到 MCP 配置");
-        }
-
-        Self {
-            config,
-            services,
+        Ok(Self {
+            managed_registry,
             performance_collector,
-        }
+        })
     }
 
     /// 获取所有工具
     #[allow(dead_code)]
-    pub fn get_all_tools(&self) -> Vec<Tool> {
-        let mut tools = Vec::new();
-        for service in self.services.values() {
-            tools.extend(service.tools());
-        }
-        tools
+    pub async fn get_all_tools(&self) -> Vec<Tool> {
+        self.managed_registry.get_all_tools().await
     }
 
     /// 处理工具调用
@@ -470,52 +383,62 @@ impl GitAiMcpManager {
         tool_name: &str,
         arguments: serde_json::Value,
     ) -> McpResult<serde_json::Value> {
-        debug!("🔧 处理工具调用: {}", tool_name);
-        debug!(
-            "📋 工具参数: {}",
-            serde_json::to_string_pretty(&arguments).unwrap_or_default()
-        );
-
         // 记录调用开始
         let start_time = self.performance_collector.record_call_start(tool_name);
 
-        // 查找处理该工具的服务
-        for service in self.services.values() {
-            let tools = service.tools();
-            if tools.iter().any(|tool| tool.name == tool_name) {
-                debug!("🎯 找到处理服务: {}", service.name());
+        let result = self
+            .managed_registry
+            .handle_tool_call(tool_name, arguments)
+            .await;
 
-                let result = service.handle_tool_call(tool_name, arguments).await;
+        // 记录调用结果
+        let duration = start_time.elapsed();
+        let duration_ms = duration.as_millis() as u64;
 
-                // 记录调用结果
-                let duration = start_time.elapsed();
-                let duration_ms = duration.as_millis() as u64;
-
-                match &result {
-                    Ok(_) => {
-                        self.performance_collector
-                            .record_call_success(tool_name, duration_ms);
-                        info!("✅ 工具调用成功: {} (耗时: {:?})", tool_name, duration);
-                    }
-                    Err(e) => {
-                        self.performance_collector
-                            .record_call_failure(tool_name, duration_ms);
-                        warn!(
-                            "❌ 工具调用失败: {} (耗时: {:?}, 错误: {})",
-                            tool_name, duration, e
-                        );
-                    }
-                }
-
-                return result;
+        match &result {
+            Ok(_) => {
+                self.performance_collector
+                    .record_call_success(tool_name, duration_ms);
+            }
+            Err(_) => {
+                self.performance_collector
+                    .record_call_failure(tool_name, duration_ms);
             }
         }
 
-        error!("❌ 未找到处理工具的服务: {}", tool_name);
-        Err(invalid_parameters_error(format!(
-            "Unknown tool: {}",
-            tool_name
-        )))
+        result
+    }
+
+    /// 动态注册服务
+    #[allow(dead_code)]
+    pub async fn register_service(
+        &self,
+        service: Arc<dyn GitAiMcpService + Send + Sync>,
+        config: serde_json::Value,
+    ) -> McpResult<()> {
+        self.managed_registry
+            .register_service(service, config)
+            .await
+    }
+
+    /// 动态注销服务
+    #[allow(dead_code)]
+    pub async fn unregister_service(&self, service_id: &str, reason: String) -> McpResult<()> {
+        self.managed_registry
+            .unregister_service(service_id, reason)
+            .await
+    }
+
+    /// 获取所有服务列表
+    #[allow(dead_code)]
+    pub async fn list_services(&self) -> Vec<registry::ServiceMetadata> {
+        self.managed_registry.list_services().await
+    }
+
+    /// 获取健康的服务列表
+    #[allow(dead_code)]
+    pub async fn get_healthy_services(&self) -> Vec<registry::ServiceMetadata> {
+        self.managed_registry.get_healthy_services().await
     }
 
     /// 获取性能统计
@@ -533,8 +456,8 @@ impl GitAiMcpManager {
 
     /// 获取服务器信息
     #[allow(dead_code)]
-    pub fn get_server_info(&self) -> Option<Implementation> {
-        self.config.mcp.as_ref().map(|config| Implementation {
+    pub fn get_server_info(&self, config: &crate::config::Config) -> Option<Implementation> {
+        config.mcp.as_ref().map(|config| Implementation {
             name: config.server.name.clone(),
             version: config.server.version.clone(),
         })

@@ -979,8 +979,7 @@ mod tests {
         #[cfg(feature = "tree-sitter-java")]
         let analyzer = StructureAnalyzer::new(SupportedLanguage::Java, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), feature = "tree-sitter-rust"))]
-        let mut analyzer =
-            StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
+        let analyzer = StructureAnalyzer::new(SupportedLanguage::Rust, &queries_manager).unwrap();
         #[cfg(all(not(feature = "tree-sitter-java"), not(feature = "tree-sitter-rust")))]
         {
             println!("Skipping test_parse_parameters - no supported languages available");
