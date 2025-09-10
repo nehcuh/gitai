@@ -60,9 +60,8 @@ pub fn config_dir() -> PathBuf {
     }
 
     // 3. 平台标准目录
-    directories::BaseDirs::new()
+    dirs::config_dir()
         .expect("Failed to determine user directories")
-        .config_dir()
         .join("gitai")
 }
 
@@ -85,9 +84,8 @@ pub fn cache_dir() -> PathBuf {
     }
 
     // 3. 平台标准目录
-    directories::BaseDirs::new()
+    dirs::cache_dir()
         .expect("Failed to determine user directories")
-        .cache_dir()
         .join("gitai")
 }
 
