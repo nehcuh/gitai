@@ -174,7 +174,7 @@ impl ScanService {
         #[cfg(feature = "security")]
         {
             // 检查 OpenGrep 是否已安装
-            if !crate::scan::is_opengrep_installed() {
+            if !gitai_security::is_opengrep_installed() {
                 error!("❌ OpenGrep 未安装，无法执行扫描");
                 return Err(execution_failed_error(
                     "OpenGrep is not installed. Please run 'gitai scan --auto-install' first.",
@@ -189,7 +189,7 @@ impl ScanService {
 
             // 执行扫描
             info!("🔄 运行 OpenGrep 扫描...");
-            let result = crate::scan::run_opengrep_scan(config, path, lang, Some(timeout), true)
+            let result = gitai_security::run_opengrep_scan(config, path, lang, Some(timeout), true)
                 .map_err(|e| execution_failed_error(format!("Failed to run scan: {}", e)))?;
 
             // 转换扫描结果
@@ -208,7 +208,7 @@ impl ScanService {
     #[cfg(feature = "security")]
     fn convert_real_scan_result(
         &self,
-        scan_result: crate::scan::ScanResult,
+        scan_result: gitai_security::ScanResult,
         params: &ScanParams,
     ) -> ScanResult {
         let mut findings = Vec::new();

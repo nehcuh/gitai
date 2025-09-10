@@ -32,8 +32,8 @@ pub fn convert_analysis_result_with_critical_check(
 // ===============
 
 #[cfg(feature = "security")]
-impl From<crate::scan::Finding> for super::types::Finding {
-    fn from(f: crate::scan::Finding) -> Self {
+impl From<gitai_security::Finding> for super::types::Finding {
+    fn from(f: gitai_security::Finding) -> Self {
         super::types::Finding {
             title: f.title,
             severity: f
@@ -54,6 +54,6 @@ impl From<crate::scan::Finding> for super::types::Finding {
 
 /// 批量转换扫描结果为评审发现
 #[cfg(feature = "security")]
-pub fn convert_scan_findings(findings: Vec<crate::scan::Finding>) -> Vec<super::types::Finding> {
+pub fn convert_scan_findings(findings: Vec<gitai_security::Finding>) -> Vec<super::types::Finding> {
     findings.into_iter().map(Into::into).collect()
 }

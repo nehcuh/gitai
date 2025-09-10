@@ -11,6 +11,9 @@ pub mod domain_errors;
 pub mod interfaces;
 pub mod services;
 
+/// Adapter integration registry and traits exposure
+pub mod adapters;
+
 #[cfg(feature = "ai")]
 pub mod ai;
 

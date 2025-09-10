@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// 统一的严重程度枚举
 /// 用于表示问题、风险、发现等的严重性级别
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     /// 紧急/关键 - 必须立即处理
@@ -17,6 +17,18 @@ pub enum Severity {
     Low,
     /// 信息 - 仅供参考
     Info,
+}
+
+impl PartialOrd for Severity {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Severity {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.to_score().cmp(&other.to_score())
+    }
 }
 
 impl Severity {

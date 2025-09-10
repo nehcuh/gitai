@@ -2,7 +2,6 @@
 // 用于获取 git diff 中变更前的代码状态并进行 Tree-sitter 分析
 
 use gitai_types::GitAIError;
-use gitai_core::domain_errors::GitError;
 use crate::tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -17,28 +17,33 @@ gitai-core = { path = "../gitai-core" }
 gitai-analysis = { path = "../gitai-analysis" }
 gitai-security = { path = "../gitai-security" }
 
-# MCP support
-rmcp = { workspace = true }
-
 # Async runtime
 tokio = { workspace = true }
 futures-util = { workspace = true }
-
-# Web framework for HTTP transport
-warp = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# Date and time
+chrono = { workspace = true }
+
 # Logging
 log = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+env_logger = { workspace = true }
 
 # Error handling
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+
+# Concurrency utilities
+parking_lot = { workspace = true }
+
+# UUID generation
+uuid = { workspace = true, features = ["v4"] }
+
+# Command line parsing
+clap = { workspace = true, features = ["derive"] }
 
 [features]
 default = ["stdio", "websocket"]

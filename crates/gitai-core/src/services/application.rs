@@ -1,7 +1,6 @@
 //! 应用服务
 
 use gitai_types::common::{AnalysisResult, Project};
-use crate::domain_errors::DomainError;
 use async_trait::async_trait;
 
 /// 应用服务接口

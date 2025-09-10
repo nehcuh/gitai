@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use gitai::args::Command;
 use gitai::config::Config;
-use gitai::scan;
+use gitai_security as scan;
 
 /// Handler for scan command with Command enum
 #[cfg(feature = "security")]

@@ -17,7 +17,7 @@ use std::{env, fs};
 ///
 /// # Examples
 /// ```
-/// use gitai::utils::paths::expand_user;
+/// use gitai_analysis::utils::paths::expand_user;
 ///
 /// let path = expand_user("~/Documents");
 /// assert!(path.is_absolute());
@@ -162,7 +162,7 @@ pub fn resolve_config_path(path: &str) -> PathBuf {
 ///
 /// # Examples
 /// ```
-/// use gitai::utils::paths::resolve_mcp_path;
+/// use gitai_analysis::utils::paths::resolve_mcp_path;
 ///
 /// // 绝对路径
 /// let abs_path = resolve_mcp_path("/usr/local/bin", "Test").unwrap();

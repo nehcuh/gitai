@@ -2,9 +2,6 @@
 //!
 //! 提供安全的错误处理模式，替代 .unwrap() 调用
 
-use gitai_core::domain_errors::{ConfigError, GitError, AiError, ScanError};
-use gitai_core::interfaces::{ConfigResult, GitResult, AiResult, ScanResult};
-use gitai_types::*;
 use gitai_types::{GitAIError, Result};
 
 /// 安全的 Result 处理工具

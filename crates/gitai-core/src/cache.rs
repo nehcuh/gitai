@@ -1,7 +1,6 @@
 // 缓存模块
 // TODO: 实现统一的缓存策略
 
-use gitai_types::Result;
 use std::collections::HashMap;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -28,4 +27,8 @@ impl CacheManager {
     pub fn clear(&self) {
         self.cache.write().clear();
     }
+}
+
+impl Default for CacheManager {
+    fn default() -> Self { Self::new() }
 }

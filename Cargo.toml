@@ -6,10 +6,11 @@ members = [
     "crates/gitai-core",
     "crates/gitai-types", 
     "crates/gitai-analysis",
-    # "crates/gitai-cli",
-    # "crates/gitai-mcp",
-    # "crates/gitai-metrics",
-    # "crates/gitai-security",
+    "crates/gitai-cli",
+    "crates/gitai-mcp",
+    "crates/gitai-metrics",
+    "crates/gitai-security",
+    "crates/gitai-adapters",
     # "crates/gitai-bin",
 ]
 resolver = "2"
@@ -45,6 +46,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Date and time
 chrono = { version = "0.4.40", features = ["serde"] }
+
+# Version handling
+semver = "1.0"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4"] }
 
 # File system
 dirs = "6.0.0"
@@ -101,12 +108,13 @@ rayon = "1.10"
 # Dev dependencies (used in individual crates)
 criterion = "0.5"
 
-# [workspace.dev-dependencies]
-# tempfile = "3.20.0"
-# criterion = "0.5"
-# mockito = "1.6"
-# proptest = "1.6"
-# test-case = "3.1"
+# Workspace-level dev dependencies for integration tests
+[workspace.dev-dependencies]
+tempfile = "3.20.0"
+tokio-test = "0.4"
+assert_cmd = "2.0"
+predicates = "3.0"
+serial_test = "3.0"
 
 [profile.release]
 opt-level = 3
