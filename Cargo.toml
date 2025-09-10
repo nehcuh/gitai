@@ -3,7 +3,7 @@
 
 [workspace]
 members = [
-    # "crates/gitai-core",
+    "crates/gitai-core",
     "crates/gitai-types", 
     # "crates/gitai-cli",
     # "crates/gitai-mcp",

@@ -135,10 +135,41 @@ gitai/
 
 ## 进度跟踪
 
-- [ ] 第一阶段：准备工作
-- [ ] 第二阶段：核心模块提取
+- [x] 第一阶段：准备工作 ✅
+  - 创建 workspace 结构
+  - 分析依赖关系
+  - 设置基本的 crate 框架
+  
+- [x] 第二阶段：核心模块提取（部分完成）
+  - [x] gitai-types：提取所有共享类型定义 ✅
+    - common.rs：核心实体（FilePath, Language, Version 等）
+    - risk.rs：Severity 和 RiskLevel 类型
+    - error.rs：统一错误类型
+    - change.rs：破坏性变更类型
+- [x] gitai-core：核心业务逻辑 ✅
+    - domain/interfaces 和 domain/services 迁移完成
+    - 核心配置、Git、DevOps 功能正常工作
+    - 所有编译错误已修复
+  - [ ] gitai-analysis：代码分析功能
+  
 - [ ] 第三阶段：功能模块提取
 - [ ] 第四阶段：接口层提取
 - [ ] 第五阶段：集成和测试
 
-最后更新：2025-01-10
+## 当前状态
+
+### ✅ 已完成
+- Workspace 基础配置
+- gitai-types crate 完全迁移并可编译
+- gitai-core crate 迁移并可编译
+- 依赖关系分析工具
+
+### 🚧 进行中
+- gitai-analysis crate 迁移（下一步）
+
+### 📝 待处理
+- 其他 crate 的迁移
+- 集成测试更新
+- CI/CD 配置更新
+
+最后更新：2025-01-11

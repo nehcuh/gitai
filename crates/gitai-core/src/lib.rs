@@ -1,10 +1,15 @@
-// GitAI Core Library
-// 核心功能模块，提供基础服务和通用功能
+//! GitAI Core Library
+//! 核心功能模块，提供基础服务和通用功能
+
+#![warn(missing_docs)]
 
 pub mod config;
 pub mod context;
 pub mod git;
 pub mod error;
+pub mod domain_errors;
+pub mod interfaces;
+pub mod services;
 
 #[cfg(feature = "ai")]
 pub mod ai;
