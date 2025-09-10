@@ -1,0 +1,44 @@
+[package]
+name = "gitai-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "GitAI command-line tool"
+
+[[bin]]
+name = "gitai"
+path = "src/main.rs"
+
+[[bin]]
+name = "gitai-mcp"
+path = "src/bin/gitai-mcp.rs"
+required-features = ["mcp"]
+
+[dependencies]
+# Internal crates
+gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
+gitai-analysis = { path = "../gitai-analysis", optional = true }
+gitai-security = { path = "../gitai-security", optional = true }
+gitai-metrics = { path = "../gitai-metrics", optional = true }
+gitai-cli = { path = "../gitai-cli" }
+gitai-mcp = { path = "../gitai-mcp", optional = true }
+
+# External dependencies
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+env_logger = { workspace = true }
+
+[features]
+default = ["analysis", "security"]
+full = ["analysis", "security", "metrics", "mcp"]
+minimal = []
+
+# Feature flags
+analysis = ["dep:gitai-analysis"]
+security = ["dep:gitai-security"]
+metrics = ["dep:gitai-metrics"]
+mcp = ["dep:gitai-mcp"]

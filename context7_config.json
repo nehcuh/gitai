@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "gitai": {
+      "command": "/Users/huchen/Projects/gitai/target/debug/gitai-mcp",
+      "args": ["serve"],
+      "env": {
+        "RUST_LOG": "error"
+      }
+    }
+  }
+}
