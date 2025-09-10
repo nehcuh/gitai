@@ -102,11 +102,13 @@ cargo build --release --features full
 
 ## 📚 文档
 
-- [快速入门指南](docs/getting-started/QUICK_START.md)
-- [架构设计](docs/architecture/ARCHITECTURE.md)
-- [功能详解](docs/features/README.md)
-- [API文档](docs/api/README.md)
-- [开发指南](docs/development/CONTRIBUTING.md)
+- 文档索引: docs/README.md
+- 架构设计: docs/architecture/ARCHITECTURE.md
+- MCP 服务: docs/features/MCP_SERVICE.md
+- API 参考: docs/api/API_REFERENCE.md
+- MCP 图摘要: docs/api/MCP_GRAPH_SUMMARY.md
+- 依赖图与摘要: docs/features/DEPENDENCY_GRAPH.md
+- 开发指南: docs/development/CONTRIBUTING.md
 
 ## 🤝 贡献
 

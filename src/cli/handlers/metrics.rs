@@ -7,14 +7,9 @@ use gitai::config::Config;
 
 /// Handler for metrics command with Command enum
 #[cfg(feature = "metrics")]
-pub async fn handle_command(
-    config: &Config,
-    command: &Command,
-) -> crate::cli::CliResult<()> {
+pub async fn handle_command(config: &Config, command: &Command) -> crate::cli::CliResult<()> {
     match command {
-        Command::Metrics { action } => {
-            handle_metrics(config, action).await.map_err(|e| e.into())
-        }
+        Command::Metrics { action } => handle_metrics(config, action).await.map_err(|e| e.into()),
         _ => Err("Invalid command for metrics handler".into()),
     }
 }
@@ -22,11 +17,11 @@ pub async fn handle_command(
 /// Handle metrics commands
 #[cfg(feature = "metrics")]
 async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> {
+    use gitai::git;
     use gitai::metrics::QualityTracker;
     use gitai::project_insights::InsightsGenerator;
     use gitai::tree_sitter::TreeSitterManager;
-    use gitai::git;
-    
+
     match action {
         MetricsAction::Record { tags, force } => {
             info!("Recording code quality snapshot (force: {})", force);
@@ -44,12 +39,12 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             }
 
             // 创建质量追踪器
-            let mut tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let mut tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 分析当前代码
             println!("🔍 分析代码结构...");
-            let mut manager = TreeSitterManager::new().await
+            let mut manager = TreeSitterManager::new()
+                .await
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 获取当前目录的代码文件并分析
@@ -59,7 +54,9 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             for file_path in &code_files {
                 if let Ok(content) = std::fs::read_to_string(file_path) {
                     if let Some(ext) = file_path.extension().and_then(|s| s.to_str()) {
-                        if let Some(lang) = gitai::tree_sitter::SupportedLanguage::from_extension(ext) {
+                        if let Some(lang) =
+                            gitai::tree_sitter::SupportedLanguage::from_extension(ext)
+                        {
                             if let Ok(file_summary) = manager.analyze_structure(&content, lang) {
                                 // 合并结果
                                 summary.functions.extend(file_summary.functions);
@@ -76,7 +73,8 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             let insights = InsightsGenerator::generate(&summary, None);
 
             // 记录快照
-            let mut snapshot = tracker.record_snapshot(&summary, &insights)
+            let mut snapshot = tracker
+                .record_snapshot(&summary, &insights)
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             // 添加标签
@@ -89,18 +87,29 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             println!("   分支: {}", snapshot.branch);
             println!("   代码行数: {}", snapshot.lines_of_code);
             println!("   技术债务: {:.1}", snapshot.technical_debt.debt_score);
-            println!("   复杂度: {:.1}", snapshot.complexity_metrics.avg_cyclomatic_complexity);
-            
+            println!(
+                "   复杂度: {:.1}",
+                snapshot.complexity_metrics.avg_cyclomatic_complexity
+            );
+
             info!("Quality snapshot recorded successfully");
             Ok(())
         }
-        MetricsAction::Analyze { days, format, output } => {
-            info!("Analyzing quality trends for {} days in {} format", days.unwrap_or(30), format);
+        MetricsAction::Analyze {
+            days,
+            format,
+            output,
+        } => {
+            info!(
+                "Analyzing quality trends for {} days in {} format",
+                days.unwrap_or(30),
+                format
+            );
             println!("📈 分析质量趋势...");
 
-            let tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-            let analysis = tracker.analyze_trends(*days)
+            let tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let analysis = tracker
+                .analyze_trends(*days)
                 .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let result = match format.as_str() {
@@ -108,10 +117,12 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
                 "markdown" | "html" => {
                     let visualizer = gitai::metrics::visualizer::TrendVisualizer::new();
                     if format == "html" {
-                        visualizer.generate_html_report(&analysis, tracker.get_snapshots())
+                        visualizer
+                            .generate_html_report(&analysis, tracker.get_snapshots())
                             .map_err(|e| anyhow::anyhow!(e.to_string()))?
                     } else {
-                        visualizer.generate_report(&analysis, tracker.get_snapshots())
+                        visualizer
+                            .generate_report(&analysis, tracker.get_snapshots())
                             .map_err(|e| anyhow::anyhow!(e.to_string()))?
                     }
                 }
@@ -136,24 +147,30 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             } else {
                 println!("{}", result);
             }
-            
+
             Ok(())
         }
-        MetricsAction::Report { report_type: _, output, html } => {
+        MetricsAction::Report {
+            report_type: _,
+            output,
+            html,
+        } => {
             info!("Generating quality report (html: {})", html);
             println!("📄 生成质量报告...");
 
-            let tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
             let report = if *html {
-                let analysis = tracker.analyze_trends(None)
+                let analysis = tracker
+                    .analyze_trends(None)
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 let visualizer = gitai::metrics::visualizer::TrendVisualizer::new();
-                visualizer.generate_html_report(&analysis, tracker.get_snapshots())
+                visualizer
+                    .generate_html_report(&analysis, tracker.get_snapshots())
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?
             } else {
-                tracker.generate_report(output.as_deref())
+                tracker
+                    .generate_report(output.as_deref())
                     .map_err(|e| anyhow::anyhow!(e.to_string()))?
             };
 
@@ -164,23 +181,32 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             } else {
                 println!("{}", report);
             }
-            
+
             Ok(())
         }
-        MetricsAction::List { limit, branch, format } => {
-            info!("Listing quality snapshots (limit: {}, format: {})", limit, format);
-            
-            let tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        MetricsAction::List {
+            limit,
+            branch,
+            format,
+        } => {
+            info!(
+                "Listing quality snapshots (limit: {}, format: {})",
+                limit, format
+            );
+
+            let tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
             let snapshots = tracker.get_snapshots();
 
             // 过滤分支
             let filtered: Vec<_> = if let Some(branch_name) = branch {
-                snapshots.iter().filter(|s| s.branch == *branch_name).collect()
+                snapshots
+                    .iter()
+                    .filter(|s| s.branch == *branch_name)
+                    .collect()
             } else {
                 snapshots.iter().collect()
             };
-            
+
             let total_filtered = filtered.len();
 
             match format.as_str() {
@@ -201,12 +227,15 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
                             snapshot.timestamp.format("%Y-%m-%d %H:%M"),
                             snapshot.technical_debt.debt_score
                         );
-                        debug!("Listed snapshot: {} on branch {}", 
-                               &snapshot.commit_hash[..7], snapshot.branch);
+                        debug!(
+                            "Listed snapshot: {} on branch {}",
+                            &snapshot.commit_hash[..7],
+                            snapshot.branch
+                        );
                     }
                 }
             }
-            
+
             info!("Listed {} snapshots", total_filtered.min(*limit));
             Ok(())
         }
@@ -214,40 +243,45 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             let to_str = to.as_ref().map_or("latest".to_string(), |s| s.clone());
             info!("Comparing snapshots: {} vs {}", from, to_str);
             println!("📊 比较质量快照...");
-            
-            let tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-            
+
+            let _tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
             // TODO: Implement comparison logic
             println!("⚠️  快照比较功能正在开发中");
             println!("   From: {}", from);
             println!("   To: {}", to_str);
             println!("   Format: {}", format);
-            
+
             Ok(())
         }
         MetricsAction::Clean { keep_days, yes } => {
-            info!("Cleaning old snapshots (keep_days: {}, confirmed: {})", keep_days, yes);
+            info!(
+                "Cleaning old snapshots (keep_days: {}, confirmed: {})",
+                keep_days, yes
+            );
             println!("🧹 清理旧快照...");
-            
+
             if !yes {
                 println!("ℹ️  需要使用 --yes 确认清理操作");
                 return Ok(());
             }
-            
+
             // TODO: Implement cleanup logic
             println!("⚠️  清理功能正在开发中");
             println!("   保留最近 {} 天的数据", keep_days);
-            
+
             Ok(())
         }
-        MetricsAction::Export { format, output, branches } => {
+        MetricsAction::Export {
+            format,
+            output,
+            branches,
+        } => {
             info!("Exporting metrics in {} format", format);
             println!("📤 导出质量度量...");
-            
-            let tracker = QualityTracker::new()
-                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-            
+
+            let _tracker = QualityTracker::new().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
             // TODO: Implement export logic
             println!("⚠️  导出功能正在开发中");
             println!("   Format: {}", format);
@@ -255,7 +289,7 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
             if !branches.is_empty() {
                 println!("   Branches: {}", branches.join(", "));
             }
-            
+
             Ok(())
         }
     }
@@ -265,18 +299,22 @@ async fn handle_metrics(_config: &Config, action: &MetricsAction) -> Result<()> 
 #[cfg(feature = "metrics")]
 fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
     use std::fs;
-    
+
     let mut code_files = Vec::new();
     let extensions = [
-        "rs", "java", "py", "js", "ts", "go", "c", "cpp", "h", "hpp",
-        "rb", "php", "swift", "kt", "scala", "cs", "vb", "pl", "r", "m"
+        "rs", "java", "py", "js", "ts", "go", "c", "cpp", "h", "hpp", "rb", "php", "swift", "kt",
+        "scala", "cs", "vb", "pl", "r", "m",
     ];
-    
-    fn visit_dir(dir: &std::path::Path, extensions: &[&str], files: &mut Vec<PathBuf>) -> Result<()> {
+
+    fn visit_dir(
+        dir: &std::path::Path,
+        extensions: &[&str],
+        files: &mut Vec<PathBuf>,
+    ) -> Result<()> {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_dir() {
                 // Skip common non-code directories
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
@@ -292,7 +330,7 @@ fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
         }
         Ok(())
     }
-    
+
     visit_dir(std::path::Path::new(dir), &extensions, &mut code_files)?;
     Ok(code_files)
 }
@@ -308,14 +346,16 @@ mod tests {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "test-model".to_string(),
                 api_key: None,
-                temperature: Some(0.3),
+                temperature: 0.3,
             },
             scan: ScanConfig {
                 default_path: Some(".".to_string()),
-                timeout: Some(300),
-                jobs: Some(4),
+                timeout: 300,
+                jobs: 4,
+                rules_dir: None,
             },
             devops: None,
+            language: None,
             mcp: None,
         }
     }
@@ -329,7 +369,7 @@ mod tests {
             branch: None,
             format: "text".to_string(),
         };
-        
+
         let result = handle_metrics(&config, &action).await;
         assert!(result.is_ok() || result.is_err());
     }
@@ -339,7 +379,7 @@ mod tests {
     async fn test_find_code_files() {
         let result = find_code_files(".");
         assert!(result.is_ok());
-        
+
         if let Ok(files) = result {
             // Should find at least some Rust files in this project
             assert!(!files.is_empty());

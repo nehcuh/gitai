@@ -2,14 +2,15 @@ pub mod analyzer;
 // Note: analyzer.rs has been refactored into analyzer/ directory
 pub mod cache;
 pub mod custom_queries;
+pub mod helpers;
 pub mod queries;
 pub mod unified_analyzer;
 
+pub use cache::CacheStats;
 use cache::{CacheKey, TreeSitterCache};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 use tree_sitter::{Language, Parser};
 
 /// 支持的编程语言
@@ -155,8 +156,21 @@ impl TreeSitterManager {
         // 确保queries已下载
         queries_manager.ensure_queries_downloaded().await?;
 
-        // 初始化缓存 (100项，1小时过期)
-        let cache = TreeSitterCache::new(100, 3600).ok();
+        // 初始化缓存（可通过环境变量覆盖默认值）
+        // GITAI_TS_CACHE_CAPACITY: usize (默认 100)
+        // GITAI_TS_CACHE_MAX_AGE: u64 秒 (默认 3600)
+        let default_capacity = 100usize;
+        let default_max_age = 3600u64;
+        let capacity = std::env::var("GITAI_TS_CACHE_CAPACITY")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(default_capacity);
+        let max_age = std::env::var("GITAI_TS_CACHE_MAX_AGE")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(default_max_age);
+        let cache = TreeSitterCache::new(capacity, max_age).ok();
 
         Ok(Self {
             parsers,
@@ -164,13 +178,31 @@ impl TreeSitterManager {
             cache,
         })
     }
-    
+
+    /// 获取缓存统计（如果启用了缓存）
+    pub fn cache_stats(&self) -> Option<CacheStats> {
+        self.cache.as_ref().map(|c| c.stats())
+    }
+
+    /// 清空缓存（内存+磁盘），若未启用缓存则为 no-op
+    pub fn clear_cache(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref cache) = self.cache {
+            cache.clear()?;
+        }
+        Ok(())
+    }
+
+    /// 获取缓存配置（capacity, max_age_seconds）
+    pub fn cache_settings(&self) -> Option<(usize, u64)> {
+        self.cache.as_ref().map(|c| c.settings())
+    }
+
     /// 并发分析多个文件
-    /// 
+    ///
     /// # Arguments
     /// * `file_paths` - 要分析的文件路径列表
     /// * `max_concurrent` - 最大并发数（默认为 4）
-    /// 
+    ///
     /// # Returns
     /// 返回每个文件的分析结果，包含文件路径和分析摘要
     pub async fn analyze_files_concurrent(
@@ -179,82 +211,122 @@ impl TreeSitterManager {
         max_concurrent: Option<usize>,
     ) -> Result<Vec<FileAnalysisResult>, Box<dyn std::error::Error + Send + Sync>> {
         use futures_util::stream::{self, StreamExt};
-        
-        let max_concurrent = max_concurrent.unwrap_or(4);
-        let semaphore = Arc::new(Semaphore::new(max_concurrent));
+
+        let pool_size = max_concurrent.unwrap_or(4).max(1);
         let start_time = std::time::Instant::now();
-        
+
         log::info!(
-            "开始并发分析 {} 个文件，最大并发数: {}",
+            "开始并发分析 {} 个文件，工作线程数: {}",
             file_paths.len(),
-            max_concurrent
+            pool_size
         );
-        
-        // 使用 stream 并发处理文件
+
+        // 构建管理器池（限制并发）
+        let (man_tx, man_rx) = tokio::sync::mpsc::channel::<TreeSitterManager>(pool_size);
+        for _ in 0..pool_size {
+            let mgr = TreeSitterManager::new().await?;
+            // 忽略发送失败（不会发生，因为接收端在下面）
+            let _ = man_tx.send(mgr).await;
+        }
+        let man_rx = Arc::new(tokio::sync::Mutex::new(man_rx));
+        let man_tx = Arc::new(man_tx);
+
+        // 使用 stream 以池大小并发处理文件
         let results: Vec<FileAnalysisResult> = stream::iter(file_paths)
             .map(|path| {
-                let sem = semaphore.clone();
+                let man_rx = man_rx.clone();
+                let man_tx = man_tx.clone();
                 async move {
-                    // 获取信号量许可
-                    let _permit = sem.acquire().await.ok()?;
-                    
+                    // 获取一个可用的管理器
+                    let mut mgr = {
+                        let mut rx = man_rx.lock().await;
+                        match rx.recv().await {
+                            Some(m) => m,
+                            None => return None, // 池不可用
+                        }
+                    };
+
                     // 读取文件内容
-                    let content = tokio::fs::read_to_string(&path).await.ok()?;
-                    
+                    let content = match tokio::fs::read_to_string(&path).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::debug!("读取文件失败 {}: {}", path.display(), e);
+                            // 归还管理器
+                            let _ = man_tx.send(mgr).await;
+                            return None;
+                        }
+                    };
+
                     // 推断语言
-                    let extension = path.extension()?.to_str()?;
-                    let language = SupportedLanguage::from_extension(extension)?;
-                    
-                    // 为每个任务创建独立的 TreeSitterManager 实例以避免并发问题
-                    let mut manager = TreeSitterManager::new().await.ok()?;
-                    
-                    // 分析文件
+                    let language = match path
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .and_then(SupportedLanguage::from_extension)
+                    {
+                        Some(lang) => lang,
+                        None => {
+                            log::debug!("无法推断语言，跳过: {}", path.display());
+                            let _ = man_tx.send(mgr).await;
+                            return None;
+                        }
+                    };
+
+                    // 分析
                     let file_start = std::time::Instant::now();
-                    let summary = manager.analyze_structure(&content, language).ok()?;
+                    let result = mgr.analyze_structure(&content, language);
                     let analysis_time = file_start.elapsed().as_secs_f64();
-                    
-                    log::debug!(
-                        "文件 {} 分析完成，耗时: {:.2}秒",
-                        path.display(),
-                        analysis_time
-                    );
-                    
-                    Some(FileAnalysisResult {
-                        file_path: path,
-                        language,
-                        summary,
-                        analysis_time,
-                    })
+
+                    // 归还管理器
+                    let _ = man_tx.send(mgr).await;
+
+                    match result {
+                        Ok(summary) => {
+                            log::debug!(
+                                "文件 {} 分析完成，耗时: {:.2}秒",
+                                path.display(),
+                                analysis_time
+                            );
+                            Some(FileAnalysisResult {
+                                file_path: path,
+                                language,
+                                summary,
+                                analysis_time,
+                            })
+                        }
+                        Err(e) => {
+                            log::debug!("分析失败 {}: {}", path.display(), e);
+                            None
+                        }
+                    }
                 }
             })
-            .buffer_unordered(max_concurrent)
-            .filter_map(|result| async move { result })
+            .buffer_unordered(pool_size)
+            .filter_map(|r| async move { r })
             .collect()
             .await;
-        
+
         let total_time = start_time.elapsed().as_secs_f64();
         let files_analyzed = results.len();
-        let throughput = files_analyzed as f64 / total_time;
-        
+        let throughput = if total_time > 0.0 {
+            files_analyzed as f64 / total_time
+        } else {
+            0.0
+        };
+
         log::info!(
             "并发分析完成: {} 个文件成功分析，总耗时: {:.2}秒，吞吐量: {:.2} 文件/秒",
             files_analyzed,
             total_time,
             throughput
         );
-        
-        // 生成性能统计
+
         if files_analyzed > 0 {
             let avg_time = total_time / files_analyzed as f64;
-            let max_time = results
-                .iter()
-                .map(|r| r.analysis_time)
-                .fold(0.0, f64::max);
+            let max_time = results.iter().map(|r| r.analysis_time).fold(0.0, f64::max);
             let min_time = results
                 .iter()
                 .map(|r| r.analysis_time)
                 .fold(f64::MAX, f64::min);
-                
             log::info!(
                 "性能统计 - 平均: {:.3}秒, 最快: {:.3}秒, 最慢: {:.3}秒",
                 avg_time,
@@ -262,10 +334,10 @@ impl TreeSitterManager {
                 max_time
             );
         }
-        
+
         Ok(results)
     }
-    
+
     /// 分析目录中的所有代码文件（并发）
     pub async fn analyze_directory_concurrent(
         &self,
@@ -274,9 +346,9 @@ impl TreeSitterManager {
         max_concurrent: Option<usize>,
     ) -> Result<DirectoryAnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
         use walkdir::WalkDir;
-        
+
         let mut file_paths = Vec::new();
-        
+
         // 收集所有需要分析的文件
         for entry in WalkDir::new(dir_path)
             .into_iter()
@@ -284,7 +356,7 @@ impl TreeSitterManager {
             .filter(|e| e.file_type().is_file())
         {
             let path = entry.path();
-            
+
             // 跳过隐藏文件和常见的排除目录
             if path.components().any(|c| {
                 c.as_os_str()
@@ -294,7 +366,7 @@ impl TreeSitterManager {
             }) {
                 continue;
             }
-            
+
             // 检查文件扩展名
             if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
                 if let Some(lang) = SupportedLanguage::from_extension(ext) {
@@ -305,22 +377,24 @@ impl TreeSitterManager {
                 }
             }
         }
-        
+
         log::info!(
             "在目录 {} 中找到 {} 个代码文件",
             dir_path.display(),
             file_paths.len()
         );
-        
+
         // 并发分析所有文件
-        let file_results = self.analyze_files_concurrent(file_paths, max_concurrent).await?;
-        
+        let file_results = self
+            .analyze_files_concurrent(file_paths, max_concurrent)
+            .await?;
+
         // 按语言分组结果
         let mut language_statistics: HashMap<String, LanguageStatistics> = HashMap::new();
         let mut total_functions = 0;
         let mut total_classes = 0;
         let mut total_lines = 0;
-        
+
         for result in &file_results {
             let lang_stats = language_statistics
                 .entry(result.language.name().to_string())
@@ -331,7 +405,7 @@ impl TreeSitterManager {
                     line_count: 0,
                     avg_analysis_time: 0.0,
                 });
-            
+
             lang_stats.file_count += 1;
             lang_stats.function_count += result.summary.functions.len();
             lang_stats.class_count += result.summary.classes.len();
@@ -348,21 +422,186 @@ impl TreeSitterManager {
                 }
             }
             lang_stats.line_count += max_line;
-            
+
             total_functions += result.summary.functions.len();
             total_classes += result.summary.classes.len();
             total_lines += max_line;
         }
-        
+
         // 计算每种语言的平均分析时间
         for result in &file_results {
             if let Some(lang_stats) = language_statistics.get_mut(result.language.name()) {
-                lang_stats.avg_analysis_time = 
-                    (lang_stats.avg_analysis_time * (lang_stats.file_count - 1) as f64 
-                     + result.analysis_time) / lang_stats.file_count as f64;
+                lang_stats.avg_analysis_time = (lang_stats.avg_analysis_time
+                    * (lang_stats.file_count - 1) as f64
+                    + result.analysis_time)
+                    / lang_stats.file_count as f64;
             }
         }
-        
+
+        Ok(DirectoryAnalysisResult {
+            directory: dir_path.to_path_buf(),
+            language_statistics,
+            total_files: file_results.len(),
+            total_functions,
+            total_classes,
+            total_lines,
+        })
+    }
+
+    /// 分析目录中的所有代码文件（并发，带 include/exclude 过滤）
+    pub async fn analyze_directory_concurrent_with_filters(
+        &self,
+        dir_path: &Path,
+        language_filter: Option<SupportedLanguage>,
+        max_concurrent: Option<usize>,
+        include_globs: Option<&[&str]>,
+        exclude_globs: Option<&[&str]>,
+    ) -> Result<DirectoryAnalysisResult, Box<dyn std::error::Error + Send + Sync>> {
+        use walkdir::WalkDir;
+
+        fn matches_pattern(pat: &str, text: &str) -> bool {
+            // 简单通配符匹配：'*' 任意序列，'?' 单字符
+            fn inner(p: &[u8], t: &[u8]) -> bool {
+                if p.is_empty() {
+                    return t.is_empty();
+                }
+                match p[0] {
+                    b'*' => {
+                        // 尝试匹配任意长度
+                        for i in 0..=t.len() {
+                            if inner(&p[1..], &t[i..]) {
+                                return true;
+                            }
+                        }
+                        false
+                    }
+                    b'?' => {
+                        if t.is_empty() {
+                            false
+                        } else {
+                            inner(&p[1..], &t[1..])
+                        }
+                    }
+                    c => {
+                        if !t.is_empty() && c == t[0] {
+                            inner(&p[1..], &t[1..])
+                        } else {
+                            false
+                        }
+                    }
+                }
+            }
+            inner(pat.as_bytes(), text.as_bytes())
+        }
+
+        fn match_any(patterns: &[&str], text: &str) -> bool {
+            patterns.iter().any(|p| matches_pattern(p, text))
+        }
+
+        let mut file_paths = Vec::new();
+
+        for entry in WalkDir::new(dir_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.path();
+
+            // 跳过隐藏文件和常见的排除目录
+            if path.components().any(|c| {
+                c.as_os_str()
+                    .to_str()
+                    .map(|s| s.starts_with('.') || s == "target" || s == "node_modules")
+                    .unwrap_or(false)
+            }) {
+                continue;
+            }
+
+            // 计算相对路径用于匹配
+            let rel = path
+                .strip_prefix(dir_path)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/");
+
+            if let Some(ex_patterns) = exclude_globs {
+                if match_any(ex_patterns, &rel) {
+                    continue;
+                }
+            }
+            if let Some(in_patterns) = include_globs {
+                if !in_patterns.is_empty() && !match_any(in_patterns, &rel) {
+                    continue;
+                }
+            }
+
+            // 检查文件扩展名
+            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                if let Some(lang) = SupportedLanguage::from_extension(ext) {
+                    if language_filter.is_none() || language_filter == Some(lang) {
+                        file_paths.push(path.to_path_buf());
+                    }
+                }
+            }
+        }
+
+        log::info!(
+            "在目录 {} 中找到 {} 个代码文件 (包含过滤)",
+            dir_path.display(),
+            file_paths.len()
+        );
+
+        let file_results = self
+            .analyze_files_concurrent(file_paths, max_concurrent)
+            .await?;
+
+        // 复用与基础方法相同的汇总逻辑
+        let mut language_statistics: HashMap<String, LanguageStatistics> = HashMap::new();
+        let mut total_functions = 0;
+        let mut total_classes = 0;
+        let mut total_lines = 0;
+
+        for result in &file_results {
+            let lang_stats = language_statistics
+                .entry(result.language.name().to_string())
+                .or_insert_with(|| LanguageStatistics {
+                    file_count: 0,
+                    function_count: 0,
+                    class_count: 0,
+                    line_count: 0,
+                    avg_analysis_time: 0.0,
+                });
+
+            lang_stats.file_count += 1;
+            lang_stats.function_count += result.summary.functions.len();
+            lang_stats.class_count += result.summary.classes.len();
+            let mut max_line = 0;
+            for func in &result.summary.functions {
+                if func.line_end > max_line {
+                    max_line = func.line_end;
+                }
+            }
+            for class in &result.summary.classes {
+                if class.line_end > max_line {
+                    max_line = class.line_end;
+                }
+            }
+            lang_stats.line_count += max_line;
+
+            total_functions += result.summary.functions.len();
+            total_classes += result.summary.classes.len();
+            total_lines += max_line;
+        }
+
+        for result in &file_results {
+            if let Some(lang_stats) = language_statistics.get_mut(result.language.name()) {
+                lang_stats.avg_analysis_time = (lang_stats.avg_analysis_time
+                    * (lang_stats.file_count - 1) as f64
+                    + result.analysis_time)
+                    / lang_stats.file_count as f64;
+            }
+        }
+
         Ok(DirectoryAnalysisResult {
             directory: dir_path.to_path_buf(),
             language_statistics,
@@ -791,6 +1030,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_analyze_simple_rust_code() {
+        // Only test when Rust support is enabled
+        if SupportedLanguage::Rust.language().is_none() {
+            println!("跳过 Rust 代码分析测试 - Rust 支持未启用");
+            return;
+        }
         let mut manager = TreeSitterManager::new()
             .await
             .expect("Failed to create manager");

@@ -165,10 +165,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_simple_usage() {
-    // 这个测试确保示例代码可以正常运行
-    main().await.expect("示例应该正常运行");
+#[test]
+fn test_simple_usage() {
+    // 这个测试确保示例代码可以正常运行（示例的 main 使用 tokio::main 创建运行时）
+    main().expect("示例应该正常运行");
 }
 
 #[tokio::test]
@@ -215,15 +215,13 @@ async fn test_concurrent_usage() {
         let container_clone = container.clone();
         handles.push(tokio::spawn(async move {
             let config = container_clone.resolve::<Config>().await?;
-            Ok::<_, Box<dyn std::error::Error>>(config.app_name.clone())
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(config.app_name.clone())
         }));
     }
 
     let results = futures_util::future::join_all(handles).await;
     for result in results {
-        let app_name = result.expect("任务应该成功完成")?;
+        let app_name = result.expect("任务应该成功完成").expect("任务返回了错误");
         assert_eq!(app_name, "ConcurrentApp");
     }
-
-    Ok(())
 }

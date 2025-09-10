@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::{debug, info};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 use gitai::args::Command;
 use gitai::config::Config;
@@ -9,10 +9,7 @@ use gitai::scan;
 
 /// Handler for scan command with Command enum
 #[cfg(feature = "security")]
-pub async fn handle_command(
-    config: &Config,
-    command: &Command,
-) -> crate::cli::CliResult<()> {
+pub async fn handle_command(config: &Config, command: &Command) -> crate::cli::CliResult<()> {
     match command {
         Command::Scan {
             path,
@@ -28,30 +25,28 @@ pub async fn handle_command(
             no_history,
             timeout,
             benchmark,
-        } => {
-            handle_scan(
-                config,
-                path,
-                tool,
-                *full,
-                *remote,
-                *update_rules,
-                format,
-                output.clone(),
-                *translate,
-                *auto_install,
-                lang.as_deref(),
-                *no_history,
-                *timeout,
-                *benchmark,
-            )
-            .await
-            .map_err(|e| e.into())
-        }
+        } => handle_scan(
+            config,
+            path,
+            tool,
+            *full,
+            *remote,
+            *update_rules,
+            format,
+            output.clone(),
+            *translate,
+            *auto_install,
+            lang.as_deref(),
+            *no_history,
+            *timeout,
+            *benchmark,
+        )
+        .await
+        .map_err(|e| e.into()),
         Command::ScanHistory { limit, format: _ } => {
             handle_scan_history(*limit).await.map_err(|e| e.into())
         }
-        _ => Err("Invalid command for scan handler".into()),
+        _ => Err(anyhow::anyhow!("Invalid command for scan handler").into()),
     }
 }
 
@@ -75,7 +70,7 @@ async fn handle_scan(
     benchmark: bool,
 ) -> Result<()> {
     use serde_json;
-    
+
     let show_progress = format != "json";
 
     if show_progress {
@@ -96,11 +91,12 @@ async fn handle_scan(
             if show_progress {
                 println!("🔧 未检测到 OpenGrep，正在自动安装...");
             }
-            if let Err(e) = scan::install_opengrep() {
-                return Err(anyhow::anyhow!("OpenGrep 安装失败: {}", e));
-            }
+            scan::install_opengrep()
+                .map_err(|e| anyhow::anyhow!("Failed to install OpenGrep: {}", e))?;
         } else {
-            return Err(anyhow::anyhow!("未检测到 OpenGrep，请先安装或使用 --auto-install 进行自动安装"));
+            return Err(anyhow::anyhow!(
+                "未检测到 OpenGrep，请先安装或使用 --auto-install 进行自动安装"
+            ));
         }
     }
 
@@ -127,7 +123,7 @@ async fn handle_scan(
     let result = if normalized_tool == "opengrep" || normalized_tool == "auto" {
         let include_version = show_progress && !benchmark;
         scan::run_opengrep_scan(config, path, lang, timeout, include_version)
-            .map_err(|e| anyhow::anyhow!("Scan failed: {}", e))?
+            .map_err(|e| anyhow::anyhow!("OpenGrep scan execution failed: {}", e))?
     } else {
         return Err(anyhow::anyhow!(
             "不支持的扫描工具: {} (支持的工具: opengrep, security, auto)",
@@ -201,18 +197,21 @@ fn get_cache_dir() -> Result<PathBuf> {
 
 /// Handler for scan history display
 async fn handle_scan_history(limit: usize) -> Result<()> {
-    use std::fs;
     use serde_json;
-    
+    use std::fs;
+
     info!("Displaying scan history with limit: {}", limit);
-    
+
     let cache_dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".cache/gitai/scan_history");
 
     if !cache_dir.exists() {
         println!("📁 扫描历史目录不存在");
-        debug!("Scan history directory does not exist: {}", cache_dir.display());
+        debug!(
+            "Scan history directory does not exist: {}",
+            cache_dir.display()
+        );
         return Ok(());
     }
 
@@ -256,7 +255,7 @@ async fn handle_scan_history(limit: usize) -> Result<()> {
                 println!("{}. {} - {}", i + 1, modified, result.tool);
                 println!("   执行时间: {:.2}s", result.execution_time);
                 println!("   发现问题: {}", result.findings.len());
-                
+
                 if !result.findings.is_empty() {
                     println!("   前3个问题:");
                     for finding in result.findings.iter().take(3) {
@@ -264,36 +263,44 @@ async fn handle_scan_history(limit: usize) -> Result<()> {
                     }
                 }
                 println!();
-                
-                debug!("Displayed scan result: {} findings in {:.2}s", 
-                       result.findings.len(), result.execution_time);
+
+                debug!(
+                    "Displayed scan result: {} findings in {:.2}s",
+                    result.findings.len(),
+                    result.execution_time
+                );
             }
         }
     }
 
-    info!("Displayed {} scan history entries", entries.len().min(limit));
+    info!(
+        "Displayed {} scan history entries",
+        entries.len().min(limit)
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AiConfig, ScanConfig};
 
     fn create_test_config() -> Config {
+        use gitai::config::{AiConfig, ScanConfig};
         Config {
             ai: AiConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "test-model".to_string(),
                 api_key: None,
-                temperature: Some(0.3),
+                temperature: 0.3,
             },
             scan: ScanConfig {
                 default_path: Some(".".to_string()),
-                timeout: Some(300),
-                jobs: Some(4),
+                timeout: 300,
+                jobs: 4,
+                rules_dir: None,
             },
             devops: None,
+            language: None,
             mcp: None,
         }
     }
@@ -317,7 +324,7 @@ mod tests {
             timeout: None,
             benchmark: false,
         };
-        
+
         let result = handle_command(&config, &command).await;
         assert!(result.is_ok() || result.is_err());
     }

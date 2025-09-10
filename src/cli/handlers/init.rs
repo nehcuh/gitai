@@ -1,7 +1,6 @@
 use anyhow::Result;
 use log::{debug, info};
-use std::path::PathBuf;
-
+use std::path::{Path, PathBuf};
 
 /// Handler for the init command
 pub async fn handle_init(
@@ -34,7 +33,10 @@ pub async fn handle_init(
         Ok(config_path) => {
             println!("✅ 配置初始化成功!");
             println!("📁 配置文件: {}", config_path.display());
-            info!("Configuration initialized successfully at: {}", config_path.display());
+            info!(
+                "Configuration initialized successfully at: {}",
+                config_path.display()
+            );
 
             // 如果需要下载资源
             if download_resources && !offline {
@@ -86,7 +88,7 @@ pub async fn handle_init(
         Err(e) => {
             eprintln!("❌ 初始化失败: {e}");
             debug!("Initialization failed: {}", e);
-            return Err(e.into());
+            return Err(e);
         }
     }
 
@@ -135,7 +137,7 @@ async fn download_tree_sitter_resources() -> Result<()> {
 }
 
 /// Download OpenGrep resources
-async fn download_opengrep_resources(config_path: &PathBuf) -> Result<()> {
+async fn download_opengrep_resources(config_path: &Path) -> Result<()> {
     #[cfg(feature = "security")]
     {
         use gitai::resource_manager::{load_resource_config, ResourceManager};
@@ -172,7 +174,7 @@ async fn download_opengrep_resources(config_path: &PathBuf) -> Result<()> {
 /// Handler for init command with Command enum
 pub async fn handle_command(command: &gitai::args::Command) -> crate::cli::CliResult<()> {
     use gitai::args::Command;
-    
+
     match command {
         Command::Init {
             config_url,
@@ -180,16 +182,16 @@ pub async fn handle_command(command: &gitai::args::Command) -> crate::cli::CliRe
             resources_dir,
             dev,
             download_resources,
-        } => {
-            handle_init(
-                config_url.clone(),
-                *offline,
-                resources_dir.clone(),
-                *dev,
-                *download_resources,
-            ).await.map_err(|e| e.into())
-        }
-        _ => Err("Invalid command for init handler".into())
+        } => handle_init(
+            config_url.clone(),
+            *offline,
+            resources_dir.clone(),
+            *dev,
+            *download_resources,
+        )
+        .await
+        .map_err(|e| e.into()),
+        _ => Err("Invalid command for init handler".into()),
     }
 }
 
@@ -205,7 +207,7 @@ mod tests {
         assert!(result.is_ok() || result.is_err());
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_handle_init_with_config_url() {
         // Test with config URL
         let config_url = Some("https://example.com/config.toml".to_string());

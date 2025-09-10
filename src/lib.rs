@@ -13,6 +13,7 @@ pub mod config;
 pub mod config_init;
 pub mod context;
 pub mod error;
+pub mod error_ext;
 #[cfg(test)]
 pub mod error_tests;
 pub mod features;

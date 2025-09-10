@@ -21,16 +21,14 @@ jobs:
 
       - name: Format check
         run: cargo fmt --all -- --check
-        continue-on-error: true
 
-      - name: Clippy
-        run: cargo clippy --all-targets
-        continue-on-error: true
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build (all features)
         run: cargo build --all-features
 
-      - name: Test (unit only, lib+bins)
+      - name: Test (unit + bins, all features)
         run: cargo test --lib --bins --all-features -- --nocapture
 
   feature-matrix:
@@ -79,4 +77,31 @@ jobs:
           else
             target/debug/gitai --help >/dev/null
           fi
+
+  benchmarks:
+    name: Benchmarks (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build benches (all features)
+        run: cargo bench --all-features --no-run
+
+      - name: Run criterion (quick)
+        env:
+          RUST_LOG: warn
+        run: |
+          # Quick mode: reduce warm-up/measurement/sample size, disable plots
+          cargo bench --all-features -- \
+            --warm-up-time 0.0 \
+            --measurement-time 1.0 \
+            --sample-size 10 \
+            --noplot
 

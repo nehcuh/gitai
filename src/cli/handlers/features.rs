@@ -13,6 +13,6 @@ pub async fn handle_command(command: &Command) -> HandlerResult<()> {
             features::display_features(format);
             Ok(())
         }
-        _ => Err("Invalid command for features handler".into())
+        _ => Err("Invalid command for features handler".into()),
     }
 }

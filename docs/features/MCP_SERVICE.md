@@ -63,9 +63,9 @@ GitAI 的 MCP 服务实现了完整的 Model Context Protocol，为 LLM 客户�
 **参数：**
 - `tree_sitter` (bool): 启用结构分析
 - `security_scan` (bool): 启用安全扫描
-- `issue_ids` (array): 关联的 Issue ID
+- `issue_ids` (array): 关联的 Issue ID（提供该参数且未显式设置 `deviation_analysis` 时，将自动启用偏离度分析）
 - `format` (string): 输出格式 (text/json/markdown)
-- `deviation_analysis` (bool): 偏离度分析
+- `deviation_analysis` (bool): 偏离度分析（显式为 true 时无论是否提供 issue_ids 均执行）
 
 ### 2. execute_commit - 智能提交
 生成智能提交信息并执行提交。
@@ -157,6 +157,20 @@ gitai mcp --transport stdio
 
 # 指定配置文件
 gitai mcp --config /path/to/config.toml
+```
+
+### 环境变量（推荐）
+
+在运行 MCP 服务器前，建议配置以下环境变量（示例为本地 Ollama）：
+
+```bash
+export GITAI_AI_API_URL="http://localhost:11434/v1/chat/completions"
+export GITAI_AI_MODEL="qwen2.5:32b"
+# 可选：外部服务 API Key
+export GITAI_AI_API_KEY="{{OPENAI_OR_OTHER_API_KEY}}"
+# 可选：DevOps 平台集成
+export GITAI_DEVOPS_TOKEN="{{DEVOPS_TOKEN}}"
+export GITAI_DEVOPS_BASE_URL="https://your-org.coding.net"
 ```
 
 ### 3. Claude Desktop 集成
@@ -318,7 +332,7 @@ impl GitAiMcpService for ReviewService {
 - 配置缓存
 
 ### 3. 资源控制
-- Semaphore 限制并发
+- 工作池 + 复用 TreeSitterManager 实例（避免为每个文件重复构造解析器/查询管理器）
 - 超时控制
 - 内存限制
 

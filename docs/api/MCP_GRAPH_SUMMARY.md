@@ -138,3 +138,46 @@
 - invalid_filter / budget_too_small / radius_too_large / no_seeds
 - stats 字段包含实际裁剪信息，便于客户端提示“可下钻获取更多”
 
+## 端到端示例（摘要 → 导出 → 图像）
+
+1) 获取图摘要（用于确定关注范围）
+```json
+{
+  "name": "summarize_graph",
+  "arguments": {
+    "path": ".",
+    "format": "json",
+    "radius": 1,
+    "top_k": 200,
+    "community": true,
+    "with_paths": true,
+    "path_samples": 5
+  }
+}
+```
+
+2) 导出依赖图（Mermaid，适合转换为 SVG）
+```json
+{
+  "name": "execute_dependency_graph",
+  "arguments": {
+    "path": ".",
+    "format": "mermaid",
+    "verbosity": 1
+  }
+}
+```
+
+3) 转换为图像（SVG）
+```json
+{
+  "name": "convert_graph_to_image",
+  "arguments": {
+    "input_format": "mermaid",
+    "input_content": "graph LR; A-->B;",
+    "output_format": "svg",
+    "output_path": "graph.svg"
+  }
+}
+```
+

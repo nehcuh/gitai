@@ -7,11 +7,7 @@ use gitai::args::ConfigAction;
 use gitai::config::Config;
 
 /// Handler for the config command
-pub async fn handle_config(
-    config: &Config,
-    action: &ConfigAction,
-    offline: bool,
-) -> Result<()> {
+pub async fn handle_config(config: &Config, action: &ConfigAction, offline: bool) -> Result<()> {
     use gitai::resource_manager::{load_resource_config, ResourceManager};
 
     match action {
@@ -182,34 +178,36 @@ pub async fn handle_command(
     offline: bool,
 ) -> crate::cli::CliResult<()> {
     use gitai::args::Command;
-    
+
     match command {
-        Command::Config { action } => {
-            handle_config(config, action, offline).await.map_err(|e| e.into())
-        }
-        _ => Err("Invalid command for config handler".into())
+        Command::Config { action } => handle_config(config, action, offline)
+            .await
+            .map_err(|e| e.into()),
+        _ => Err("Invalid command for config handler".into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AiConfig, ScanConfig};
 
     fn create_test_config() -> Config {
+        use gitai::config::{AiConfig, ScanConfig};
         Config {
             ai: AiConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "test-model".to_string(),
                 api_key: None,
-                temperature: Some(0.3),
+                temperature: 0.3,
             },
             scan: ScanConfig {
                 default_path: Some(".".to_string()),
-                timeout: Some(300),
-                jobs: Some(4),
+                timeout: 300,
+                jobs: 4,
+                rules_dir: None,
             },
             devops: None,
+            language: None,
             mcp: None,
         }
     }

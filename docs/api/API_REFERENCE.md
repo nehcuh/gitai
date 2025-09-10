@@ -55,107 +55,171 @@ impl Analyzer {
 
 #### `gitai::tree_sitter`
 
-Tree-sitter 结构分析模块。
+Tree-sitter 结构分析模块（多语言，支持并发）。
 
 ```rust
 pub struct TreeSitterManager {
-    parsers: HashMap<Language, Parser>,
-    cache: Arc<Mutex<LruCache<String, AnalysisResult>>>,
+    // 内部：parsers、queries_manager、可选缓存
 }
 
 impl TreeSitterManager {
-    /// 创建管理器实例
-    pub fn new() -> Self
-    
-    /// 分析单个文件
-    pub fn analyze_file(
+    /// 创建新的管理器（异步，确保查询规则可用）
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// 分析内存中的代码（单文件、单语言）
+    pub fn analyze_structure(
         &mut self,
-        path: &Path,
-        content: &str,
-        language: Language
-    ) -> Result<FileAnalysis>
-    
+        code: &str,
+        language: SupportedLanguage,
+    ) -> Result<StructuralSummary, Box<dyn std::error::Error + Send + Sync>>;
+
     /// 并发分析多个文件
     pub async fn analyze_files_concurrent(
         &self,
-        files: Vec<PathBuf>,
-        max_concurrent: usize
-    ) -> Result<Vec<FileAnalysis>>
+        file_paths: Vec<PathBuf>,
+        max_concurrent: Option<usize>,
+    ) -> Result<Vec<FileAnalysisResult>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// 并发分析目录中的所有代码文件
+    pub async fn analyze_directory_concurrent(
+        &self,
+        dir_path: &Path,
+        language_filter: Option<SupportedLanguage>,
+        max_concurrent: Option<usize>,
+    ) -> Result<DirectoryAnalysisResult, Box<dyn std::error::Error + Send + Sync>>;
 }
+
+/// 关键类型（节选）
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StructuralSummary { /* 单/多语言的函数、类、导入、复杂度等 */ }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LanguageSummary { /* 单语言摘要 + file_count */ }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FileAnalysisResult { /* file_path, language, summary, analysis_time */ }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DirectoryAnalysisResult { /* 按语言统计、总计等 */ }
 ```
+
+性能说明：
+- 并发分析使用固定大小的工作池（默认 4 个）。每个 worker 复用一个 TreeSitterManager 实例，避免为每个文件重复构建解析器与查询管理器。
+- I/O 与解析并行执行，并在分析完成后记录吞吐量与单文件耗时统计日志。
+- 使用 `max_concurrent` 控制并发度，建议根据 CPU 核心数与 I/O 能力进行调整。
 
 #### `gitai::mcp`
 
-MCP 服务管理模块。
+MCP 服务与注册表模块。
 
 ```rust
+// 服务管理器（带性能统计）
 pub struct GitAiMcpManager {
-    registry: ServiceRegistry,
-    config: McpConfig,
+    // managed_registry, performance_collector
 }
 
 impl GitAiMcpManager {
-    /// 异步创建管理器
-    pub async fn new(config: Config) -> Result<Self>
-    
-    /// 注册服务
+    /// 创建管理器（异步，根据配置自动注册启用的服务）
+    pub async fn new(config: Config) -> McpResult<Self>;
+
+    /// 列出所有工具（聚合各服务）
+    pub async fn get_all_tools(&self) -> Vec<Tool>;
+
+    /// 处理工具调用（按工具名路由到对应服务）
+    pub async fn handle_tool_call(
+        &self,
+        tool_name: &str,
+        arguments: serde_json::Value,
+    ) -> McpResult<serde_json::Value>;
+
+    /// 可选：动态注册/注销服务、列出/筛选服务、获取性能统计
+}
+
+// 服务注册表（依赖管理、事件、拓扑排序）
+pub struct ServiceRegistry { /* 内部: 元数据表、实例表、监听器 */ }
+
+impl ServiceRegistry {
+    pub fn new() -> Self;
+
+    /// 注册服务（带元数据）
     pub async fn register_service(
         &self,
-        service: Arc<dyn GitAiMcpService>
-    ) -> Result<()>
-    
-    /// 调用工具
-    pub async fn call_tool(
-        &self,
-        name: &str,
-        arguments: Value
-    ) -> McpResult<Value>
-    
-    /// 获取所有工具
-    pub fn list_tools(&self) -> Vec<Tool>
+        service: Arc<dyn GitAiMcpService + Send + Sync>,
+        config: serde_json::Value,
+    ) -> McpResult<()>;
+
+    /// 注销服务（按 service_id）
+    pub async fn unregister_service(&self, service_id: &str, reason: String) -> McpResult<()>;
+
+    /// 列出服务（包含状态、依赖、工具等元数据）
+    pub async fn list_services(&self) -> Vec<ServiceMetadata>;
+
+    /// 获取启动顺序（拓扑排序，返回 service_id 列表）
+    pub async fn get_startup_order(&self) -> McpResult<Vec<String>>;
 }
+
+#[async_trait]
+pub trait GitAiMcpService: Send + Sync { /* name/description/version/dependencies/tools/handle_tool_call */ }
 ```
 
 ### 服务注册表 API
 
 #### `gitai::mcp::registry`
 
-服务注册和依赖管理。
+服务注册与依赖管理（当前实现）。
 
 ```rust
+use semver::{Version, VersionReq};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use std::collections::HashMap;
+
 pub struct ServiceRegistry {
-    services: Arc<DashMap<String, ServiceEntry>>,
-    event_bus: Arc<EventBus>,
+    services: Arc<RwLock<HashMap<String, ServiceMetadata>>>,
+    service_instances: Arc<RwLock<HashMap<String, Arc<dyn GitAiMcpService + Send + Sync>>>>,
+    event_listeners: Arc<RwLock<Vec<Arc<dyn ServiceEventListener + Send + Sync>>>>,
 }
 
 impl ServiceRegistry {
     /// 创建注册表
-    pub fn new() -> Self
-    
-    /// 注册服务
+    pub fn new() -> Self;
+
+    /// 注册服务（带依赖校验与循环检测）
     pub async fn register_service(
         &self,
-        service: Arc<dyn GitAiMcpService>,
-        metadata: Value
-    ) -> Result<()>
-    
+        service: Arc<dyn GitAiMcpService + Send + Sync>,
+        config: serde_json::Value,
+    ) -> McpResult<()>;
+
     /// 注销服务
-    pub async fn deregister_service(
-        &self,
-        name: &str
-    ) -> Result<()>
-    
-    /// 检查依赖
-    pub async fn check_dependencies(
-        &self,
-        service: &dyn GitAiMcpService
-    ) -> Result<()>
-    
-    /// 获取启动顺序
-    pub async fn get_startup_order(&self) -> Result<Vec<String>>
+    pub async fn unregister_service(&self, service_id: &str, reason: String) -> McpResult<()>;
+
+    /// 列出已注册服务（含状态/依赖/工具列表）
+    pub async fn list_services(&self) -> Vec<ServiceMetadata>;
+
+    /// 根据工具名查询所属服务
+    pub async fn find_service_by_tool(&self, tool_name: &str)
+        -> Option<Arc<dyn GitAiMcpService + Send + Sync>>;
+
+    /// 获取启动顺序（拓扑排序）
+    pub async fn get_startup_order(&self) -> McpResult<Vec<String>>;
 }
 
-/// 服务依赖定义
+#[derive(Debug, Clone)]
+pub struct ServiceMetadata {
+    pub id: String,
+    pub name: String,
+    pub version: Version,
+    pub description: String,
+    pub tools: Vec<String>,
+    pub dependencies: Vec<ServiceDependency>,
+    pub status: ServiceStatus,
+    pub registered_at: chrono::DateTime<chrono::Utc>,
+    pub last_health_check: Option<chrono::DateTime<chrono::Utc>>,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone)]
 pub struct ServiceDependency {
     pub service_name: String,
     pub version_req: VersionReq,
@@ -209,6 +273,30 @@ impl ServiceContainer {
 
 ## MCP 服务 API
 
+### MCP Quickstart (stdio)
+
+1) Set environment variables (example uses local Ollama; replace secrets with your own):
+```bash
+export GITAI_AI_API_URL="http://localhost:11434/v1/chat/completions"
+export GITAI_AI_MODEL="qwen2.5:32b"
+# Optional external API key
+export GITAI_AI_API_KEY="{{OPENAI_OR_OTHER_API_KEY}}"
+```
+
+2) Start the MCP server (stdio transport):
+```bash
+gitai mcp --transport stdio
+```
+
+3) Minimal MCP request (tools/list):
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+```
+
 ### 工具接口
 
 所有 MCP 服务实现以下 trait：
@@ -245,18 +333,43 @@ pub trait GitAiMcpService: Send + Sync {
 }
 ```
 
-### 可用工具
+### 可用工具（工具名 → 所属服务）
+- execute_review → review
+- execute_commit → commit
+- execute_scan → scan
+- execute_analysis → analysis
+- analyze_deviation → deviation
+- execute_dependency_graph → dependency
+- convert_graph_to_image → dependency
+- summarize_graph → analysis
+- query_call_chain → analysis
 
 #### `execute_review`
 
 执行代码评审。
 
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| path | string | 否 | 当前工作目录 | MCP 服务运行目录非仓库根时可指定仓库根路径 |
+| tree_sitter | bool | 否 | false | 启用多语言结构分析 |
+| security_scan | bool | 否 | false | 启用安全扫描（需 security 特性） |
+| issue_ids | string[] | 否 | [] | 关联 Issue 列表，提供后隐式启用偏离度分析 |
+| space_id | integer | 否 | 配置 devops.space_id | Coding 空间（项目）ID，覆盖配置 |
+| scan_tool | string | 否 | opengrep | 扫描工具（如 opengrep） |
+| deviation_analysis | bool | 否 | false | 显式开启偏离度分析（未提供时在有 issue_ids 时自动启用） |
+| format | enum(text,json,markdown) | 否 | text | 输出格式 |
+
 **请求：**
 ```json
 {
+  "path": ".",            // 可选：服务运行目录非仓库根时指定
   "tree_sitter": true,
   "security_scan": false,
   "issue_ids": ["#123"],
+  "space_id": 123456,      // 可选
+  "scan_tool": "opengrep", // 可选
   "format": "text",
   "deviation_analysis": false
 }
@@ -276,6 +389,17 @@ pub trait GitAiMcpService: Send + Sync {
 
 生成智能提交。
 
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| message | string | 否 | null | 提交信息，未提供时将由 AI 生成 |
+| issue_ids | string[] | 否 | [] | 关联 Issue 列表 |
+| add_all | bool | 否 | false | 添加所有修改的文件 |
+| review | bool | 否 | false | 提交前执行评审摘要 |
+| tree_sitter | bool | 否 | false | 评审时启用结构分析（在 review=true 时有效） |
+| dry_run | bool | 否 | false | 试运行，不实际提交 |
+
 **请求：**
 ```json
 {
@@ -283,6 +407,7 @@ pub trait GitAiMcpService: Send + Sync {
   "issue_ids": ["#123"],
   "add_all": false,
   "review": false,
+  "tree_sitter": false,
   "dry_run": false
 }
 ```
@@ -298,6 +423,15 @@ pub trait GitAiMcpService: Send + Sync {
 #### `execute_scan`
 
 执行安全扫描。
+
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| path | string | 是 | - | 扫描路径 |
+| tool | enum(opengrep,security) | 否 | opengrep | security 等同于 opengrep |
+| timeout | integer | 否 | 300 | 超时时间（秒） |
+| lang | string | 否 | 自动检测 | 语言过滤（默认多语言规则） |
 
 **请求：**
 ```json
@@ -326,6 +460,14 @@ pub trait GitAiMcpService: Send + Sync {
 
 执行结构分析。
 
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| path | string | 是 | - | 文件或目录路径 |
+| language | string | 否 | 自动推断 | 编程语言（如 rust/java/go 等） |
+| verbosity | integer(0-2) | 否 | 1 | 详细程度 |
+
 **请求：**
 ```json
 {
@@ -341,6 +483,109 @@ pub trait GitAiMcpService: Send + Sync {
   "files_analyzed": 10,
   "total_time": 1.23,
   "metrics": {}
+}
+```
+
+#### `analyze_deviation`
+
+分析代码变更与 DevOps Issue 的偏离度。
+
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| issue_ids | string[] | 是 | - | 需要评估的 Issue 列表 |
+| diff | string | 否 | 从 git 获取 | 默认为当前变更 diff；可显式传入 |
+
+**请求：**
+```json
+{
+  "issue_ids": ["#123", "#456"],
+  "diff": "...optional git diff content..."
+}
+```
+
+**响应（示例）：**
+```json
+{
+  "match_score": 85,
+  "deviation_reasons": ["有部分 Issue 要求未完全满足"],
+  "matched_issues": ["#123", "#456"],
+  "unmatched_issues": [],
+  "details": {"note": "..."},
+  "needs_attention": false
+}
+```
+
+#### `query_call_chain`
+
+查询函数调用链（上游/下游）。
+
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| path | string | 否 | . | 扫描目录 |
+| start | string | 是 | - | 起始函数名 |
+| end | string | 否 | - | 结束函数名 |
+| direction | enum(downstream,upstream) | 否 | downstream | 方向 |
+| max_depth | integer(1-32) | 否 | 8 | 最大深度 |
+| max_paths | integer(1-100) | 否 | 20 | 返回路径上限 |
+
+#### `execute_dependency_graph`
+
+生成代码依赖图（默认 ASCII）。
+
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| path | string | 是 | - | 文件或目录路径 |
+| format | enum(json,dot,svg,mermaid,ascii) | 否 | ascii | 输出格式 |
+| output | string | 否 | - | 输出文件路径（可选） |
+| depth | integer | 否 | 无限 | 分析深度 |
+| include_calls | bool | 否 | true | 是否包含调用关系 |
+| include_imports | bool | 否 | true | 是否包含导入关系 |
+| verbosity | integer(0-3) | 否 | 1 | 详细程度 |
+|| confirm | bool | 否 | false | 大型项目导出完整图需确认 |
+
+**请求：**
+```json
+{
+  "name": "execute_dependency_graph",
+  "arguments": {
+    "path": ".",
+    "format": "ascii",
+    "verbosity": 1
+  }
+}
+```
+
+#### `convert_graph_to_image`
+
+将 DOT 或 Mermaid 内容转换为 PNG/SVG/PDF 图像文件。
+
+参数表：
+
+| 名称 | 类型 | 必填 | 默认 | 说明 |
+|-----|------|------|------|------|
+| input_format | enum(dot,mermaid) | 是 | - | 输入格式 |
+| input_content | string | 是 | - | 图内容（DOT/Mermaid） |
+| output_format | enum(png,svg,pdf) | 是 | - | 输出格式 |
+| output_path | string | 是 | - | 输出文件路径 |
+| engine | enum(dot,neato,circo,fdp,sfdp,twopi) | 否 | dot | Graphviz 布局引擎 |
+
+**请求：**
+```json
+{
+  "name": "convert_graph_to_image",
+  "arguments": {
+    "input_format": "dot",
+    "input_content": "digraph G { A -> B }",
+    "output_format": "svg",
+    "output_path": "graph.svg",
+    "engine": "dot"
+  }
 }
 ```
 
@@ -571,15 +816,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manager = GitAiMcpManager::new(config).await?;
     
     // 调用工具
-    let result = manager.call_tool(
-        "execute_review",
-        json!({
-            "tree_sitter": true,
-            "security_scan": false
-        })
-    ).await?;
+    let result = manager
+        .handle_tool_call(
+            "execute_review",
+            json!({
+                "tree_sitter": true,
+                "security_scan": false
+            })
+        )
+        .await?;
     
-    println!("评审结果: {}", result);
+    println!("评审结果: {}", serde_json::to_string_pretty(&result)?);
     
     Ok(())
 }

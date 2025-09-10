@@ -4,8 +4,8 @@
 
 use super::HandlerResult;
 use gitai::args::Command;
-use gitai::config::Config;
 use gitai::commit;
+use gitai::config::Config;
 
 /// 处理 commit 命令
 pub async fn handle_command(config: &Config, command: &Command) -> HandlerResult<()> {
@@ -28,10 +28,10 @@ pub async fn handle_command(config: &Config, command: &Command) -> HandlerResult
                 *tree_sitter,
                 *dry_run,
             );
-            
+
             commit::execute_commit(config, commit_config).await?;
             Ok(())
         }
-        _ => Err("Invalid command for commit handler".into())
+        _ => Err(anyhow::anyhow!("Invalid command for commit handler").into()),
     }
 }

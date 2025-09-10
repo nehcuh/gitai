@@ -67,6 +67,24 @@ gitai commit --review --tree-sitter
 gitai commit --space-id 12345 --issue-id "#101"
 ```
 
+## MCP 映射
+
+- 对应工具：commit 服务的 `execute_commit`
+- 说明：当 review=true 时，tree_sitter 才用于评审环节
+
+示例请求：
+```json
+{
+  "name": "execute_commit",
+  "arguments": {
+    "issue_ids": ["#123"],
+    "review": true,
+    "tree_sitter": true,
+    "add_all": true
+  }
+}
+```
+
 ## 配置选项
 
 在 `~/.config/gitai/config.toml` 中配置：

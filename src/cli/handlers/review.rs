@@ -35,10 +35,10 @@ pub async fn handle_command(config: &Config, command: &Command) -> HandlerResult
                 *space_id,
                 *full,
             );
-            
+
             review::execute_review(config, review_config).await?;
             Ok(())
         }
-        _ => Err("Invalid command for review handler".into())
+        _ => Err(anyhow::anyhow!("Invalid command for review handler").into()),
     }
 }

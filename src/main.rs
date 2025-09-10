@@ -26,9 +26,6 @@ use gitai::scan;
 #[cfg(feature = "update-notifier")]
 use gitai::update;
 
-#[cfg(feature = "mcp")]
-use gitai::mcp;
-
 #[cfg(feature = "metrics")]
 use gitai::metrics;
 
@@ -83,27 +80,19 @@ mod cli;
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logger();
-    
+
     let args = gitai::args::Args::parse();
     let mut app = cli::CliApp::new(args);
-    
+
     // Initialize configuration if needed
     app.initialize().await?;
-    
+
     // Run the application
     app.run().await
 }
 
-// legacy_main 不再需要，所有命令由 cli::CliApp 处理
-#[allow(dead_code)]
-async fn legacy_main() -> Result<()> {
-    unreachable!("legacy_main 已废弃，使用 CliApp::run() 处理所有命令")
-}
-
-// 以下保留的辅助函数在需要时可迁移到相应 handler 或 utils 模块
-
-// Legacy command handling code has been migrated to cli::handlers module
-// The following commented code can be removed once all handlers are verified
+// All command handling is now managed by cli::CliApp
+// Legacy command handling code has been fully migrated to cli::handlers module
 /*
         Command::Review {
             language,
@@ -316,6 +305,10 @@ async fn legacy_main() -> Result<()> {
 }
 */
 
+// The following helper functions have been migrated to cli::handlers module
+// These are kept temporarily for reference and can be removed after full verification
+
+#[allow(dead_code)]
 async fn handle_graph_export(
     path: &std::path::Path,
     output: Option<&std::path::PathBuf>,
@@ -332,7 +325,7 @@ async fn handle_graph_export(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(dead_code, clippy::too_many_arguments)]
 async fn handle_graph_summary(
     path: &std::path::Path,
     radius: usize,
@@ -377,6 +370,7 @@ async fn handle_graph_summary(
 
 // 扫描相关处理函数
 #[cfg(feature = "security")]
+#[allow(dead_code)]
 async fn handle_scan(
     config: &config::Config,
     path: &std::path::Path,
@@ -505,6 +499,7 @@ async fn handle_scan(
 }
 
 #[cfg(feature = "security")]
+#[allow(dead_code)]
 fn handle_scan_history(limit: usize) -> Result<()> {
     let cache_dir = get_cache_dir()?;
     let history_dir = cache_dir.join("scan_history");
@@ -566,46 +561,8 @@ fn handle_scan_history(limit: usize) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "update-notifier")]
-async fn handle_update_check(config: &config::Config, format: &str) -> Result<()> {
-    let updater = update::AutoUpdater::new(config.clone());
-    let status = updater.check_update_status();
-
-    if format == "json" {
-        let json = serde_json::to_string_pretty(&status)?;
-        println!("{}", json);
-    } else {
-        println!("🔎 更新检查:");
-        println!();
-
-        for item in &status {
-            println!("📦 {}: {}", item.name, item.message);
-        }
-
-        println!();
-        if status.is_empty() {
-            println!("就绪状态: ✅ 已就绪");
-        } else {
-            println!("就绪状态: ❌ 需要更新");
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "update-notifier")]
-async fn handle_update(config: &config::Config) -> Result<()> {
-    println!("🔄 正在更新规则...");
-    let updater = update::AutoUpdater::new(config.clone());
-    let result = updater.update_scan_rules().await?;
-
-    println!("✅ 更新完成");
-    println!("   更新状态: {}", result.message);
-
-    Ok(())
-}
-
 #[cfg(feature = "ai")]
+#[allow(dead_code)]
 async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Result<()> {
     // 执行Git命令
     let output = git::run_git(git_args)?;
@@ -632,6 +589,7 @@ async fn handle_git_with_ai(config: &config::Config, git_args: &[String]) -> Res
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) -> Result<()> {
     match action {
         PromptAction::Init => {
@@ -706,6 +664,7 @@ async fn handle_prompts_action(_config: &config::Config, action: &PromptAction) 
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn handle_init(
     config_url: Option<String>,
     offline: bool,
@@ -775,6 +734,7 @@ async fn handle_init(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn handle_config(
     config: &config::Config,
     action: &ConfigAction,
@@ -921,40 +881,8 @@ async fn handle_config(
     Ok(())
 }
 
-#[cfg(feature = "mcp")]
-async fn handle_mcp(config: &config::Config, transport: &str, addr: &str) -> Result<()> {
-    // 检查 MCP 是否启用
-    if !config.mcp.as_ref().map_or(false, |mcp| mcp.enabled) {
-        eprintln!("❌ MCP 服务未启用，请在配置文件中启用 MCP");
-        std::process::exit(1);
-    }
-
-    println!("🚀 启动 GitAI MCP 服务器");
-    println!("📡 传输协议: {}", transport);
-
-    match transport {
-        "stdio" => {
-            println!("🔌 使用 stdio 传输");
-            mcp::bridge::start_mcp_server(config.clone()).await?;
-        }
-        "tcp" => {
-            println!("🌐 监听地址: {}", addr);
-            eprintln!("⚠️  TCP 传输暂未实现");
-        }
-        "sse" => {
-            println!("🌐 监听地址: {}", addr);
-            eprintln!("⚠️  SSE 传输暂未实现");
-        }
-        _ => {
-            eprintln!("❌ 不支持的传输协议: {}", transport);
-            std::process::exit(1);
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(feature = "metrics")]
+#[allow(dead_code)]
 async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Result<()> {
     use gitai::metrics::QualityTracker;
     use gitai::project_insights::InsightsGenerator;
@@ -1254,6 +1182,7 @@ async fn handle_metrics(_config: &config::Config, action: &MetricsAction) -> Res
 
 // 辅助函数：查找代码文件
 /// 下载 Tree-sitter 资源
+#[allow(dead_code)]
 async fn download_tree_sitter_resources() -> Result<()> {
     // 创建 TreeSitterManager 实例，这通常会触发初始化和下载
     // 检查是否启用了任意 Tree-sitter 语言支持
@@ -1296,6 +1225,7 @@ async fn download_tree_sitter_resources() -> Result<()> {
 }
 
 /// 下载 OpenGrep 规则资源
+#[allow(dead_code)]
 async fn download_opengrep_resources(_config_path: &std::path::Path) -> Result<()> {
     #[cfg(feature = "security")]
     {
@@ -1332,6 +1262,7 @@ async fn download_opengrep_resources(_config_path: &std::path::Path) -> Result<(
 
 // 辅助函数：查找代码文件
 #[cfg(feature = "metrics")]
+#[allow(dead_code)]
 fn find_code_files(dir: &str) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     let supported_extensions = ["rs", "java", "py", "js", "ts", "go", "c", "cpp"];

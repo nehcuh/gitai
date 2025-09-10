@@ -18,14 +18,11 @@ pub struct CliApp {
 impl CliApp {
     /// 创建新的 CLI 应用程序实例
     pub fn new(args: Args) -> Self {
-        Self {
-            args,
-            config: None,
-        }
+        Self { args, config: None }
     }
 
     /// 初始化配置
-    /// 
+    ///
     /// Init 命令不需要配置文件，其他命令需要先加载配置
     pub async fn initialize(&mut self) -> CliResult<()> {
         // Init 命令不需要配置文件
@@ -52,9 +49,7 @@ impl CliApp {
     /// 运行 CLI 应用程序
     pub async fn run(&self) -> CliResult<()> {
         match &self.args.command {
-            Command::Init { .. } => {
-                handlers::init::handle_command(&self.args.command).await
-            }
+            Command::Init { .. } => handlers::init::handle_command(&self.args.command).await,
             Command::Review { .. } => {
                 let config = self.config.as_ref().unwrap();
                 handlers::review::handle_command(config, &self.args.command).await
@@ -106,7 +101,8 @@ impl CliApp {
             }
             Command::Config { .. } => {
                 let config = self.config.as_ref().unwrap();
-                handlers::config::handle_command(config, &self.args.command, self.args.offline).await
+                handlers::config::handle_command(config, &self.args.command, self.args.offline)
+                    .await
             }
             #[cfg(feature = "metrics")]
             Command::Metrics { .. } => {
@@ -119,9 +115,7 @@ impl CliApp {
                 eprintln!("💡 请使用包含 'metrics' 功能的构建版本");
                 Err("功能未启用".into())
             }
-            Command::Graph { .. } => {
-                handlers::graph::handle_command(&self.args.command).await
-            }
+            Command::Graph { .. } => handlers::graph::handle_command(&self.args.command).await,
             Command::Features { .. } => {
                 handlers::features::handle_command(&self.args.command).await
             }

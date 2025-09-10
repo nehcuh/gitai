@@ -129,12 +129,87 @@ pub async fn build_global_dependency_graph(
     Ok(global_graph)
 }
 
+fn parse_env_bool(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("on") | Some("On")
+    )
+}
+
+fn parse_env_usize(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(default)
+}
+
+fn parse_env_f32(name: &str, default: f32) -> f32 {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(default)
+}
+
+fn prune_graph_for_export(graph: &mut DependencyGraph, keep_top_n: usize, min_edge_weight: f32) {
+    if keep_top_n == 0 || graph.nodes.len() <= keep_top_n {
+        return; // nothing to do
+    }
+
+    // Ensure importance_score is populated
+    let _ = graph.calculate_pagerank(0.85, 20, 1e-6);
+
+    // Select top-N nodes by importance
+    let mut nodes_scored: Vec<(String, f32)> = graph
+        .nodes
+        .iter()
+        .map(|(id, n)| (id.clone(), n.importance_score))
+        .collect();
+    nodes_scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let keep_ids: std::collections::HashSet<String> = nodes_scored
+        .into_iter()
+        .take(keep_top_n)
+        .map(|(id, _)| id)
+        .collect();
+
+    // Retain nodes
+    graph.nodes.retain(|id, _| keep_ids.contains(id));
+
+    // Retain edges: both ends kept and above weight threshold
+    graph.edges.retain(|e| {
+        keep_ids.contains(&e.from) && keep_ids.contains(&e.to) && e.weight >= min_edge_weight
+    });
+
+    // Rebuild adjacency after pruning
+    graph.rebuild_adjacency_lists();
+}
+
 /// 导出 DOT 文本（含高亮关键节点）
 pub async fn export_dot_string(
     scan_dir: &Path,
     highlight_threshold: f32,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let graph = build_global_dependency_graph(scan_dir).await?;
+    let mut graph = build_global_dependency_graph(scan_dir).await?;
+
+    // 内部可选优化：快速剪枝（默认关闭；通过环境变量开启）
+    // GITAI_GRAPH_EXPORT_PRUNE=true|1 开启
+    // GITAI_GRAPH_EXPORT_KEEP_TOP=2000 保留的 Top 节点数（默认 2000）
+    // GITAI_GRAPH_EXPORT_MIN_EDGE_WEIGHT=0.0 边权重阈值（默认 0.0）
+    // 说明：不改变 CLI 参数与默认行为，仅在设置环境变量时生效
+    if parse_env_bool("GITAI_GRAPH_EXPORT_PRUNE") {
+        let keep_top = parse_env_usize("GITAI_GRAPH_EXPORT_KEEP_TOP", 2000);
+        let min_w = parse_env_f32("GITAI_GRAPH_EXPORT_MIN_EDGE_WEIGHT", 0.0);
+        let before = (graph.nodes.len(), graph.edges.len());
+        prune_graph_for_export(&mut graph, keep_top, min_w);
+        let after = (graph.nodes.len(), graph.edges.len());
+        log::info!(
+            "graph export prune enabled: nodes {} -> {}, edges {} -> {}",
+            before.0,
+            after.0,
+            before.1,
+            after.1
+        );
+    }
+
     let critical: Vec<String> = graph
         .identify_critical_nodes(highlight_threshold)
         .into_iter()

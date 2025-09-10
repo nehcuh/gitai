@@ -1,10 +1,17 @@
-use gitai::config::Config;
-use gitai::mcp::registry::ServiceRegistryBuilder;
-use gitai::mcp::services::{AnalysisService, CommitService, ReviewService, ScanService};
-use std::sync::Arc;
+#[cfg(not(feature = "mcp"))]
+fn main() {
+    eprintln!(
+        "This example requires the 'mcp' feature.\nRun with: cargo run --example mcp_registry_demo --features mcp"
+    );
+}
 
+#[cfg(feature = "mcp")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use gitai::config::Config;
+    use gitai::mcp::registry::ServiceRegistryBuilder;
+    use gitai::mcp::services::{AnalysisService, CommitService, ReviewService, ScanService};
+    use std::sync::Arc;
     // 初始化日志
     env_logger::init();
 

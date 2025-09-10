@@ -6,25 +6,44 @@ Welcome to GitAI's documentation. This page provides a comprehensive index of al
 
 ## 🚀 Getting Started / 快速开始
 - **Development Guide / 开发指南** — [WARP.md](../WARP.md) - Complete development environment setup and commands
-- **Project Status / 项目状态** — [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) - Current implementation progress (98% complete)
+- **Project Status / 项目状态** — [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) - Current implementation progress
 - **Contributing / 贡献指南** — [development/CONTRIBUTING.md](development/CONTRIBUTING.md) - How to contribute to the project
 
+## ⚡ Quickstart / 快速开始
+- MCP Server (stdio) Quickstart / MCP 服务器（stdio）快速开始
+
+```bash
+# AI service (example: local Ollama). Replace with your setup.
+export GITAI_AI_API_URL="http://localhost:11434/v1/chat/completions"
+export GITAI_AI_MODEL="qwen2.5:32b"
+# Optional external API key
+export GITAI_AI_API_KEY="{{OPENAI_OR_OTHER_API_KEY}}"
+
+# Start MCP server via stdio
+gitai mcp --transport stdio
+```
+
+See also: API Reference → MCP Quickstart (docs/api/API_REFERENCE.md).
+
 ## 🏗️ Architecture & Design / 架构与设计
-- **Architecture Overview / 架构概览** — [ARCHITECTURE.md](ARCHITECTURE.md) - Core design principles and module structure
-- **Modular CLI Design / 模块化 CLI 设计** — [CLI_MODULARIZATION_PROGRESS.md](CLI_MODULARIZATION_PROGRESS.md) - CLI handler modularization
+- **Architecture Overview / 架构概览** — [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md) - Core design principles and module structure
+- **Modular CLI Design / 模块化 CLI 设计** — [archive/historical/CLI_MODULARIZATION_PROGRESS.md](archive/historical/CLI_MODULARIZATION_PROGRESS.md) - CLI handler modularization
 - **MCP Service Registry / MCP 服务注册** — [api/mcp-implementation-notes.md](api/mcp-implementation-notes.md) - Model Context Protocol implementation
-- **Concurrent Analysis / 并发分析** — [CONCURRENT_ANALYSIS_OPTIMIZATION.md](CONCURRENT_ANALYSIS_OPTIMIZATION.md) - TreeSitter concurrent optimization
+- **Concurrent Analysis / 并发分析** — [archive/historical/CONCURRENT_ANALYSIS_OPTIMIZATION.md](archive/historical/CONCURRENT_ANALYSIS_OPTIMIZATION.md) - TreeSitter concurrent optimization
 - **Configuration Management / 配置管理** — [CONFIG_MANAGEMENT.md](CONFIG_MANAGEMENT.md) - Configuration system design
-- **Graph Summarization / 图摘要** — [GRAPH_SUMMARIZATION_PLAN.md](GRAPH_SUMMARIZATION_PLAN.md) - Dependency graph compression
+- **Graph Summarization / 图摘要** — [api/MCP_GRAPH_SUMMARY.md](api/MCP_GRAPH_SUMMARY.md) - Dependency graph summarization
 
 ## 🛠️ Features / 功能特性
 - **Feature Flags / 功能门控** — [features/FEATURE_FLAGS.md](features/FEATURE_FLAGS.md) - Feature flag system and conditional compilation
 - **Code Review Workflow / 代码评审工作流** — [features/REVIEW_WORKFLOW.md](features/REVIEW_WORKFLOW.md) - AI-powered review process
-- **Dependency Analysis / 依赖分析** — [features/dependency-analysis-in-review.md](features/dependency-analysis-in-review.md) - PageRank in code review
+- **Dependency Graph / 依赖图与摘要** — [features/DEPENDENCY_GRAPH.md](features/DEPENDENCY_GRAPH.md) - Graph export and summarization (CLI & MCP)
+- **Dependency Analysis in Review / 评审中的依赖分析** — [features/dependency-analysis-in-review.md](features/dependency-analysis-in-review.md) - PageRank in code review
 - **Security Scanning / 安全扫描** — [AI_ERA_SECURITY.md](AI_ERA_SECURITY.md) - AI-era security considerations
 
 ## 📚 API & Integration / API 与集成
-- **MCP API Documentation / MCP API 文档** — [api/MCP_GRAPH_SUMMARY.md](api/MCP_GRAPH_SUMMARY.md) - Graph summary API
+- **API Reference / API 参考** — [api/API_REFERENCE.md](api/API_REFERENCE.md) - Library, MCP, CLI contracts
+- **MCP Graph Summary / MCP 图摘要** — [api/MCP_GRAPH_SUMMARY.md](api/MCP_GRAPH_SUMMARY.md) - Graph summary API
+- **MCP Service Guide / MCP 服务说明** — [features/MCP_SERVICE.md](features/MCP_SERVICE.md) - Services and tools overview
 - **MCP Integration Examples / MCP 集成示例** — [examples/mcp_integration/README.md](examples/mcp_integration/README.md) - Integration examples
 - **Resource Download / 资源下载** — [RESOURCE_DOWNLOAD_GUIDE.md](RESOURCE_DOWNLOAD_GUIDE.md) - External resource management
 
@@ -32,6 +51,11 @@ Welcome to GitAI's documentation. This page provides a comprehensive index of al
 - **Regression Testing / 回归测试** — [development/REGRESSION.md](development/REGRESSION.md) - Test procedures and checklists
 - **MCP Integration Tests / MCP 集成测试** — [development/MCP_INTEGRATION_TESTS.md](development/MCP_INTEGRATION_TESTS.md) - MCP service testing
 - **Review Output Fix / 评审输出修复** — [review-output-fix.md](review-output-fix.md) - Review module fixes
+
+## ⚙️ Performance Notes / 性能说明
+- Phase 2 optimizations and env configuration — [PHASE2_OPTIMIZATIONS.md](PHASE2_OPTIMIZATIONS.md)
+  - Tree-sitter cache: GITAI_TS_CACHE_CAPACITY, GITAI_TS_CACHE_MAX_AGE
+  - Graph export pruning: GITAI_GRAPH_EXPORT_PRUNE, GITAI_GRAPH_EXPORT_KEEP_TOP, GITAI_GRAPH_EXPORT_MIN_EDGE_WEIGHT
 
 ## 📖 Reference / 参考资料
 - **Terminology / 术语表** — [TERMINOLOGY.md](TERMINOLOGY.md) - Project-specific terminology

@@ -475,6 +475,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "tree-sitter-rust")]
     #[tokio::test]
     async fn test_analyze_rust_code() {
         let analyzer = UnifiedAnalyzer::new(SupportedLanguage::Rust).unwrap();

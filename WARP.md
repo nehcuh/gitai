@@ -145,7 +145,10 @@ export GITAI_DEVOPS_TOKEN="your_devops_token"
 export GITAI_DEVOPS_BASE_URL="https://your-org.coding.net"
 
 # Optional: Custom rules for security scanning
-export GITAI_RULES_URL="https://your-rules-repo/rules.tar.gz"
+# Official OpenGrep rules repo:
+#   Homepage: https://github.com/opengrep/opengrep-rules
+#   Tarball (recommended): https://github.com/opengrep/opengrep-rules/archive/refs/heads/main.tar.gz
+export GITAI_RULES_URL="https://github.com/opengrep/opengrep-rules/archive/refs/heads/main.tar.gz"
 ```
 
 ## 架构概览

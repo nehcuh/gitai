@@ -108,7 +108,7 @@ export GITAI_DEVOPS_BASE_URL="https://your-org.coding.net"
 
 ## 参考文档
 
-- docs/mcp-implementation-notes.md — MCP 实现说明
-- README.md — 项目总览与使用
-- WARP.md — 终端环境下的开发与调试指南
+- ../../api/mcp-implementation-notes.md — MCP 实现说明
+- ../../../README.md — 项目总览与使用
+- ../../../WARP.md — 终端环境下的开发与调试指南
 

@@ -490,7 +490,7 @@ impl StructureAnalyzer {
 
         // 计算复杂度提示 - 使用优化版本
         log::debug!("开始计算复杂度提示");
-        summary.complexity_hints = self.calculate_complexity_hints_optimized(&summary);
+        summary.complexity_hints = super::helpers::calculate_complexity_hints_optimized(&summary);
         log::debug!("生成 {} 个复杂度提示", summary.complexity_hints.len());
 
         log::info!(
@@ -778,7 +778,7 @@ impl StructureAnalyzer {
                 function.parameters.clear();
                 function
                     .parameters
-                    .extend(self.parse_parameters_optimized(&param_text));
+                    .extend(super::helpers::parse_parameters_optimized(&param_text));
             }
         }
         self.function_buffer = functions_to_process;
@@ -882,87 +882,6 @@ impl StructureAnalyzer {
 
         Ok(std::mem::take(&mut self.comment_buffer))
     }
-
-    /// 优化的参数解析方法 - 减少字符串分配
-    fn parse_parameters_optimized(&self, params_text: &str) -> Vec<String> {
-        if params_text.is_empty() {
-            return Vec::new();
-        }
-
-        let trimmed = params_text.trim_matches(|c| c == '(' || c == ')');
-        if trimmed.is_empty() {
-            return Vec::new();
-        }
-
-        let mut params = Vec::with_capacity(5); // 预分配
-        let mut start = 0;
-        let mut bracket_level: i32 = 0;
-
-        for (i, ch) in trimmed.char_indices() {
-            match ch {
-                '(' | '<' | '[' => bracket_level += 1,
-                ')' | '>' | ']' => bracket_level = bracket_level.saturating_sub(1),
-                ',' if bracket_level == 0 => {
-                    if start < i {
-                        let param = trimmed[start..i].trim();
-                        if !param.is_empty() {
-                            params.push(param.to_string());
-                        }
-                    }
-                    start = i + 1;
-                }
-                _ => {}
-            }
-        }
-
-        // 添加最后一个参数
-        if start < trimmed.len() {
-            let param = trimmed[start..].trim();
-            if !param.is_empty() {
-                params.push(param.to_string());
-            }
-        }
-
-        params
-    }
-
-    /// 优化的复杂度计算方法 - 减少重复计算
-    fn calculate_complexity_hints_optimized(&self, summary: &StructuralSummary) -> Vec<String> {
-        let mut hints = Vec::with_capacity(10); // 预分配
-
-        // 函数数量分析
-        let func_count = summary.functions.len();
-        if func_count > 50 {
-            hints.push(format!("文件包含{func_count}个函数，建议考虑拆分"));
-        }
-
-        // 类数量分析
-        let class_count = summary.classes.len();
-        if class_count > 10 {
-            hints.push(format!("文件包含{class_count}个类，建议考虑模块化"));
-        }
-
-        // 长函数检测 - 优化循环
-        for func in &summary.functions {
-            let line_count = func.line_end.saturating_sub(func.line_start);
-            if line_count > 100 {
-                hints.push(format!("函数{}过长({}行)，建议拆分", func.name, line_count));
-            }
-        }
-
-        // 参数过多检测 - 优化循环
-        for func in &summary.functions {
-            if func.parameters.len() > 5 {
-                hints.push(format!(
-                    "函数{}参数过多({}个)，建议使用对象封装",
-                    func.name,
-                    func.parameters.len()
-                ));
-            }
-        }
-
-        hints
-    }
 }
 
 #[cfg(test)]
@@ -986,21 +905,25 @@ mod tests {
             return;
         }
 
-        // 测试空参数
-        let params = analyzer.parse_parameters("");
-        assert_eq!(params, Vec::<String>::new());
+        // 在可用语言下执行参数解析测试
+        #[cfg(any(feature = "tree-sitter-java", feature = "tree-sitter-rust"))]
+        {
+            // 测试空参数
+            let params = analyzer.parse_parameters("");
+            assert_eq!(params, Vec::<String>::new());
 
-        // 测试空括号
-        let params = analyzer.parse_parameters("()");
-        assert_eq!(params, Vec::<String>::new());
+            // 测试空括号
+            let params = analyzer.parse_parameters("()");
+            assert_eq!(params, Vec::<String>::new());
 
-        // 测试单个参数
-        let params = analyzer.parse_parameters("(String name)");
-        assert_eq!(params, vec!["String name"]);
+            // 测试单个参数
+            let params = analyzer.parse_parameters("(String name)");
+            assert_eq!(params, vec!["String name"]);
 
-        // 测试多个参数
-        let params = analyzer.parse_parameters("(String name, int age, boolean active)");
-        assert_eq!(params, vec!["String name", "int age", "boolean active"]);
+            // 测试多个参数
+            let params = analyzer.parse_parameters("(String name, int age, boolean active)");
+            assert_eq!(params, vec!["String name", "int age", "boolean active"]);
+        }
     }
 
     #[test]

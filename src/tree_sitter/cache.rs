@@ -115,15 +115,39 @@ impl TreeSitterCache {
         let base_dir = crate::utils::paths::tree_sitter_cache_dir();
 
         // 测试环境隔离：为每次测试实例使用独立子目录，避免并发测试干扰
+        // 但允许通过环境变量在测试中共享目录以便进行并发磁盘写入测试：
+        // - GITAI_TS_CACHE_TEST_SHARED=true    使用共享子目录 shared_test_cache
+        // - GITAI_TS_CACHE_TEST_SHARED=<name>  使用指定子目录名
         let cache_dir = if cfg!(test) {
-            let unique = format!(
-                "test_{}",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis()
-            );
-            base_dir.join(unique)
+            match std::env::var("GITAI_TS_CACHE_TEST_SHARED") {
+                Ok(val) => {
+                    let v = val.to_lowercase();
+                    if v == "1" || v == "true" {
+                        base_dir.join("shared_test_cache")
+                    } else if !v.is_empty() {
+                        base_dir.join(v)
+                    } else {
+                        let unique = format!(
+                            "test_{}",
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis()
+                        );
+                        base_dir.join(unique)
+                    }
+                }
+                Err(_) => {
+                    let unique = format!(
+                        "test_{}",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis()
+                    );
+                    base_dir.join(unique)
+                }
+            }
         } else {
             base_dir
         };
@@ -242,6 +266,12 @@ impl TreeSitterCache {
             .unwrap_or_else(|_| CacheStats::default())
     }
 
+    /// 返回当前缓存配置（capacity, max_age_seconds）
+    pub fn settings(&self) -> (usize, u64) {
+        let cap = self.memory_cache.lock().map(|c| c.cap().get()).unwrap_or(0);
+        (cap, self.max_age_seconds)
+    }
+
     /// 预热缓存
     pub fn warm_up(
         &self,
@@ -290,9 +320,47 @@ impl TreeSitterCache {
         let file_path = self.cache_file_path(key);
 
         let content = serde_json::to_string_pretty(entry)?;
-        std::fs::write(&file_path, content)?;
+        Self::write_atomic(&file_path, &content)?;
 
         Ok(())
+    }
+
+    /// 原子写入文件：写入到同目录的临时文件并原子替换目标文件
+    fn write_atomic_target(file_path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+        use std::io::Write as _;
+        let dir = file_path
+            .parent()
+            .ok_or_else(|| std::io::Error::other("no parent dir"))?;
+        let fname = file_path
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_else(|| "cache".into());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let tmp_name = format!(".{}.{}.tmp", fname, now);
+        let tmp_path = dir.join(tmp_name);
+
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&tmp_path)?;
+            f.write_all(bytes)?;
+            // 尽力刷新到磁盘
+            let _ = f.sync_all();
+        }
+
+        // 在类 Unix 系统上，rename 是原子的并会替换目标文件
+        std::fs::rename(&tmp_path, file_path)?;
+        Ok(())
+    }
+
+    /// 便捷方法：将字符串内容原子写入文件
+    fn write_atomic(file_path: &std::path::Path, content: &str) -> std::io::Result<()> {
+        Self::write_atomic_target(file_path, content.as_bytes())
     }
 
     /// 从磁盘删除缓存
@@ -443,5 +511,15 @@ mod tests {
         // 测试清除缓存
         cache.clear().unwrap();
         assert!(cache.get(&key).is_none());
+    }
+
+    #[test]
+    fn test_cache_settings_returns_config() {
+        let cap = 123;
+        let max_age = 4567u64;
+        let cache = TreeSitterCache::new(cap, max_age).expect("cache new");
+        let (actual_cap, actual_age) = cache.settings();
+        assert_eq!(actual_cap, cap);
+        assert_eq!(actual_age, max_age);
     }
 }

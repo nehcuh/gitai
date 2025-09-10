@@ -68,6 +68,24 @@ gitai prompts init
 gitai prompts update
 ```
 
+## MCP 映射
+
+- 对应工具：review 服务的 `execute_review`
+- 示例请求：
+```json
+{
+  "name": "execute_review",
+  "arguments": {
+    "path": ".",
+    "tree_sitter": true,
+    "security_scan": false,
+    "issue_ids": ["#123"],
+    "format": "text",
+    "deviation_analysis": false
+  }
+}
+```
+
 ## 注意事项与限制
 - 全局依赖图会扫描工作目录；大型仓库耗时较长。
 - 中心性阈值和影响传播深度为启发式默认值。

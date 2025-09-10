@@ -60,12 +60,14 @@ async fn handle_graph_export(
     threshold: f32,
 ) -> Result<()> {
     use gitai::architectural_impact::graph_export::export_dot_string;
-    
+
     info!("Exporting dependency graph for path: {}", path.display());
     debug!("Using threshold: {}", threshold);
-    
-    let dot = export_dot_string(path, threshold).await.map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    
+
+    let dot = export_dot_string(path, threshold)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
     if let Some(out) = output {
         std::fs::write(out, dot)?;
         println!("📁 依赖图已导出: {}", out.display());
@@ -74,7 +76,7 @@ async fn handle_graph_export(
         println!("{dot}");
         debug!("Graph output written to stdout");
     }
-    
+
     Ok(())
 }
 
@@ -97,11 +99,13 @@ async fn handle_graph_summary(
     output: Option<&std::path::PathBuf>,
 ) -> Result<()> {
     use gitai::architectural_impact::graph_export::export_summary_string;
-    
+
     info!("Generating graph summary for path: {}", path.display());
-    debug!("Parameters: radius={}, top_k={}, budget_tokens={}, format={}", 
-           radius, top_k, budget_tokens, format);
-    
+    debug!(
+        "Parameters: radius={}, top_k={}, budget_tokens={}, format={}",
+        radius, top_k, budget_tokens, format
+    );
+
     let summary = export_summary_string(
         path,
         radius,
@@ -117,8 +121,9 @@ async fn handle_graph_summary(
         path_samples,
         path_max_hops,
     )
-    .await.map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    
+    .await
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
     if let Some(out) = output {
         std::fs::write(out, &summary)?;
         println!("📁 图摘要已导出: {}", out.display());
@@ -127,7 +132,7 @@ async fn handle_graph_summary(
         println!("{summary}");
         debug!("Summary output written to stdout");
     }
-    
+
     Ok(())
 }
 
@@ -139,7 +144,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_graph_export() {
         let path = std::path::Path::new(".");
-        let result = handle_graph_export(&path, None, 0.1).await;
+        let result = handle_graph_export(path, None, 0.1).await;
         // This test may fail without proper setup, but shows the interface
         assert!(result.is_ok() || result.is_err());
     }
@@ -148,7 +153,20 @@ mod tests {
     async fn test_handle_graph_summary() {
         let path = std::path::Path::new(".");
         let result = handle_graph_summary(
-            &path, 1, 10, 1000, false, "json", false, "labelprop", 10, 5, false, 5, 3, None,
+            path,
+            1,
+            10,
+            1000,
+            false,
+            "json",
+            false,
+            "labelprop",
+            10,
+            5,
+            false,
+            5,
+            3,
+            None,
         )
         .await;
         // This test may fail without proper setup, but shows the interface

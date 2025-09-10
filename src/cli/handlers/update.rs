@@ -6,16 +6,13 @@ use gitai::config::Config;
 
 /// Handler for update command with Command enum
 #[cfg(feature = "update-notifier")]
-pub async fn handle_command(
-    config: &Config,
-    command: &Command,
-) -> crate::cli::CliResult<()> {
-    use crate::update;
-
+pub async fn handle_command(config: &Config, command: &Command) -> crate::cli::CliResult<()> {
     match command {
         Command::Update { check, format } => {
             if *check {
-                handle_update_check(config, format).await.map_err(|e| e.into())
+                handle_update_check(config, format)
+                    .await
+                    .map_err(|e| e.into())
             } else {
                 handle_update(config).await.map_err(|e| e.into())
             }
@@ -26,10 +23,10 @@ pub async fn handle_command(
 
 #[cfg(feature = "update-notifier")]
 async fn handle_update_check(config: &Config, format: &str) -> Result<()> {
-    use crate::update::AutoUpdater;
-    
+    use gitai::update::AutoUpdater;
+
     info!("Checking for updates in {} format", format);
-    
+
     let updater = AutoUpdater::new(config.clone());
     let status = updater.check_update_status();
 
@@ -60,11 +57,11 @@ async fn handle_update_check(config: &Config, format: &str) -> Result<()> {
 
 #[cfg(feature = "update-notifier")]
 async fn handle_update(config: &Config) -> Result<()> {
-    use crate::update::AutoUpdater;
-    
+    use gitai::update::AutoUpdater;
+
     info!("Updating scan rules");
     println!("🔄 正在更新规则...");
-    
+
     let updater = AutoUpdater::new(config.clone());
     let result = updater.update_scan_rules().await?;
 
@@ -78,22 +75,24 @@ async fn handle_update(config: &Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AiConfig, ScanConfig};
 
     fn create_test_config() -> Config {
+        use gitai::config::{AiConfig, ScanConfig};
         Config {
             ai: AiConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "test-model".to_string(),
                 api_key: None,
-                temperature: Some(0.3),
+                temperature: 0.3,
             },
             scan: ScanConfig {
                 default_path: Some(".".to_string()),
-                timeout: Some(300),
-                jobs: Some(4),
+                timeout: 300,
+                jobs: 4,
+                rules_dir: None,
             },
             devops: None,
+            language: None,
             mcp: None,
         }
     }
@@ -106,7 +105,7 @@ mod tests {
             check: true,
             format: "text".to_string(),
         };
-        
+
         let result = handle_command(&config, &command).await;
         assert!(result.is_ok() || result.is_err());
     }
@@ -119,7 +118,7 @@ mod tests {
             check: false,
             format: "text".to_string(),
         };
-        
+
         let result = handle_command(&config, &command).await;
         assert!(result.is_ok() || result.is_err());
     }

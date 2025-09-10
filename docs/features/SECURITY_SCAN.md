@@ -345,6 +345,33 @@ node_modules/
 **/*.pb.go
 ```
 
+## MCP 映射
+
+- 对应工具：scan 服务的 `execute_scan`
+- 参数：path（必填）、tool（opengrep/security，可选，默认 opengrep）、timeout、lang
+- 注意：MCP 服务不会自动更新规则。若扫描结果显示未加载有效规则，请配置规则来源或先通过 CLI 更新规则。
+
+规则配置建议：
+- 通过环境变量提供规则包（推荐）：
+-  - export GITAI_RULES_URL="https://github.com/opengrep/opengrep-rules/archive/refs/heads/main.tar.gz"
+  - 然后重试 MCP 扫描
+- 或使用 CLI 一次性更新：
+  - gitai scan --update-rules --auto-install
+- 或将规则手动放置到目录：
+  - ~/.cache/gitai/rules/opengrep-rules-main/java（及其他语言子目录）
+
+示例请求：
+```json
+{
+  "name": "execute_scan",
+  "arguments": {
+    "path": ".",
+    "tool": "opengrep",
+    "timeout": 300
+  }
+}
+```
+
 ## 与其他功能集成
 
 ### 代码评审集成

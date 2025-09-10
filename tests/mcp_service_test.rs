@@ -3,6 +3,7 @@
 //! 测试 MCP 服务的基本功能
 
 #[cfg(all(feature = "mcp", test))]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use gitai::config::{Config, McpConfig, McpServerConfig, McpServicesConfig};
     use gitai::mcp::GitAiMcpManager;

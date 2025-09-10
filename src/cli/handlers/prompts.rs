@@ -9,12 +9,12 @@ use gitai::config::Config;
 /// Handler for the prompts command
 pub async fn handle_prompts(_config: &Config, action: &PromptAction) -> Result<()> {
     info!("Handling prompts action: {:?}", action);
-    
+
     match action {
         PromptAction::Init => {
             info!("Initializing prompts directory");
             println!("🔄 正在初始化提示词目录...");
-            
+
             let prompts_dir = dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config")
@@ -26,8 +26,14 @@ pub async fn handle_prompts(_config: &Config, action: &PromptAction) -> Result<(
 
             // 创建默认模板
             let templates = [
-                ("commit.md", include_str!("../../../assets/prompts/commit.md")),
-                ("review.md", include_str!("../../../assets/prompts/review.md")),
+                (
+                    "commit.md",
+                    include_str!("../../../assets/prompts/commit.md"),
+                ),
+                (
+                    "review.md",
+                    include_str!("../../../assets/prompts/review.md"),
+                ),
             ];
 
             for (filename, content) in &templates {
@@ -58,7 +64,7 @@ pub async fn handle_prompts(_config: &Config, action: &PromptAction) -> Result<(
             println!("📝 可用的提示词模板:");
             let entries = fs::read_dir(&prompts_dir)?;
             let mut count = 0;
-            
+
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("md") {
@@ -69,7 +75,7 @@ pub async fn handle_prompts(_config: &Config, action: &PromptAction) -> Result<(
                     }
                 }
             }
-            
+
             info!("Listed {} prompt templates", count);
         }
         PromptAction::Show { name, language: _ } => {
@@ -107,36 +113,34 @@ pub async fn handle_command(
     command: &gitai::args::Command,
 ) -> crate::cli::CliResult<()> {
     use gitai::args::Command;
-    
+
     match command {
-        Command::Prompts { action } => {
-            handle_prompts(config, action).await.map_err(|e| e.into())
-        }
-        _ => Err("Invalid command for prompts handler".into())
+        Command::Prompts { action } => handle_prompts(config, action).await.map_err(|e| e.into()),
+        _ => Err("Invalid command for prompts handler".into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gitai::config::{AiConfig, ScanConfig};
-    use tempfile::TempDir;
-    use std::env;
 
     fn create_test_config() -> Config {
+        use gitai::config::{AiConfig, ScanConfig};
         Config {
             ai: AiConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "test-model".to_string(),
                 api_key: None,
-                temperature: Some(0.3),
+                temperature: 0.3,
             },
             scan: ScanConfig {
                 default_path: Some(".".to_string()),
-                timeout: Some(300),
-                jobs: Some(4),
+                timeout: 300,
+                jobs: 4,
+                rules_dir: None,
             },
             devops: None,
+            language: None,
             mcp: None,
         }
     }
@@ -145,7 +149,7 @@ mod tests {
     async fn test_handle_prompts_list() {
         let config = create_test_config();
         let action = PromptAction::List;
-        
+
         // This test would need proper setup of home directory
         // For now, just verify the function signature works
         let result = handle_prompts(&config, &action).await;
@@ -159,7 +163,7 @@ mod tests {
             name: "commit".to_string(),
             language: None,
         };
-        
+
         let result = handle_prompts(&config, &action).await;
         assert!(result.is_ok() || result.is_err());
     }
@@ -168,7 +172,7 @@ mod tests {
     async fn test_handle_prompts_update() {
         let config = create_test_config();
         let action = PromptAction::Update;
-        
+
         let result = handle_prompts(&config, &action).await;
         assert!(result.is_ok());
     }
