@@ -1,24 +1,36 @@
 // Git 操作模块
-// TODO: 从 src/git.rs 迁移
+// Re-export implementations from git_impl
 
 use gitai_types::Result;
 
-pub fn get_staged_diff() -> Result<String> {
-    // TODO: 实际实现
-    Ok(String::new())
-}
+// Include git_impl module as sibling file
+#[path = "git_impl.rs"]
+mod git_impl;
 
-pub fn get_diff() -> Result<String> {
-    // TODO: 实际实现
-    Ok(String::new())
+// Re-export the actual implementations
+pub use git_impl::{
+    run_git, run_git_capture,
+    get_diff, get_all_diff,
+    has_unstaged_changes, has_staged_changes,
+    get_status, git_commit, git_add_all,
+    get_unpushed_diff
+};
+
+// These are still stubs - need to be implemented or removed
+pub fn get_staged_diff() -> Result<String> {
+    // Use the actual implementation from git_impl
+    git_impl::run_git(&["diff".to_string(), "--cached".to_string()])
+        .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
 }
 
 pub fn get_current_branch() -> Result<String> {
-    // TODO: 实际实现
-    Ok("main".to_string())
+    git_impl::run_git(&["symbolic-ref".to_string(), "--short".to_string(), "HEAD".to_string()])
+        .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
+        .map(|s| s.trim().to_string())
 }
 
 pub fn get_current_commit() -> Result<String> {
-    // TODO: 实际实现
-    Ok("HEAD".to_string())
+    git_impl::run_git(&["rev-parse".to_string(), "HEAD".to_string()])
+        .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
+        .map(|s| s.trim().to_string())
 }

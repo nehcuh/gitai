@@ -11,6 +11,19 @@ description = "Code analysis engine for GitAI"
 gitai-types = { path = "../gitai-types" }
 gitai-core = { path = "../gitai-core" }
 
+# Missing dependencies
+lru = { workspace = true }
+futures-util = { workspace = true }
+walkdir = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+md5 = { workspace = true }
+dirs = { workspace = true }
+toml = { workspace = true }
+rand = "0.8"
+home = "0.5"
+directories = "5.0"
+
 # Tree-sitter for code parsing
 tree-sitter = { workspace = true }
 
@@ -52,7 +65,9 @@ cpp = ["tree-sitter-cpp"]
 # Analysis features
 dependency-graph = []
 architectural-impact = []
-full = ["all-languages", "dependency-graph", "architectural-impact"]
+ai = []
+security = []
+full = ["all-languages", "dependency-graph", "architectural-impact", "ai", "security"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
