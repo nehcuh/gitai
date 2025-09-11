@@ -16,7 +16,6 @@ gitai-types = { path = "../gitai-types" }
 gitai-core = { path = "../gitai-core" }
 gitai-analysis = { path = "../gitai-analysis" }
 gitai-security = { path = "../gitai-security" }
-gitai-metrics = { path = "../gitai-metrics" }
 
 # CLI framework
 clap = { workspace = true }
@@ -35,6 +34,9 @@ env_logger = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# Date and time
+chrono = { workspace = true }
+
 # Error handling
 anyhow = { workspace = true }
 
@@ -45,10 +47,10 @@ dirs = { workspace = true }
 colored = "2.0"
 
 [features]
-default = ["full-analysis", "security", "metrics"]
+# Keep defaults minimal to avoid pulling optional subsystems during migration
+default = ["minimal"]
 full-analysis = ["gitai-analysis/full"]
 security = ["gitai-security/full"]
-metrics = ["gitai-metrics/full"]
 minimal = []
 
 [dev-dependencies]

@@ -236,6 +236,7 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
 }
 
 /// 获取最后一次提交的 diff
+#[allow(dead_code)]
 pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // 先检查是否有多个提交
     let log_output = run_git(&[
@@ -305,6 +306,7 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
 }
 
 /// 获取所有变更（包括最后一次提交）- 用于 MCP 调用
+#[allow(dead_code)]
 pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // 首先尝试获取当前的变更
     match get_all_diff() {
@@ -322,6 +324,7 @@ pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error
 }
 
 /// 过滤掉被 .gitignore 忽略的文件路径
+#[allow(dead_code)]
 pub fn filter_ignored_files(
     paths: Vec<String>,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
@@ -345,6 +348,7 @@ pub fn filter_ignored_files(
 }
 
 /// 获取当前仓库中被跟踪的文件列表（排除 .gitignore 中的文件）
+#[allow(dead_code)]
 pub fn get_tracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // git ls-files 只会列出被跟踪的文件，自动排除 .gitignore 中的文件
     let output = run_git(&["ls-files".to_string()])?;
@@ -368,11 +372,13 @@ pub fn get_untracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + 
 }
 
 /// 是否存在未跟踪变更（新增文件）
+#[allow(dead_code)]
 pub fn has_untracked_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     Ok(!get_untracked_files()?.is_empty())
 }
 
 /// 是否存在任何提交
+#[allow(dead_code)]
 pub fn has_any_commit() -> bool {
     if let Ok((code, _out, _err)) = run_git_capture(&[
         "rev-parse".to_string(),
@@ -385,6 +391,7 @@ pub fn has_any_commit() -> bool {
 }
 
 /// 检查文件是否被 .gitignore 忽略
+#[allow(dead_code)]
 pub fn is_file_ignored(file_path: &Path) -> bool {
     let path_str = file_path.to_string_lossy();
 

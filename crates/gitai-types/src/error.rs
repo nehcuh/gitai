@@ -1,7 +1,6 @@
 //! Error types for GitAI
 
 use thiserror::Error;
-use std::path::PathBuf;
 
 /// GitAI specific error types
 #[derive(Debug, Error)]

@@ -1,7 +1,7 @@
 // GitAI 统一操作上下文
 // 消除重复定义，提供一致的数据结构
 
-use gitai_types::{GitInfo, Finding, Severity, RiskLevel};
+use gitai_types::{GitInfo, Severity, RiskLevel};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::collections::HashMap;
@@ -268,6 +268,10 @@ impl OperationContext {
             .collect::<Vec<_>>()
             .join("\n")
     }
+}
+
+impl Default for OperationContext {
+    fn default() -> Self { Self::new() }
 }
 
 impl OperationOptions {

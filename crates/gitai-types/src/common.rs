@@ -146,23 +146,41 @@ impl std::str::FromStr for FilePath {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProgrammingLanguage {
+    /// Rust 语言
     Rust,
+    /// Java 语言
     Java,
+    /// Python 语言
     Python,
+    /// JavaScript 语言
     JavaScript,
+    /// TypeScript 语言
     TypeScript,
+    /// Go 语言
     Go,
+    /// C 语言
     C,
+    /// C++ 语言
     Cpp,
+    /// C# 语言
     CSharp,
+    /// Scala 语言
     Scala,
+    /// Kotlin 语言
     Kotlin,
+    /// Swift 语言
     Swift,
+    /// PHP 语言
     Php,
+    /// Ruby 语言
     Ruby,
+    /// F# 语言
     FSharp,
+    /// OCaml 语言
     OCaml,
+    /// Haskell 语言
     Haskell,
+    /// 未知语言
     Unknown,
 }
 
@@ -430,8 +448,11 @@ impl CodeChange {
 /// 变更统计信息
 #[derive(Debug, Clone)]
 pub struct ChangeStats {
+    /// 变更的行数
     pub lines_changed: u32,
+    /// 内容大小（字节数）
     pub content_size: usize,
+    /// 变更类型
     pub change_type: ChangeType,
 }
 
@@ -1077,11 +1098,14 @@ pub enum FilterOperator {
 /// 结果包装器
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResultWrapper<T> {
+    /// 结果数据
     pub data: T,
+    /// 结果元数据
     pub metadata: ResultMetadata,
 }
 
 impl<T> ResultWrapper<T> {
+    /// 创建新的结果包装器
     pub fn new(data: T) -> Self {
         Self {
             data,
@@ -1089,6 +1113,7 @@ impl<T> ResultWrapper<T> {
         }
     }
 
+    /// 设置元数据
     pub fn with_metadata(mut self, metadata: ResultMetadata) -> Self {
         self.metadata = metadata;
         self
@@ -1098,38 +1123,49 @@ impl<T> ResultWrapper<T> {
 /// 结果元数据
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ResultMetadata {
+    /// 时间戳
     pub timestamp: Option<DateTime<Utc>>,
+    /// 版本信息
     pub version: Option<String>,
+    /// 请求ID
     pub request_id: Option<String>,
+    /// 处理时间（毫秒）
     pub processing_time_ms: Option<u64>,
+    /// 缓存命中标志
     pub cache_hit: Option<bool>,
 }
 
 impl ResultMetadata {
+    /// 创建新的元数据
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// 设置时间戳
     pub fn with_timestamp(mut self) -> Self {
         self.timestamp = Some(Utc::now());
         self
     }
 
+    /// 设置版本信息
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = Some(version.into());
         self
     }
 
+    /// 设置请求ID
     pub fn with_request_id(mut self, request_id: impl Into<String>) -> Self {
         self.request_id = Some(request_id.into());
         self
     }
 
+    /// 设置处理时间
     pub fn with_processing_time(mut self, duration: std::time::Duration) -> Self {
         self.processing_time_ms = Some(duration.as_millis() as u64);
         self
     }
 
+    /// 设置缓存命中状态
     pub fn with_cache_hit(mut self, hit: bool) -> Self {
         self.cache_hit = Some(hit);
         self
@@ -1139,14 +1175,20 @@ impl ResultMetadata {
 /// 审计信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditInfo {
+    /// 创建时间
     pub created_at: DateTime<Utc>,
+    /// 创建者
     pub created_by: Option<String>,
+    /// 更新时间
     pub updated_at: DateTime<Utc>,
+    /// 更新者
     pub updated_by: Option<String>,
+    /// 版本号
     pub version: u64,
 }
 
 impl AuditInfo {
+    /// 创建新的审计信息
     pub fn new(creator: Option<impl Into<String>>) -> Self {
         let now = Utc::now();
         let created_by = creator.map(|c| c.into());
@@ -1160,6 +1202,7 @@ impl AuditInfo {
         }
     }
 
+    /// 更新审计信息
     pub fn update(&mut self, updater: Option<impl Into<String>>) {
         self.updated_at = Utc::now();
         self.updated_by = updater.map(|u| u.into());
@@ -1176,12 +1219,16 @@ impl Default for AuditInfo {
 /// 软删除信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeletionInfo {
+    /// 是否已删除
     pub is_deleted: bool,
+    /// 删除时间
     pub deleted_at: Option<DateTime<Utc>>,
+    /// 删除者
     pub deleted_by: Option<String>,
 }
 
 impl DeletionInfo {
+    /// 创建新的软删除信息
     pub fn new() -> Self {
         Self {
             is_deleted: false,
@@ -1190,12 +1237,14 @@ impl DeletionInfo {
         }
     }
 
+    /// 标记为删除
     pub fn delete(&mut self, deleter: Option<impl Into<String>>) {
         self.is_deleted = true;
         self.deleted_at = Some(Utc::now());
         self.deleted_by = deleter.map(|d| d.into());
     }
 
+    /// 恢复删除
     pub fn restore(&mut self) {
         self.is_deleted = false;
         self.deleted_at = None;
@@ -1283,128 +1332,196 @@ impl IntoIterator for Tags {
     }
 }
 
-/// 结果类型别名
+/// 文件路径结果类型别名
 pub type FilePathResult = Result<FilePath, String>;
+/// 行范围结果类型别名
 pub type LineRangeResult = Result<LineRange, String>;
+/// 版本结果类型别名
 pub type VersionResult = Result<Version, String>;
 
 /// 项目实体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
+    /// 项目ID
     pub id: String,
+    /// 项目名称
     pub name: String,
+    /// 项目描述
     pub description: Option<String>,
+    /// 项目路径
     pub path: String,
+    /// 项目语言
     pub language: Option<String>,
+    /// 创建时间
     pub created_at: DateTime<Utc>,
+    /// 更新时间
     pub updated_at: DateTime<Utc>,
+    /// 元数据
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// 分析结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisResult {
+    /// 分析结果ID
     pub id: String,
+    /// 项目ID
     pub project_id: String,
+    /// 分析类型
     pub analysis_type: String,
+    /// 开始时间
     pub start_time: DateTime<Utc>,
+    /// 结束时间
     pub end_time: DateTime<Utc>,
+    /// 分析状态
     pub status: AnalysisStatus,
+    /// 发现的问题列表
     pub findings: Vec<Finding>,
+    /// 分析摘要
     pub summary: AnalysisSummary,
 }
 
 /// 分析状态
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum AnalysisStatus {
+    /// 等待中
     Pending,
+    /// 运行中
     Running,
+    /// 已完成
     Completed,
+    /// 失败
     Failed,
 }
 
 /// 发现问题
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
+    /// 问题ID
     pub id: String,
+    /// 严重级别
     pub severity: FindingSeverity,
+    /// 问题类别
     pub category: String,
+    /// 问题描述
     pub message: String,
+    /// 文件路径
     pub file_path: Option<String>,
+    /// 行号
     pub line_number: Option<u32>,
+    /// 建议
     pub recommendation: Option<String>,
 }
 
 /// 发现严重级别
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FindingSeverity {
+    /// 信息
     Info,
+    /// 警告
     Warning,
+    /// 错误
     Error,
+    /// 严重
     Critical,
 }
 
 /// 分析摘要
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisSummary {
+    /// 总文件数
     pub total_files: usize,
+    /// 已分析文件数
     pub files_analyzed: usize,
+    /// 总发现问题数
     pub total_findings: usize,
+    /// 按严重级别分类的问题数量
     pub findings_by_severity: HashMap<FindingSeverity, usize>,
+    /// 持续时间（毫秒）
     pub duration_ms: u64,
 }
 
 /// 配置实体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Configuration {
+    /// 配置ID
     pub id: String,
+    /// 配置名称
     pub name: String,
+    /// 配置版本
     pub version: String,
+    /// 设置项
     pub settings: HashMap<String, serde_json::Value>,
+    /// 创建时间
     pub created_at: DateTime<Utc>,
+    /// 更新时间
     pub updated_at: DateTime<Utc>,
 }
 
 /// 工作流实体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workflow {
+    /// 工作流ID
     pub id: String,
+    /// 工作流名称
     pub name: String,
+    /// 工作流描述
     pub description: Option<String>,
+    /// 工作流步骤
     pub steps: Vec<WorkflowStep>,
+    /// 工作流状态
     pub status: WorkflowStatus,
+    /// 创建时间
     pub created_at: DateTime<Utc>,
+    /// 开始时间
     pub started_at: Option<DateTime<Utc>>,
+    /// 完成时间
     pub completed_at: Option<DateTime<Utc>>,
 }
 
 /// 工作流步骤
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowStep {
+    /// 步骤ID
     pub id: String,
+    /// 步骤名称
     pub name: String,
+    /// 步骤类型
     pub step_type: String,
+    /// 参数
     pub parameters: HashMap<String, serde_json::Value>,
+    /// 依赖的步骤ID
     pub depends_on: Vec<String>,
+    /// 步骤状态
     pub status: StepStatus,
 }
 
 /// 工作流状态
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum WorkflowStatus {
+    /// 等待中
     Pending,
+    /// 运行中
     Running,
+    /// 已完成
     Completed,
+    /// 失败
     Failed,
+    /// 已取消
     Cancelled,
 }
 
 /// 步骤状态
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum StepStatus {
+    /// 等待中
     Pending,
+    /// 运行中
     Running,
+    /// 已完成
     Completed,
+    /// 失败
     Failed,
+    /// 已跳过
     Skipped,
 }

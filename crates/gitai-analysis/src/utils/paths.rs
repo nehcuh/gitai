@@ -17,7 +17,7 @@ use std::{env, fs};
 ///
 /// # Examples
 /// ```
-/// use gitai::utils::paths::expand_user;
+/// use gitai_analysis::utils::paths::expand_user;
 ///
 /// let path = expand_user("~/Documents");
 /// assert!(path.is_absolute());
@@ -60,9 +60,8 @@ pub fn config_dir() -> PathBuf {
     }
 
     // 3. 平台标准目录
-    directories::BaseDirs::new()
+    dirs::config_dir()
         .expect("Failed to determine user directories")
-        .config_dir()
         .join("gitai")
 }
 
@@ -85,9 +84,8 @@ pub fn cache_dir() -> PathBuf {
     }
 
     // 3. 平台标准目录
-    directories::BaseDirs::new()
+    dirs::cache_dir()
         .expect("Failed to determine user directories")
-        .cache_dir()
         .join("gitai")
 }
 
@@ -162,7 +160,7 @@ pub fn resolve_config_path(path: &str) -> PathBuf {
 ///
 /// # Examples
 /// ```
-/// use gitai::utils::paths::resolve_mcp_path;
+/// use gitai_analysis::utils::paths::resolve_mcp_path;
 ///
 /// // 绝对路径
 /// let abs_path = resolve_mcp_path("/usr/local/bin", "Test").unwrap();

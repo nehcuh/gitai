@@ -75,10 +75,24 @@ jobs:
       - name: Build variant
         run: |
           if [ "${{ matrix.variant.features }}" = "default" ]; then
-            cargo build --release --locked
+            cargo build --workspace --release --locked --bin gitai
           else
-            cargo build --release --locked --no-default-features --features "${{ matrix.variant.features }}"
+            cargo build --workspace --release --locked --no-default-features --features "${{ matrix.variant.features }}" --bin gitai
           fi
+        shell: bash
+
+      - name: Verify workspace build
+        run: |
+          echo "=== Verify workspace build ==="
+          cargo check --workspace --all-targets --release
+          echo "=== Verify specific crates ==="
+          cargo check -p gitai-types --release
+          cargo check -p gitai-core --release
+          cargo check -p gitai-analysis --release
+          cargo check -p gitai-cli --release
+          cargo check -p gitai-mcp --release
+          cargo check -p gitai-metrics --release
+          cargo check -p gitai-security --release
         shell: bash
         
       - name: Rename binary

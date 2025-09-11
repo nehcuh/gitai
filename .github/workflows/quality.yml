@@ -29,17 +29,34 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy (lint)
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Test (default features)
-        run: cargo test --all-targets --quiet
+      - name: Test (workspace)
+        run: cargo test --workspace --all-targets --quiet
 
-      - name: Test (all features)
-        run: cargo test --all-features --all-targets --quiet
+      - name: Test (workspace with all features)
+        run: cargo test --workspace --all-features --all-targets --quiet
+
+      - name: Test workspace integration
+        run: cargo test --test workspace_integration_test --test core_functionality_test --quiet
 
       - name: Build: minimal/default/full
         run: |
-          cargo build --no-default-features --features minimal
-          cargo build --features default
-          cargo build --features full
+          cargo build --workspace --no-default-features --features minimal
+          cargo build --workspace --features default
+          cargo build --workspace --features full
+
+      - name: Verify workspace structure
+        run: |
+          echo "=== Verify workspace structure ==="
+          # Check that all workspace members compile
+          cargo check --workspace --all-targets
+          # Check specific crates
+          cargo check -p gitai-types
+          cargo check -p gitai-core
+          cargo check -p gitai-analysis
+          cargo check -p gitai-cli
+          cargo check -p gitai-mcp
+          cargo check -p gitai-metrics
+          cargo check -p gitai-security
 

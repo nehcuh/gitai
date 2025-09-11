@@ -22,7 +22,6 @@ dirs = { workspace = true }
 toml = { workspace = true }
 rand = "0.8"
 home = "0.5"
-directories = "5.0"
 
 # Tree-sitter for code parsing
 tree-sitter = { workspace = true }

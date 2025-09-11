@@ -9,6 +9,7 @@ description = "Core functionality for GitAI"
 
 [dependencies]
 gitai-types = { path = "../gitai-types" }
+gitai-adapters = { path = "../gitai-adapters" }
 
 # Core dependencies
 anyhow = { workspace = true }
@@ -47,7 +48,12 @@ chrono = { workspace = true }
 default = ["ai", "cache"]
 ai = ["dep:reqwest"]
 cache = ["dep:lru", "dep:md5", "dep:parking_lot"]
-full = ["ai", "cache"]
+# Newly added feature flags to align with cfg! checks in code
+security = []
+mcp = []
+metrics = []
+# Meta feature including all capabilities
+full = ["ai", "cache", "security", "mcp", "metrics"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

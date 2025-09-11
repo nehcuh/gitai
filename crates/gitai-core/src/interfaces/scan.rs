@@ -1,7 +1,5 @@
 //! 安全扫描服务接口定义
 
-use gitai_types::*;
-use crate::domain_errors::{DomainError, ScanError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -23,13 +23,16 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Build (all features)
-        run: cargo build --all-features
+      - name: Build (workspace)
+        run: cargo build --workspace
 
-      - name: Test (unit + bins, all features)
-        run: cargo test --lib --bins --all-features -- --nocapture
+      - name: Test (workspace)
+        run: cargo test --workspace -- --nocapture
+
+      - name: Test workspace integration
+        run: cargo test --test workspace_integration_test --test core_functionality_test
 
   feature-matrix:
     name: Feature matrix on ${{ matrix.os }} - ${{ matrix.feature }}
@@ -38,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        feature: [minimal, ai, security, devops, update-notifier, full]
+        feature: [minimal, ai, security, devops, full]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,17 +58,33 @@ jobs:
           set -e
           case "${{ matrix.feature }}" in
             minimal)
-              cargo build --no-default-features --features minimal;;
+              cargo build --workspace --no-default-features --features minimal;;
             ai)
-              cargo build --no-default-features --features "ai,tree-sitter-rust";;
+              cargo build --workspace --no-default-features --features "ai,tree-sitter-rust";;
             security)
-              cargo build --no-default-features --features security;;
+              cargo build --workspace --no-default-features --features security;;
             devops)
-              cargo build --no-default-features --features devops;;
-            update-notifier)
-              cargo build --no-default-features --features update-notifier;;
+              cargo build --workspace --no-default-features --features devops;;
             full)
-              cargo build --features full;;
+              cargo build --workspace --features full;;
+            *) echo "Unknown feature"; exit 1;;
+          esac
+
+      - name: Test selected feature
+        shell: bash
+        run: |
+          set -e
+          case "${{ matrix.feature }}" in
+            minimal)
+              cargo test --workspace --no-default-features --features minimal;;
+            ai)
+              cargo test --workspace --no-default-features --features "ai,tree-sitter-rust";;
+            security)
+              cargo test --workspace --no-default-features --features security;;
+            devops)
+              cargo test --workspace --no-default-features --features devops;;
+            full)
+              cargo test --workspace --features full;;
             *) echo "Unknown feature"; exit 1;;
           esac
 
@@ -91,15 +110,15 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build benches (all features)
-        run: cargo bench --all-features --no-run
+      - name: Build benches (workspace)
+        run: cargo bench --workspace --no-run
 
       - name: Run criterion (quick)
         env:
           RUST_LOG: warn
         run: |
           # Quick mode: reduce warm-up/measurement/sample size, disable plots
-          cargo bench --all-features -- \
+          cargo bench --workspace -- \
             --warm-up-time 0.0 \
             --measurement-time 1.0 \
             --sample-size 10 \
