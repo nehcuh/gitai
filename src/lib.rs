@@ -12,7 +12,7 @@ pub mod commit;
 // config模块已迁移到crates/gitai-core
 pub mod config_init;
 pub mod context;
-pub mod error;
+// error模块已迁移到crates/gitai-types
 pub mod error_ext;
 #[cfg(test)]
 pub mod error_tests;
@@ -32,8 +32,7 @@ pub mod infrastructure;
 pub mod domain;
 
 // 条件编译模块
-#[cfg(feature = "ai")]
-pub mod ai;
+// ai模块已迁移到crates/gitai-core
 
 #[cfg(feature = "security")]
 pub mod scan;
@@ -53,7 +52,8 @@ pub use architectural_impact::{ArchitecturalImpactAnalysis, BreakingChange, Risk
 // Config已从crates/gitai-core导出
 pub use gitai_core::config::Config;
 pub use context::{Issue, OperationContext, OperationOptions};
-pub use error::{GitAIError, Result};
+// Error类型已从crates/gitai-types导出
+pub use gitai_types::error::{GitAIError, Result};
 pub use project_insights::{InsightsGenerator, ProjectInsights};
 pub use prompts::{PromptContext, PromptManager};
 pub use tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
