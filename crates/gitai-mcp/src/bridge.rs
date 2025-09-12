@@ -130,21 +130,24 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                             Some(&idx) => {
                                 if let Some(svc) = services.get(idx) {
                                     let start = std::time::Instant::now();
-                                    match svc.execute(arguments).await {
-                                        Ok(result) => {
-                                            let response = json!({
-                                                "jsonrpc": "2.0",
-                                                "id": msg.get("id"),
-                                                "result": {
-                                                    "content": [
-                                                        {"type": "json", "json": result}
-                                                    ],
-                                                    "usage": {
-                                                        "duration_ms": start.elapsed().as_millis()
-                                                    }
+                                match svc.execute(arguments).await {
+                                    Ok(result) => {
+                                        // Convert JSON result to text format for MCP protocol compliance
+                                        let text_content = serde_json::to_string_pretty(&result)
+                                            .unwrap_or_else(|_| result.to_string());
+                                        let response = json!({
+                                            "jsonrpc": "2.0",
+                                            "id": msg.get("id"),
+                                            "result": {
+                                                "content": [
+                                                    {"type": "text", "text": text_content}
+                                                ],
+                                                "usage": {
+                                                    "duration_ms": start.elapsed().as_millis()
                                                 }
-                                            });
-                                            write_response(&mut stdout, &response)?;
+                                            }
+                                        });
+                                        write_response(&mut stdout, &response)?;
                                         }
                                         Err(e) => {
                                             let response = json!({
@@ -520,10 +523,18 @@ pub async fn process_message(
                         )))
                     };
                     match result {
-                        Ok(val) => json!({
-                            "jsonrpc":"2.0","id": msg.get("id"),
-                            "result": {"content":[{"type":"json","json": val}], "usage": {"duration_ms": start.elapsed().as_millis()}}
-                        }),
+                        Ok(val) => {
+                            // Convert JSON result to text format for MCP protocol compliance
+                            let text_content = serde_json::to_string_pretty(&val)
+                                .unwrap_or_else(|_| val.to_string());
+                            json!({
+                                "jsonrpc":"2.0","id": msg.get("id"),
+                                "result": {
+                                    "content":[{"type":"text","text": text_content}], 
+                                    "usage": {"duration_ms": start.elapsed().as_millis()}
+                                }
+                            })
+                        },
                         Err(e) => json!({
                             "jsonrpc":"2.0","id": msg.get("id"),
                             "error": {"code": -32000, "message": format!("Tool execution failed: {}", e), "data": {"type":"ExecutionFailed"}}
