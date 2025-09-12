@@ -1,7 +1,7 @@
 //! GitAI Core Library
 //! 核心功能模块，提供基础服务和通用功能
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]  // 暂时关闭文档警告
 
 /// Configuration management (loading, validation)
 pub mod config;
