@@ -163,6 +163,78 @@ pub enum Command {
         #[arg(long, default_value = "127.0.0.1:8080")]
         addr: String,
     },
+    /// MCP健康检查
+    McpHealth {
+        /// MCP服务器URL
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// MCP工具列表
+    McpTools {
+        /// MCP服务器URL
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// MCP服务器信息
+    McpInfo {
+        /// MCP服务器URL
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// 调用MCP工具
+    McpCall {
+        /// MCP服务器URL
+        #[arg(long)]
+        url: Option<String>,
+        /// 工具名称
+        #[arg(short, long)]
+        name: String,
+        /// 工具参数（JSON）
+        #[arg(long)]
+        args: Option<String>,
+        /// 从文件读取参数
+        #[arg(long)]
+        args_file: Option<PathBuf>,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 原始输出模式
+        #[arg(long)]
+        raw: bool,
+        /// 压缩输出
+        #[arg(long)]
+        minify: bool,
+        /// 允许JSONC格式（支持注释和尾随逗号）
+        #[arg(long)]
+        allow_jsonc: bool,
+    },
+    /// 批量调用MCP工具
+    McpBatch {
+        /// MCP服务器URL
+        #[arg(long)]
+        url: Option<String>,
+        /// 批量调用文件（JSON数组）
+        #[arg(short, long)]
+        file: PathBuf,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 原始输出模式
+        #[arg(long)]
+        raw: bool,
+        /// 压缩输出
+        #[arg(long)]
+        minify: bool,
+        /// 并发数
+        #[arg(long, default_value = "5")]
+        concurrency: usize,
+        /// 重试次数
+        #[arg(long, default_value = "3")]
+        retries: usize,
+        /// 允许JSONC格式（支持注释和尾随逗号）
+        #[arg(long)]
+        allow_jsonc: bool,
+    },
     /// 初始化GitAI配置
     Init {
         /// 配置URL（用于企业内网）
@@ -190,6 +262,24 @@ pub enum Command {
     Metrics {
         #[command(subcommand)]
         action: MetricsAction,
+    },
+    /// 显示可用特性
+    Features {
+        /// 输出格式 (text|json|table)
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// 评估项目质量
+    Evaluate {
+        /// 要评估的路径
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// 输出格式 (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
     },
     /// 依赖图导出（全局/子目录）
     Graph {
@@ -241,12 +331,6 @@ pub enum Command {
         /// 单条路径最大跳数（调用链长度上限）
         #[arg(long, default_value_t = 5)]
         path_max_hops: usize,
-    },
-    /// 显示本构建启用的功能
-    Features {
-        /// 输出格式 (text|table|json)
-        #[arg(long, default_value = "text")]
-        format: String,
     },
 }
 

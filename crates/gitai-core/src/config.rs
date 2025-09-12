@@ -54,6 +54,10 @@ pub struct DevOpsConfig {
     pub token: Option<String>,
     /// 项目标识（可选）
     pub project: Option<String>,
+    /// 空间 ID（仅 Coding 平台使用）
+    pub space_id: Option<u64>,
+    /// 请求超时时间（秒）
+    pub timeout: u64,
 }
 
 /// MCP（模型上下文协议）配置

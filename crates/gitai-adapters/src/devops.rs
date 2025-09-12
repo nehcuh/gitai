@@ -104,7 +104,7 @@ impl DevOpsClient {
             .client
             .get(&url)
             .header("Accept", "application/json")
-            .header("Authorization", format!("token {}", self.config.token))
+            .header("Authorization", format!("token {}", self.config.token.as_deref().unwrap_or("")))
             .header("Content-Type", "application/json")
             .send()
             .await?;
@@ -242,7 +242,7 @@ impl DevOpsClient {
         let response = self
             .client
             .get(&url)
-            .header("Authorization", format!("token {}", self.config.token))
+            .header("Authorization", format!("token {}", self.config.token.as_deref().unwrap_or("")))
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await?;
