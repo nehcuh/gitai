@@ -5,6 +5,7 @@
 
 pub mod change;
 pub mod common;
+pub mod entities;
 pub mod error;
 pub mod risk;
 

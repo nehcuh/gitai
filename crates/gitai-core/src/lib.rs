@@ -5,6 +5,8 @@
 
 /// Configuration management (loading, validation)
 pub mod config;
+/// Commit message generation and management
+pub mod commit;
 /// Shared operation context and domain structures
 pub mod context;
 /// Domain-specific error types and results
@@ -17,6 +19,8 @@ pub mod git;
 pub mod interfaces;
 /// Service layer adapters and orchestration helpers
 pub mod services;
+/// Utility modules for common functionality
+pub mod utils;
 
 /// Adapter integration registry and traits exposure
 pub mod adapters;

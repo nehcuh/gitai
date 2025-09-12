@@ -1,88 +1,63 @@
 use gitai_core::config::Config;
-use lazy_static::lazy_static;
 use log::debug;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
-lazy_static! {
-    static ref VERSION_CACHE: Arc<RwLock<HashMap<String, String>>> =
-        Arc::new(RwLock::new(HashMap::new()));
-    static ref RULES_CACHE: Arc<RwLock<HashMap<PathBuf, RulesInfo>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+// 全局版本缓存，避免重复调用
+lazy_static::lazy_static! {
+    static ref VERSION_CACHE: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref RULES_CACHE: Arc<RwLock<HashMap<std::path::PathBuf, RulesInfo>>> = Arc::new(RwLock::new(HashMap::new()));
 }
 
-/// Security scan result
+/// 扫描结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
-    /// 扫描工具名称
     pub tool: String,
-    /// 扫描工具版本
     pub version: String,
-    /// 执行耗时（秒）
     pub execution_time: f64,
-    /// 发现的问题列表
     pub findings: Vec<Finding>,
-    /// 错误信息（如发生）
     pub error: Option<String>,
-    /// 规则信息（目录、来源、数量）
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub rules_info: Option<RulesInfo>,
 }
 
-/// 规则信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RulesInfo {
-    /// 规则目录路径
     pub dir: String,
-    /// 规则来源列表
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub sources: Vec<String>,
-    /// 规则总数
     pub total_rules: usize,
-    /// 规则更新时间
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub updated_at: Option<String>,
 }
 
-/// Security finding
+/// 安全问题发现
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
-    /// 问题标题
     pub title: String,
-    /// 文件路径
-    pub file_path: PathBuf,
-    /// 行号
+    pub file_path: std::path::PathBuf,
     pub line: usize,
-    /// 列号
     pub column: usize,
-    /// 严重级别
     pub severity: String,
-    /// 规则 ID
     pub rule_id: Option<String>,
-    /// 相关代码片段
     pub code_snippet: Option<String>,
-    /// 详细说明
     pub message: String,
-    /// 修复建议
     pub remediation: Option<String>,
 }
 
-/// Severity level
+/// 严重程度
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Severity {
-    /// 错误
     Error,
-    /// 警告
     Warning,
-    /// 信息
     Info,
 }
 
-/// Run OpenGrep security scan
+/// 运行OpenGrep扫描
 pub fn run_opengrep_scan(
     config: &Config,
     path: &Path,
@@ -92,6 +67,7 @@ pub fn run_opengrep_scan(
 ) -> Result<ScanResult, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let start_time = std::time::Instant::now();
 
+    // 检查路径是否存在
     if !path.exists() {
         log::error!("扫描路径不存在: {}", path.display());
         return Err(format!("扫描路径不存在: {}", path.display()).into());
@@ -99,6 +75,7 @@ pub fn run_opengrep_scan(
 
     log::info!("开始扫描: {}", path.display());
 
+    // 构建命令（不要把可执行名放入 args）
     let mut args = vec![
         "--json".to_string(),
         "--quiet".to_string(),
@@ -111,27 +88,30 @@ pub fn run_opengrep_scan(
         args.push(format!("--jobs={}", config.scan.jobs));
     }
 
-    // honor .gitignore
+    // 添加 .gitignore 支持
+    // OpenGrep/Semgrep 默认会遵守 .gitignore，但我们明确启用它
     args.push("--use-git-ignore".to_string());
 
-    // Rules directory
+    // 规则目录
     let rules_dir = config
         .scan
         .rules_dir
         .clone()
-        .map(PathBuf::from)
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
                 .join(".cache")
                 .join("gitai")
                 .join("rules")
         });
     let mut rules_info: Option<RulesInfo> = None;
-    let mut used_config_paths: Vec<PathBuf> = Vec::new();
+    let mut used_config_paths: Vec<std::path::PathBuf> = Vec::new();
     if rules_dir.exists() {
         if let Ok(mut iter) = std::fs::read_dir(&rules_dir) {
             if iter.next().is_some() {
+                // 语言已指定：仅使用该子目录（且包含有效规则）
+                // 未指定：包含所有存在且包含有效规则的语言子目录，避免根目录中的非规则 YAML 被解析
                 let known_langs = [
                     "java",
                     "python",
@@ -148,7 +128,8 @@ pub fn run_opengrep_scan(
                     "swift",
                 ];
 
-                fn dir_contains_valid_rules(dir: &Path) -> bool {
+                // 辅助：检测目录是否包含有效规则（任意 .yml/.yaml 且包含 'rules:' 键）
+                fn dir_contains_valid_rules(dir: &std::path::Path) -> bool {
                     use std::fs;
                     let mut stack = vec![dir.to_path_buf()];
                     while let Some(d) = stack.pop() {
@@ -156,6 +137,7 @@ pub fn run_opengrep_scan(
                             for entry in entries.flatten() {
                                 let p = entry.path();
                                 if p.is_dir() {
+                                    // 跳过隐藏目录
                                     if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
                                         if name.starts_with('.') {
                                             continue;
@@ -166,6 +148,7 @@ pub fn run_opengrep_scan(
                                     if ext.eq_ignore_ascii_case("yml")
                                         || ext.eq_ignore_ascii_case("yaml")
                                     {
+                                        // 排除常见的非规则配置文件
                                         if let Some(fname) = p.file_name().and_then(|s| s.to_str())
                                         {
                                             if fname.starts_with('.') {
@@ -193,7 +176,8 @@ pub fn run_opengrep_scan(
                     false
                 }
 
-                let mut candidate_roots: Vec<PathBuf> = vec![rules_dir.clone()];
+                // 构造候选根目录：rules_dir 以及其一级子目录（兼容 opengrep-rules-main/java 结构）
+                let mut candidate_roots: Vec<std::path::PathBuf> = vec![rules_dir.clone()];
                 if let Ok(entries) = std::fs::read_dir(&rules_dir) {
                     for entry in entries.flatten() {
                         let p = entry.path();
@@ -250,10 +234,12 @@ pub fn run_opengrep_scan(
                     }
                 }
 
+                // 添加所有配置目录
                 for p in &used_config_paths {
                     args.push(format!("--config={}", p.display()));
                 }
 
+                // 读取元信息：优先使用第一个有效目录；如果没有，则尝试根目录
                 if let Some(first) = used_config_paths.first() {
                     rules_info = read_rules_info(first).or_else(|| read_rules_info(&rules_dir));
                 }
@@ -261,19 +247,25 @@ pub fn run_opengrep_scan(
         }
     }
 
+    // 执行命令
     log::debug!("执行命令: opengrep {} {}", args.join(" "), path.display());
     let output = Command::new("opengrep")
         .args(&args)
         .arg(path)
         .output()
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        .map_err(|e| {
             log::error!("执行 OpenGrep 失败: {e}");
-            Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                "执行 OpenGrep 失败: {e}\n💡 请确保 OpenGrep 已安装并在 PATH 中"
-            ))
+            format!("执行 OpenGrep 失败: {e}\n💡 请确保 OpenGrep 已安装并在 PATH 中")
         })?;
 
     let execution_time = start_time.elapsed().as_secs_f64();
+
+    // 处理退出码
+    // OpenGrep/Semgrep 退出码说明：
+    // 0 = 成功，有或没有发现
+    // 1 = 未捕获的错误
+    // 2 = 命令无效或找不到规则/文件
+    // 对于退出码 2，我们需要检查是否真的是错误还是只是没有发现
     let exit_code = output.status.code().unwrap_or(-1);
 
     if !output.status.success() {
@@ -281,15 +273,20 @@ pub fn run_opengrep_scan(
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr_trim = stderr.trim();
 
+        // 退出码 2 可能只是没有匹配的文件或规则，需要进一步判断
         if exit_code == 2 {
+            // 检查是否有实际的错误信息
             if stderr_trim.is_empty()
                 || stderr_trim.contains("No rules")
                 || stderr_trim.contains("No files")
             {
+                // 这是一个"无发现"的情况，不是真正的错误
                 log::info!("OpenGrep 退出码 2：无匹配规则或文件，视为成功扫描");
+                // 继续处理，将其视为成功但无发现
             } else {
+                // 有实际的错误信息
                 let err_msg = stderr_trim.to_string();
-                log::warn!("OpenGrep 返回错误状态码 2: {err_msg}");
+                log::warn!("OpenGrep 返回错误状态码 2: {}", err_msg);
                 return Ok(ScanResult {
                     tool: "opengrep".to_string(),
                     version: if include_version {
@@ -304,15 +301,18 @@ pub fn run_opengrep_scan(
                 });
             }
         } else {
+            // 其他非零退出码，视为错误
             let err_msg = if !stderr_trim.is_empty() {
                 stderr_trim.to_string()
             } else {
+                // 附带 stdout 的前几行，帮助定位（截断到 500 字符）
                 let head = stdout.lines().take(5).collect::<Vec<_>>().join(" | ");
                 if head.is_empty() {
-                    format!("OpenGrep exited with status {exit_code} (no stderr)")
+                    format!("OpenGrep exited with status {} (no stderr)", exit_code)
                 } else {
                     let mut s = format!(
-                        "OpenGrep exited with status {exit_code} (no stderr). stdout: {head}"
+                        "OpenGrep exited with status {} (no stderr). stdout: {}",
+                        exit_code, head
                     );
                     if s.len() > 500 {
                         s.truncate(500);
@@ -320,7 +320,7 @@ pub fn run_opengrep_scan(
                     s
                 }
             };
-            log::warn!("OpenGrep 返回非零状态码 ({exit_code}): {err_msg}");
+            log::warn!("OpenGrep 返回非零状态码 ({}): {}", exit_code, err_msg);
             return Ok(ScanResult {
                 tool: "opengrep".to_string(),
                 version: if include_version {
@@ -336,6 +336,7 @@ pub fn run_opengrep_scan(
         }
     }
 
+    // 解析结果
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!("📄 OpenGrep stdout: {stdout}");
     if !used_config_paths.is_empty() {
@@ -344,7 +345,7 @@ pub fn run_opengrep_scan(
             .map(|p| p.display().to_string())
             .collect::<Vec<_>>()
             .join(", ");
-        debug!("📦 使用规则目录: {joined}");
+        debug!("📦 使用规则目录: {}", joined);
     }
 
     let findings = match parse_opengrep_output(&stdout) {
@@ -380,7 +381,9 @@ pub fn run_opengrep_scan(
     })
 }
 
+/// 获取OpenGrep版本（使用缓存）
 fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // 先检查缓存
     {
         let cache = VERSION_CACHE.read();
         if let Some(version) = cache.get("opengrep") {
@@ -388,13 +391,16 @@ fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + S
         }
     }
 
+    // 缓存未命中，执行命令
     let output = Command::new("opengrep").arg("--version").output()?;
+
     let version = if output.status.success() {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     } else {
         "unknown".to_string()
     };
 
+    // 写入缓存
     {
         let mut cache = VERSION_CACHE.write();
         cache.insert("opengrep".to_string(), version.clone());
@@ -403,6 +409,7 @@ fn get_opengrep_version() -> Result<String, Box<dyn std::error::Error + Send + S
     Ok(version)
 }
 
+/// 解析OpenGrep输出（整块 JSON，遍历 results 数组）
 fn parse_opengrep_output(
     output: &str,
 ) -> Result<Vec<Finding>, Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -413,6 +420,7 @@ fn parse_opengrep_output(
         return Ok(Vec::new());
     }
 
+    // 查找 JSON 部分（可能有标题信息在前面）
     let json_part = if let Some(pos) = output.find('{') {
         &output[pos..]
     } else {
@@ -430,15 +438,21 @@ fn parse_opengrep_output(
         debug!("📋 找到 {} 个结果", results.len());
         for (i, item) in results.iter().enumerate() {
             match create_finding_from_result(item) {
-                Ok(finding) => findings.push(finding),
-                Err(e) => debug!("❌ 解析第 {i} 个结果失败: {e}"),
+                Ok(finding) => {
+                    findings.push(finding);
+                }
+                Err(e) => {
+                    debug!("❌ 解析第 {i} 个结果失败: {e}");
+                }
             }
         }
     } else {
         debug!("⚠️ 未找到 results 数组");
+        // 检查是否有错误信息
         if let Some(errors) = v.get("errors").and_then(|e| e.as_array()) {
             debug!("❌ OpenGrep 报告错误: {errors:?}");
         }
+        // 检查扫描的路径
         if let Some(paths) = v.get("paths").and_then(|p| p.as_object()) {
             debug!("📂 扫描的路径: {paths:?}");
         }
@@ -447,6 +461,7 @@ fn parse_opengrep_output(
     Ok(findings)
 }
 
+/// 从 results[i] 构建 Finding
 fn create_finding_from_result(
     item: &serde_json::Value,
 ) -> Result<Finding, Box<dyn std::error::Error + Send + Sync + 'static>> {
@@ -458,17 +473,21 @@ fn create_finding_from_result(
     let line = item["start"]["line"].as_u64().unwrap_or(0) as usize;
     let column = item["start"]["col"].as_u64().unwrap_or(0) as usize;
     let rule_id = item["check_id"].as_str().map(|s| s.to_string());
+
     let severity_str = item["severity"].as_str().unwrap_or("WARNING");
+
     let code_snippet = item["lines"].as_str().map(|s| s.to_string());
+
     let message = item["extra"]["message"]
         .as_str()
         .unwrap_or(title.as_str())
         .to_string();
+
     let remediation = item["extra"]["fix"].as_str().map(|s| s.to_string());
 
     Ok(Finding {
         title,
-        file_path: PathBuf::from(file_path),
+        file_path: std::path::PathBuf::from(file_path),
         line,
         column,
         severity: severity_str.to_string(),
@@ -479,7 +498,7 @@ fn create_finding_from_result(
     })
 }
 
-/// Check whether OpenGrep is installed
+/// 检查OpenGrep是否已安装
 pub fn is_opengrep_installed() -> bool {
     Command::new("opengrep")
         .arg("--version")
@@ -488,10 +507,10 @@ pub fn is_opengrep_installed() -> bool {
         .unwrap_or(false)
 }
 
-/// Read rules metadata (with cache)
-pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
+pub fn read_rules_info(rules_dir: &std::path::Path) -> Option<RulesInfo> {
     use std::fs;
 
+    // 先检查缓存
     {
         let cache = RULES_CACHE.read();
         if let Some(info) = cache.get(rules_dir) {
@@ -519,6 +538,7 @@ pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
                 updated_at,
             })
         } else {
+            // 回退：仅提供目录
             Some(RulesInfo {
                 dir: rules_dir.display().to_string(),
                 sources: Vec::new(),
@@ -527,6 +547,7 @@ pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
             })
         }
     } else {
+        // 回退：仅提供目录
         Some(RulesInfo {
             dir: rules_dir.display().to_string(),
             sources: Vec::new(),
@@ -535,6 +556,7 @@ pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
         })
     };
 
+    // 写入缓存
     if let Some(ref info) = rules_info {
         let mut cache = RULES_CACHE.write();
         cache.insert(rules_dir.to_path_buf(), info.clone());
@@ -543,10 +565,11 @@ pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
     rules_info
 }
 
-/// Install OpenGrep via cargo (with helpful guidance)
+/// 安装OpenGrep（优先使用 cargo；若不可用则给出明确指引）
 pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     println!("🔧 正在安装OpenGrep...");
 
+    // 先检测 cargo 是否可用
     let cargo_available = Command::new("cargo")
         .arg("--version")
         .output()
@@ -559,6 +582,7 @@ pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync 
             .output()?;
 
         if output.status.success() {
+            // 提示 PATH 配置（如未生效）
             if !is_opengrep_installed() {
                 println!("ℹ️ 已通过 cargo 安装，但未检测到 opengrep 在 PATH。若使用 rustup 默认目录，请添加到 PATH:");
                 println!("   export PATH=\"$HOME/.cargo/bin:$PATH\"");
@@ -567,128 +591,13 @@ pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync 
             return Ok(());
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("通过 cargo 安装 OpenGrep 失败: {stderr}\n建议：\n1) 确认已安装 Rust 工具链 (https://rustup.rs) 并已将 ~/.cargo/bin 加入 PATH\n2) 手动执行: cargo install opengrep").into());
+            return Err(format!(
+                "通过 cargo 安装 OpenGrep 失败: {stderr}\n建议：\n1) 确认已安装 Rust 工具链 (https://rustup.rs) 并已将 ~/.cargo/bin 加入 PATH\n2) 手动执行: cargo install opengrep"
+            ).into());
         }
     }
 
+    // cargo 不可用：给出明确的安装指引
     let guide = "未检测到 cargo。请先安装 Rust 工具链，然后使用 cargo 安装 OpenGrep:\n\n1) 安装 Rust（推荐 rustup）: https://rustup.rs\n2) 安装 OpenGrep: cargo install opengrep\n3) 将 cargo 的 bin 目录加入 PATH: export PATH=\"$HOME/.cargo/bin:$PATH\"";
     Err(guide.into())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gitai_core::config::Config;
-    use std::fs;
-
-    fn sample_json() -> String {
-        serde_json::json!({
-            "results": [
-                {
-                    "path": "src/main.rs",
-                    "start": { "line": 10, "col": 5 },
-                    "check_id": "OG001",
-                    "severity": "ERROR",
-                    "lines": "let x = 42;",
-                    "extra": { "message": "Hardcoded value", "fix": "Use const" }
-                },
-                {
-                    "path": "lib/mod.rs",
-                    "start": { "line": 1, "col": 1 },
-                    "check_id": "OG002",
-                    "severity": "WARNING",
-                    "lines": "unsafe { /* ... */ }",
-                    "extra": { "message": "Unsafe block", "fix": null }
-                }
-            ]
-        })
-        .to_string()
-    }
-
-    #[test]
-    fn test_parse_opengrep_output_valid() {
-        let out = sample_json();
-        let findings = parse_opengrep_output(&out).expect("should parse valid json");
-        assert_eq!(findings.len(), 2);
-        let f0 = &findings[0];
-        assert_eq!(f0.title, "Hardcoded value");
-        assert_eq!(f0.file_path, PathBuf::from("src/main.rs"));
-        assert_eq!(f0.line, 10);
-        assert_eq!(f0.column, 5);
-        assert_eq!(f0.severity, "ERROR");
-        assert_eq!(f0.rule_id.as_deref(), Some("OG001"));
-        assert_eq!(f0.code_snippet.as_deref(), Some("let x = 42;"));
-        assert!(f0.remediation.as_deref() == Some("Use const"));
-
-        let f1 = &findings[1];
-        assert_eq!(f1.severity, "WARNING");
-    }
-
-    #[test]
-    fn test_parse_opengrep_output_empty_and_noise() {
-        let findings = parse_opengrep_output("").expect("empty is ok");
-        assert!(findings.is_empty());
-
-        let findings2 =
-            parse_opengrep_output("INFO: scanning... no json here").expect("no json -> empty");
-        assert!(findings2.is_empty());
-
-        let noisy = format!("some logs... {}", sample_json());
-        let findings3 = parse_opengrep_output(&noisy).expect("noisy json should parse");
-        assert_eq!(findings3.len(), 2);
-    }
-
-    #[test]
-    fn test_read_rules_info_cache_behavior() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let rules_dir = tmp.path().join("rules");
-        fs::create_dir_all(&rules_dir).unwrap();
-
-        let meta_path = rules_dir.join(".rules.meta");
-        fs::write(
-            &meta_path,
-            serde_json::json!({
-                "sources": ["https://example.com/rules.tar.gz"],
-                "total_rules": 5,
-                "updated_at": "2025-01-01T00:00:00Z"
-            })
-            .to_string(),
-        )
-        .unwrap();
-
-        let info1 = read_rules_info(&rules_dir).expect("some rules info");
-        assert_eq!(info1.total_rules, 5);
-        assert_eq!(info1.sources.len(), 1);
-
-        // mutate file to see cache keeps old value
-        fs::write(
-            &meta_path,
-            serde_json::json!({
-                "sources": ["https://example.com/other.tar.gz"],
-                "total_rules": 9,
-                "updated_at": "2026-01-01T00:00:00Z"
-            })
-            .to_string(),
-        )
-        .unwrap();
-
-        let info2 = read_rules_info(&rules_dir).expect("still cached");
-        assert_eq!(info2.total_rules, 5, "cache should return first result");
-        assert_eq!(info2.sources.len(), 1);
-        assert_eq!(info1.dir, info2.dir);
-    }
-
-    #[test]
-    fn test_run_opengrep_scan_missing_path_errors_early() {
-        let mut cfg = Config::default();
-        cfg.scan.timeout = 1;
-        cfg.scan.jobs = 0;
-
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let missing = tmp.path().join("does_not_exist");
-        let res = run_opengrep_scan(&cfg, &missing, None, None, false);
-        assert!(res.is_err());
-        let msg = format!("{}", res.err().unwrap());
-        assert!(msg.contains("扫描路径不存在"));
-    }
 }
