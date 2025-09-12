@@ -18,7 +18,6 @@ pub use git_impl::{
 pub fn get_staged_diff() -> Result<String> {
     // Use the actual implementation from git_impl
     git_impl::run_git(&["diff".to_string(), "--cached".to_string()])
-        .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
 }
 
 /// 获取当前分支名
@@ -28,13 +27,11 @@ pub fn get_current_branch() -> Result<String> {
         "--short".to_string(),
         "HEAD".to_string(),
     ])
-    .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
     .map(|s| s.trim().to_string())
 }
 
 /// 获取当前提交的 hash
 pub fn get_current_commit() -> Result<String> {
     git_impl::run_git(&["rev-parse".to_string(), "HEAD".to_string()])
-        .map_err(|e| gitai_types::GitAIError::Git(e.to_string()))
         .map(|s| s.trim().to_string())
 }

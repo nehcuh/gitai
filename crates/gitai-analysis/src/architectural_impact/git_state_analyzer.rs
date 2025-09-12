@@ -4,7 +4,7 @@
 
 use crate::tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
 use gitai_types::GitAIError;
-use serde::{Deserialize, Serialize};
+use gitai_types::error::GitError;use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 
@@ -108,17 +108,17 @@ impl GitStateAnalyzer {
         let output = Command::new("git")
             .args(["show", &format!("{commit_ref}:{file_path}")])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git show 命令: {e}")))?;
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法执行 git show 命令: {e}"))))?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(GitAIError::Git(format!(
+            return Err(GitAIError::Git(GitError::CommandFailed(format!(
                 "git show 命令执行失败: {error_msg}"
-            )));
+            ))));
         }
 
         String::from_utf8(output.stdout)
-            .map_err(|e| GitAIError::Git(format!("无法解析文件内容为UTF-8: {e}")))
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法解析文件内容为UTF-8: {e}"))))
     }
 
     /// 获取当前工作目录相对于 git 根目录的文件列表
@@ -126,13 +126,13 @@ impl GitStateAnalyzer {
         let output = Command::new("git")
             .args(["diff", "--name-only", "HEAD~1..HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git diff 命令: {e}")))?;
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法执行 git diff 命令: {e}"))))?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(GitAIError::Git(format!(
+            return Err(GitAIError::Git(GitError::CommandFailed(format!(
                 "git diff 命令执行失败: {error_msg}"
-            )));
+            ))));
         }
 
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -249,10 +249,10 @@ impl GitStateAnalyzer {
         let output = Command::new("git")
             .args(["rev-parse", "HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法执行 git rev-parse: {e}"))))?;
 
         if !output.status.success() {
-            return Err(GitAIError::Git("无法获取当前提交hash".to_string()));
+            return Err(GitAIError::Git(GitError::CommandFailed("无法获取当前提交hash".to_string())));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -263,10 +263,10 @@ impl GitStateAnalyzer {
         let output = Command::new("git")
             .args(["rev-parse", commit_ref])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法执行 git rev-parse: {e}"))))?;
 
         if !output.status.success() {
-            return Err(GitAIError::Git(format!("无法获取提交hash: {commit_ref}")));
+            return Err(GitAIError::Git(GitError::CommandFailed(format!("无法获取提交hash: {commit_ref}"))));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -277,10 +277,10 @@ impl GitStateAnalyzer {
         let output = Command::new("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .output()
-            .map_err(|e| GitAIError::Git(format!("无法执行 git rev-parse: {e}")))?;
+            .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("无法执行 git rev-parse: {e}"))))?;
 
         if !output.status.success() {
-            return Err(GitAIError::Git("无法获取当前分支名".to_string()));
+            return Err(GitAIError::Git(GitError::CommandFailed("无法获取当前分支名".to_string())));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

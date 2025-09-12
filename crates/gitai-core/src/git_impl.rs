@@ -1,4 +1,4 @@
-use gitai_types::{GitAIError, Result};
+use gitai_types::error::{GitAIError, GitError, Result};
 use std::path::Path;
 use std::process::Command;
 
@@ -8,11 +8,11 @@ pub fn run_git(args: &[String]) -> Result<String> {
         .env("GIT_PAGER", "cat")
         .args(args)
         .output()
-        .map_err(|e| GitAIError::Git(format!("Failed to execute git command: {e}")))?;
+        .map_err(|e| GitAIError::Git(GitError::CommandFailed(format!("Failed to execute git command: {e}"))))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GitAIError::Git(format!("Git command failed: {stderr}")));
+        return Err(GitAIError::Git(GitError::CommandFailed(format!("Git command failed: {stderr}"))));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -136,7 +136,7 @@ pub fn get_all_diff() -> Result<String> {
     // 如果没有任何变更，不要自动返回最后一次提交
     // 让调用方决定如何处理这种情况
     if all_diff.trim().is_empty() {
-        return Err(GitAIError::Git("没有检测到任何变更".to_string()));
+        return Err(GitAIError::Git(GitError::CommandFailed("没有检测到任何变更".to_string())));
     }
 
     Ok(all_diff)
@@ -249,7 +249,7 @@ pub fn get_last_commit_diff() -> Result<String> {
     let commit_count: usize = log_output.trim().parse().unwrap_or(0);
 
     if commit_count == 0 {
-        Err(GitAIError::Git("仓库中没有任何提交".to_string()))
+        Err(GitAIError::Git(GitError::CommitNotFound("仓库中没有任何提交".to_string())))
     } else if commit_count == 1 {
         // 只有一个提交，显示第一次提交的内容
         run_git(&[
@@ -274,7 +274,7 @@ pub fn get_upstream_branch() -> Result<String> {
         Ok(upstream) => {
             let upstream = upstream.trim().to_string();
             if upstream.is_empty() {
-                Err(GitAIError::Git("没有配置上游分支".to_string()))
+                Err(GitAIError::Git(GitError::BranchNotFound("没有配置上游分支".to_string())))
             } else {
                 Ok(upstream)
             }
@@ -297,10 +297,10 @@ pub fn get_upstream_branch() -> Result<String> {
                         origin_branch.clone(),
                     ]) {
                         Ok(_) => Ok(origin_branch),
-                        Err(_) => Err(GitAIError::Git("没有找到对应的远程分支".to_string())),
+                        Err(_) => Err(GitAIError::Git(GitError::BranchNotFound("没有找到对应的远程分支".to_string()))),
                     }
                 }
-                Err(e) => Err(GitAIError::Git(format!("无法获取当前分支: {e}"))),
+                Err(e) => Err(GitAIError::Git(GitError::CommandFailed(format!("无法获取当前分支: {e}")))),
             }
         }
     }
@@ -318,7 +318,7 @@ pub fn get_all_diff_or_last_commit() -> Result<String> {
                 Ok(last_diff) if !last_diff.trim().is_empty() => {
                     Ok(format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}"))
                 }
-                _ => Err(GitAIError::Git("没有检测到任何变更".to_string())),
+                _ => Err(GitAIError::Git(GitError::CommandFailed("没有检测到任何变更".to_string()))),
             }
         }
     }
