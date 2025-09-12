@@ -616,7 +616,7 @@ pub fn build_tools_listing() -> Vec<Value> {
         }),
         json!({
             "name": "execute_dependency_graph",
-            "description": "生成代码依赖图（ASCII/JSON/其它）",
+            "description": "生成完整代码依赖图（注意：大型项目输出可能非常庞大，建议使用 summarize_graph）",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -642,7 +642,7 @@ pub fn build_tools_listing() -> Vec<Value> {
         }),
         json!({
             "name": "summarize_graph",
-            "description": "图摘要（支持社区压缩与预算自适应裁剪）",
+            "description": "依赖图智能摘要（推荐：默认使用此工具进行依赖分析，支持预算控制和自适应裁剪）",
             "inputSchema": {
                 "type": "object",
                 "properties": {
