@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::security_insights::{InsightCategory, SecurityInsight, SecurityInsights, Severity};
 use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 use std::path::Path;

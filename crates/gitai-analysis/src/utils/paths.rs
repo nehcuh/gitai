@@ -174,7 +174,7 @@ pub fn resolve_config_path(path: &str) -> PathBuf {
 pub fn resolve_mcp_path(input_path: &str, service_name: &str) -> Result<PathBuf, String> {
     // 检查空路径
     if input_path.trim().is_empty() {
-        return Err(format!("{}: 路径不能为空", service_name));
+        return Err(format!("{service_name}: 路径不能为空"));
     }
 
     // 1. 首先展开~符号

@@ -27,12 +27,12 @@ impl SecurityScanner {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub async fn scan_directory(
-        &self, 
-        _path: &std::path::Path, 
-        _lang: Option<&str>, 
-        _context: Option<OperationContext>
+        &self,
+        _path: &std::path::Path,
+        _lang: Option<&str>,
+        _context: Option<OperationContext>,
     ) -> std::result::Result<ScanResult, Box<dyn std::error::Error + Send + Sync + 'static>> {
         // 简单实现：返回空结果
         Ok(ScanResult {
@@ -47,8 +47,8 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 
 /// 处理 scan 命令
 pub async fn handle_command(
-    _config: &gitai_core::config::Config, 
-    command: &Command
+    _config: &gitai_core::config::Config,
+    command: &Command,
 ) -> HandlerResult<()> {
     match command {
         Command::Scan {
@@ -74,12 +74,14 @@ pub async fn handle_command(
 
             // 创建扫描器
             let scanner = SecurityScanner::new();
-            
+
             // 创建操作上下文
             let context = OperationContext::new();
-            
+
             // 执行扫描
-            let result = scanner.scan_directory(path, lang.as_deref(), Some(context)).await?;
+            let result = scanner
+                .scan_directory(path, lang.as_deref(), Some(context))
+                .await?;
 
             // 输出结果
             if format == "json" {

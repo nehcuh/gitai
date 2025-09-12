@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::update::error::UpdateError;
 use crate::update::types::{PromptSetupResult, RuleDownloadResult, UpdateItem, UpdateResult};
 use crate::update::UpdateNotifier;

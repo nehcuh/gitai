@@ -18,7 +18,10 @@ impl McpServer {
 
     /// 启动服务器
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if self.is_running.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .is_running
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             log::warn!("⚠️ 服务器已经在运行");
             return Ok(());
         }
@@ -30,7 +33,10 @@ impl McpServer {
 
     /// 停止服务器
     pub async fn stop(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if !self.is_running.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .is_running
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
             log::warn!("⚠️ 服务器未运行");
             return Ok(());
         }
@@ -67,5 +73,11 @@ impl std::fmt::Display for TransportProtocol {
             TransportProtocol::WebSocket => write!(f, "websocket"),
             TransportProtocol::Tcp => write!(f, "tcp"),
         }
+    }
+}
+
+impl Default for McpServer {
+    fn default() -> Self {
+        Self::new()
     }
 }

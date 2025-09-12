@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 pub mod ai;
 pub mod cache;
-pub mod config;
+// config接口已迁移到crates/gitai-core
 pub mod devops;
-pub mod git;
+// git接口已迁移到crates/gitai-core  
 pub mod review;
 pub mod scan;
 

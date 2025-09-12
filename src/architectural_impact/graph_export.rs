@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::architectural_impact::dependency_graph::{DependencyGraph, DotOptions, NodeType};
-use crate::git;
+use gitai_core::git_impl;
 use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
 
 fn is_code_file(path: &Path) -> bool {

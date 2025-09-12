@@ -6,6 +6,7 @@
 
 use clap::{Parser, Subcommand};
 use gitai_core::config::Config;
+use gitai_mcp::bridge;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -33,11 +34,15 @@ enum Commands {
         transport: String,
 
         /// 监听地址 (仅用于 TCP/SSE)
-        #[arg(short, long, default_value = "127.0.0.1:8080")]
+        #[arg(short, long, default_value = "127.0.0.1:8711")]
         addr: String,
 
         /// 启用的服务 (逗号分隔)
-        #[arg(short, long, default_value = "review,scan,commit,analysis,dependency,deviation")]
+        #[arg(
+            short,
+            long,
+            default_value = "review,scan,commit,analysis,dependency,deviation"
+        )]
         services: String,
     },
     /// 显示服务器信息
@@ -51,11 +56,9 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // 初始化日志
-    let log_level = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| "info".to_string());
-    
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&log_level))
-        .init();
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&log_level)).init();
 
     let cli = Cli::parse();
 
@@ -75,31 +78,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     match cli.command {
-        Commands::Serve { transport, addr, services } => {
-            println!("🚀 启动 GitAI MCP 服务器");
-            println!("📡 传输协议: {}", transport);
-            println!("🔧 启用的服务: {}", services);
+        Commands::Serve {
+            transport,
+            addr,
+            services,
+        } => {
+            eprintln!("🚀 启动 GitAI MCP 服务器");
+            eprintln!("📡 传输协议: {}", transport);
+            eprintln!("🔧 启用的服务: {}", services);
 
             // 解析传输协议
             match transport.as_str() {
-                "stdio" => println!("🔌 使用 stdio 传输"),
-                "http" => println!("🌐 使用 HTTP 传输，监听地址: {}", addr),
-                "websocket" | "ws" => println!("🌐 使用 WebSocket 传输，监听地址: {}", addr),
-                "tcp" => println!("🌐 使用 TCP 传输，监听地址: {}", addr),
+                "stdio" => {
+                    eprintln!("🔌 使用 stdio 传输");
+                    crate::bridge::start_mcp_server(config.clone()).await?;
+                }
+                "tcp" => {
+                    eprintln!("🌐 使用 TCP 传输，监听地址: {}", addr);
+                    crate::bridge::start_mcp_tcp_server(config.clone(), &addr).await?;
+                }
+                "http" | "sse" | "websocket" | "ws" => {
+                    eprintln!("🌐 使用 HTTP/SSE 传输，监听地址: {}", addr);
+                    gitai_mcp::http::start_mcp_http_server(config.clone(), &addr).await?;
+                }
                 _ => {
                     eprintln!("❌ 不支持的传输协议: {}", transport);
                     std::process::exit(1);
                 }
             };
-
-            // 简化的服务器启动
-            println!("✅ GitAI MCP 服务器启动成功（模拟模式）");
-
-            // 保持运行直到收到中断信号
-            tokio::signal::ctrl_c().await?;
-            println!("📥 收到中断信号，正在关闭服务器...");
-
-            println!("✅ GitAI MCP 服务器已关闭");
         }
         Commands::Info => {
             println!("📋 GitAI MCP 服务器信息");

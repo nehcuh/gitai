@@ -12,41 +12,46 @@ name = "gitai-mcp"
 path = "src/main.rs"
 
 [dependencies]
-gitai-types = { path = "../gitai-types" }
-gitai-core = { path = "../gitai-core" }
-gitai-analysis = { path = "../gitai-analysis" }
-gitai-security = { path = "../gitai-security" }
+ gitai-types = { path = "../gitai-types" }
+ gitai-core = { path = "../gitai-core" }
+ gitai-analysis = { path = "../gitai-analysis", features = ["ai", "dependency-graph", "architectural-impact"] }
+ gitai-security = { path = "../gitai-security" }
+ md5 = { workspace = true }
 
-# Async runtime
-tokio = { workspace = true }
-futures-util = { workspace = true }
+ # Async runtime
+ tokio = { workspace = true }
+ futures-util = { workspace = true }
+ tokio-stream = "0.1"
 
-# Serialization
-serde = { workspace = true }
-serde_json = { workspace = true }
+ # Serialization
+ serde = { workspace = true }
+ serde_json = { workspace = true }
 
-# Date and time
-chrono = { workspace = true }
+ # Date and time
+ chrono = { workspace = true }
 
-# Logging
-log = { workspace = true }
-env_logger = { workspace = true }
+ # Logging
+ log = { workspace = true }
+ env_logger = { workspace = true }
 
-# Error handling
-anyhow = { workspace = true }
-async-trait = { workspace = true }
+ # Error handling
+ anyhow = { workspace = true }
+ async-trait = { workspace = true }
 
-# Concurrency utilities
-parking_lot = { workspace = true }
+ # Concurrency utilities
+ parking_lot = { workspace = true }
 
-# UUID generation
-uuid = { workspace = true, features = ["v4"] }
+ # UUID generation
+ uuid = { workspace = true, features = ["v4"] }
 
-# Command line parsing
-clap = { workspace = true, features = ["derive"] }
+ # Command line parsing
+ clap = { workspace = true, features = ["derive"] }
+
+ # HTTP server
+ warp = { workspace = true }
 
 [features]
-default = ["stdio", "websocket"]
+default = ["stdio"]
 stdio = []
 websocket = []
 http = []

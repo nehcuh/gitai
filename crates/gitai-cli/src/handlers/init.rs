@@ -11,30 +11,33 @@ impl ConfigInitializer {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub fn with_config_url(self, _url: Option<String>) -> Self {
         self
     }
-    
+
     pub fn with_offline_mode(self, _offline: bool) -> Self {
         self
     }
-    
-    pub async fn initialize(self) -> std::result::Result<std::path::PathBuf, Box<dyn std::error::Error + Send + Sync + 'static>> {
+
+    pub async fn initialize(
+        self,
+    ) -> std::result::Result<std::path::PathBuf, Box<dyn std::error::Error + Send + Sync + 'static>>
+    {
         // 简单实现：创建默认配置目录
         let config_dir = dirs::home_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("."))
             .join(".config")
             .join("gitai");
-        
+
         tokio::fs::create_dir_all(&config_dir).await?;
-        
+
         let config_path = config_dir.join("config.toml");
         if !config_path.exists() {
             let default_config = include_str!("../../../../assets/config.enhanced.toml");
             tokio::fs::write(&config_path, default_config).await?;
         }
-        
+
         Ok(config_path)
     }
 }
@@ -44,12 +47,12 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 /// 处理 init 命令
 pub async fn handle_command(command: &Command) -> HandlerResult<()> {
     match command {
-        Command::Init { 
-            config_url, 
-            offline, 
-            resources_dir: _, 
-            dev: _, 
-            download_resources 
+        Command::Init {
+            config_url,
+            offline,
+            resources_dir: _,
+            dev: _,
+            download_resources,
         } => {
             println!("🚀 初始化 GitAI 配置...");
 
@@ -74,7 +77,7 @@ pub async fn handle_command(command: &Command) -> HandlerResult<()> {
                     if *download_resources && !offline {
                         println!();
                         println!("📦 正在下载资源...");
-                        
+
                         // TODO: 实现资源下载逻辑
                         println!("✅ 资源下载完成！");
                     } else if *download_resources && *offline {
@@ -91,7 +94,7 @@ pub async fn handle_command(command: &Command) -> HandlerResult<()> {
                 }
                 Err(e) => {
                     eprintln!("❌ 初始化失败: {e}");
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
 

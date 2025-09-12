@@ -8,8 +8,8 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 
 /// 处理 review 命令
 pub async fn handle_command(
-    _config: &gitai_core::config::Config, 
-    command: &Command
+    _config: &gitai_core::config::Config,
+    command: &Command,
 ) -> HandlerResult<()> {
     match command {
         Command::Review {
@@ -35,7 +35,7 @@ pub async fn handle_command(
             println!("  Issue ID: {:?}", issue_id);
             println!("  Space ID: {:?}", space_id);
             println!("  完整分析: {}", full);
-            
+
             // TODO: 实现实际的评审逻辑
             Ok(())
         }

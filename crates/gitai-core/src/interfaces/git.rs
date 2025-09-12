@@ -1,10 +1,10 @@
 //! Git服务接口定义
 
 use super::{ConfigurableInterface, HealthCheckInterface, VersionedInterface};
-use gitai_types::common::FilePath;
 use crate::domain_errors::GitError;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use gitai_types::common::FilePath;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,7 +15,10 @@ pub trait GitService:
     VersionedInterface + ConfigurableInterface + HealthCheckInterface + Send + Sync
 {
     /// 执行Git命令
-    async fn execute_command(&self, args: &[String]) -> std::result::Result<GitCommandOutput, crate::domain_errors::GitError>;
+    async fn execute_command(
+        &self,
+        args: &[String],
+    ) -> std::result::Result<GitCommandOutput, crate::domain_errors::GitError>;
 
     /// 获取Git状态
     async fn get_status(&self) -> std::result::Result<GitStatus, crate::domain_errors::GitError>;
@@ -24,16 +27,23 @@ pub trait GitService:
     async fn get_staged_diff(&self) -> std::result::Result<String, crate::domain_errors::GitError>;
 
     /// 获取工作区的diff
-    async fn get_working_diff(&self) -> std::result::Result<String, crate::domain_errors::GitError>;
+    async fn get_working_diff(&self)
+        -> std::result::Result<String, crate::domain_errors::GitError>;
 
     /// 获取所有diff（包括暂存区、工作区和未跟踪文件）
     async fn get_all_diff(&self) -> std::result::Result<String, crate::domain_errors::GitError>;
 
     /// 获取最后一次提交的diff
-    async fn get_last_commit_diff(&self) -> std::result::Result<String, crate::domain_errors::GitError>;
+    async fn get_last_commit_diff(
+        &self,
+    ) -> std::result::Result<String, crate::domain_errors::GitError>;
 
     /// 获取两个提交之间的diff
-    async fn get_commit_diff(&self, from: &str, to: &str) -> std::result::Result<String, crate::domain_errors::GitError>;
+    async fn get_commit_diff(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> std::result::Result<String, crate::domain_errors::GitError>;
 
     /// 获取未跟踪的文件列表
     async fn get_untracked_files(&self) -> Result<Vec<FilePath>, GitError>;
@@ -48,7 +58,9 @@ pub trait GitService:
     ) -> Result<Vec<CommitInfo>, GitError>;
 
     /// 获取当前分支信息
-    async fn get_current_branch(&self) -> std::result::Result<BranchInfo, crate::domain_errors::GitError>;
+    async fn get_current_branch(
+        &self,
+    ) -> std::result::Result<BranchInfo, crate::domain_errors::GitError>;
 
     /// 获取分支列表
     async fn get_branches(&self) -> Result<Vec<BranchInfo>, GitError>;
@@ -63,7 +75,9 @@ pub trait GitService:
     async fn is_git_repository(&self) -> std::result::Result<bool, crate::domain_errors::GitError>;
 
     /// 获取仓库根目录
-    async fn get_repository_root(&self) -> std::result::Result<PathBuf, crate::domain_errors::GitError>;
+    async fn get_repository_root(
+        &self,
+    ) -> std::result::Result<PathBuf, crate::domain_errors::GitError>;
 
     /// 获取当前HEAD的commit hash
     async fn get_head_commit(&self) -> std::result::Result<String, crate::domain_errors::GitError>;
@@ -79,16 +93,26 @@ pub trait GitService:
     async fn get_file_blame(&self, file_path: &FilePath) -> Result<Vec<BlameLine>, GitError>;
 
     /// 获取仓库统计信息
-    async fn get_repository_stats(&self) -> std::result::Result<RepositoryStats, crate::domain_errors::GitError>;
+    async fn get_repository_stats(
+        &self,
+    ) -> std::result::Result<RepositoryStats, crate::domain_errors::GitError>;
 
     /// 检查工作区是否干净
-    async fn is_working_directory_clean(&self) -> std::result::Result<bool, crate::domain_errors::GitError>;
+    async fn is_working_directory_clean(
+        &self,
+    ) -> std::result::Result<bool, crate::domain_errors::GitError>;
 
     /// 暂存文件
-    async fn stage_file(&self, file_path: &FilePath) -> std::result::Result<(), crate::domain_errors::GitError>;
+    async fn stage_file(
+        &self,
+        file_path: &FilePath,
+    ) -> std::result::Result<(), crate::domain_errors::GitError>;
 
     /// 取消暂存文件
-    async fn unstage_file(&self, file_path: &FilePath) -> std::result::Result<(), crate::domain_errors::GitError>;
+    async fn unstage_file(
+        &self,
+        file_path: &FilePath,
+    ) -> std::result::Result<(), crate::domain_errors::GitError>;
 
     /// 创建提交
     async fn create_commit(
@@ -101,7 +125,11 @@ pub trait GitService:
     async fn get_config(&self, key: &str) -> Result<Option<String>, GitError>;
 
     /// 设置配置信息
-    async fn set_config(&self, key: &str, value: &str) -> std::result::Result<(), crate::domain_errors::GitError>;
+    async fn set_config(
+        &self,
+        key: &str,
+        value: &str,
+    ) -> std::result::Result<(), crate::domain_errors::GitError>;
 }
 
 /// Git命令输出
@@ -237,10 +265,15 @@ impl CommitInfo {
 /// 简化的提交信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimplifiedCommitInfo {
+    /// 提交的hash
     pub hash: String,
+    /// 简短的hash（前7位）
     pub short_hash: String,
+    /// 提交标题（第一行）
     pub title: String,
+    /// 作者名称
     pub author_name: String,
+    /// 提交时间
     pub timestamp: DateTime<Utc>,
 }
 
@@ -352,6 +385,7 @@ pub struct CommitHistoryOptions {
     pub committer: Option<String>,
     /// 时间范围过滤
     pub since: Option<DateTime<Utc>>,
+    /// 结束时间
     pub until: Option<DateTime<Utc>>,
     /// 是否包含统计信息
     pub include_stats: bool,

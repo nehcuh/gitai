@@ -1,5 +1,7 @@
 # Phase 2 Performance Optimizations
 
+> ARCHIVED: Phase 2 notes retained for reference. Current performance notes are tracked via code and CLI. See docs/README.md.
+
 ## Overview
 This document summarizes the internal performance optimizations implemented in GitAI as part of Phase 2 development. These optimizations are designed to improve performance without changing external CLI behavior or breaking existing functionality.
 

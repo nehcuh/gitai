@@ -78,7 +78,7 @@ impl Default for MetricsCollector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gitai_types::{AnalysisStatus, AnalysisSummary, Finding, FindingSeverity};
+    use gitai_types::{AnalysisStatus, AnalysisSummary, FindingSeverity};
 
     #[test]
     fn test_metrics_collector_creation() {
@@ -114,7 +114,7 @@ mod tests {
         assert_eq!(metrics.total_files, 10);
         assert_eq!(metrics.files_analyzed, 8);
         assert_eq!(metrics.total_findings, 2);
-        
+
         let project_metrics = collector.get_project_metrics("test-project");
         assert!(project_metrics.is_some());
         assert_eq!(project_metrics.unwrap().len(), 1);

@@ -1,6 +1,6 @@
 use crate::architectural_impact::ArchitecturalImpact;
 use crate::architectural_impact::{CascadeEffect, DependencyGraph, ImpactScope};
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::context::Issue; // Always use from context module, which handles the conditional compilation
 use crate::tree_sitter::StructuralSummary;
 use serde::{Deserialize, Serialize};

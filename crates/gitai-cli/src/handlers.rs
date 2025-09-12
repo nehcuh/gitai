@@ -2,6 +2,7 @@
 
 pub mod commit;
 pub mod config;
+pub mod evaluation;
 pub mod features;
 pub mod git;
 pub mod graph;
@@ -14,4 +15,3 @@ pub mod scan;
 pub mod update;
 
 // 处理器模块由 app.rs 中的路由逻辑直接使用
-

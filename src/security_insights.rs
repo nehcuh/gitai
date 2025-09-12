@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::prompt_engine::PromptEngine;
 use crate::tree_sitter::SupportedLanguage;
 use serde::{Deserialize, Serialize};

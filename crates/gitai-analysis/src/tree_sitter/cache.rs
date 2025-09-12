@@ -41,22 +41,23 @@ pub struct CacheEntry {
 impl CacheEntry {
     /// 创建新的缓存项
     pub fn new(summary: StructuralSummary) -> Self {
+        let ts = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => d.as_secs(),
+            Err(_) => 0,
+        };
         Self {
             summary,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            timestamp: ts,
             access_count: 1,
         }
     }
 
     /// 检查缓存是否过期
     pub fn is_expired(&self, max_age_seconds: u64) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => d.as_secs(),
+            Err(_) => 0,
+        };
         now.saturating_sub(self.timestamp) > max_age_seconds
     }
 
@@ -127,24 +128,23 @@ impl TreeSitterCache {
                     } else if !v.is_empty() {
                         base_dir.join(v)
                     } else {
-                        let unique = format!(
-                            "test_{}",
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
-                                .as_millis()
-                        );
+                        let millis = match std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                        {
+                            Ok(d) => d.as_millis(),
+                            Err(_) => 0,
+                        };
+                        let unique = format!("test_{millis}");
                         base_dir.join(unique)
                     }
                 }
                 Err(_) => {
-                    let unique = format!(
-                        "test_{}",
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_millis()
-                    );
+                    let millis =
+                        match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                            Ok(d) => d.as_millis(),
+                            Err(_) => 0,
+                        };
+                    let unique = format!("test_{millis}");
                     base_dir.join(unique)
                 }
             }
@@ -154,7 +154,10 @@ impl TreeSitterCache {
 
         std::fs::create_dir_all(&cache_dir)?;
 
-        let capacity = NonZeroUsize::new(capacity).unwrap_or(NonZeroUsize::new(100).unwrap());
+        let capacity = match NonZeroUsize::new(capacity) {
+            Some(nz) => nz,
+            None => unsafe { NonZeroUsize::new_unchecked(100) },
+        };
 
         Ok(Self {
             memory_cache: Arc::new(Mutex::new(LruCache::new(capacity))),
@@ -335,11 +338,11 @@ impl TreeSitterCache {
             .file_name()
             .map(|s| s.to_string_lossy())
             .unwrap_or_else(|| "cache".into());
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let tmp_name = format!(".{}.{}.tmp", fname, now);
+        let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(d) => d.as_nanos(),
+            Err(_) => 0,
+        };
+        let tmp_name = format!(".{fname}.{now}.tmp");
         let tmp_path = dir.join(tmp_name);
 
         {

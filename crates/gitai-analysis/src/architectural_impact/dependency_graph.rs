@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 // 依赖图模块 - 用于构建和分析代码间的依赖关系
 use crate::tree_sitter::{ClassInfo, FunctionInfo, StructuralSummary};
 use serde::{Deserialize, Serialize};

@@ -1,17 +1,18 @@
+use gitai_types::{GitAIError, Result};
 use std::path::Path;
 use std::process::Command;
 
 /// 简化的Git命令处理（禁用pager，保证非交互输出稳定）
-pub fn run_git(args: &[String]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn run_git(args: &[String]) -> Result<String> {
     let output = Command::new("git")
         .env("GIT_PAGER", "cat")
         .args(args)
         .output()
-        .map_err(|e| format!("Failed to execute git command: {e}"))?;
+        .map_err(|e| GitAIError::Git(format!("Failed to execute git command: {e}")))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Git command failed: {stderr}").into());
+        return Err(GitAIError::Git(format!("Git command failed: {stderr}")));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -31,12 +32,12 @@ pub fn run_git_capture(args: &[String]) -> std::io::Result<(Option<i32>, String,
 }
 
 /// 获取Git diff
-pub fn get_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_diff() -> Result<String> {
     run_git(&["diff".to_string(), "--cached".to_string()])
 }
 
 /// 获取所有变更（包括工作区、暂存区、未跟踪文件和未推送的提交）
-pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_all_diff() -> Result<String> {
     // Git 的 diff 命令不会包含未跟踪文件；我们将专门收集未跟踪（且未被 .gitignore 忽略）的文件
     let staged_diff = run_git(&["diff".to_string(), "--cached".to_string()]).unwrap_or_default();
     let unstaged_diff = run_git(&["diff".to_string()]).unwrap_or_default();
@@ -135,20 +136,20 @@ pub fn get_all_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>
     // 如果没有任何变更，不要自动返回最后一次提交
     // 让调用方决定如何处理这种情况
     if all_diff.trim().is_empty() {
-        return Err("没有检测到任何变更".into());
+        return Err(GitAIError::Git("没有检测到任何变更".to_string()));
     }
 
     Ok(all_diff)
 }
 
 /// 检查是否有未暂存的变更
-pub fn has_unstaged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+pub fn has_unstaged_changes() -> Result<bool> {
     let output = run_git(&["diff".to_string(), "--name-only".to_string()])?;
     Ok(!output.trim().is_empty())
 }
 
 /// 检查是否有已暂存的变更
-pub fn has_staged_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+pub fn has_staged_changes() -> Result<bool> {
     let output = run_git(&[
         "diff".to_string(),
         "--cached".to_string(),
@@ -159,22 +160,22 @@ pub fn has_staged_changes() -> Result<bool, Box<dyn std::error::Error + Send + S
 
 /// 获取Git状态
 #[allow(dead_code)]
-pub fn get_status() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_status() -> Result<String> {
     run_git(&["status".to_string(), "--porcelain".to_string()])
 }
 
 /// 执行Git提交
-pub fn git_commit(message: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn git_commit(message: &str) -> Result<String> {
     run_git(&["commit".to_string(), "-m".to_string(), message.to_string()])
 }
 
 /// 自动暂存所有变更
-pub fn git_add_all() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn git_add_all() -> Result<String> {
     run_git(&["add".to_string(), ".".to_string()])
 }
 
 /// 获取未推送的提交的diff
-pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_unpushed_diff() -> Result<String> {
     // 首先检查是否有远程分支
     let remote_branch = get_upstream_branch();
 
@@ -237,7 +238,7 @@ pub fn get_unpushed_diff() -> Result<String, Box<dyn std::error::Error + Send + 
 
 /// 获取最后一次提交的 diff
 #[allow(dead_code)]
-pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_last_commit_diff() -> Result<String> {
     // 先检查是否有多个提交
     let log_output = run_git(&[
         "rev-list".to_string(),
@@ -248,7 +249,7 @@ pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send
     let commit_count: usize = log_output.trim().parse().unwrap_or(0);
 
     if commit_count == 0 {
-        Err("仓库中没有任何提交".into())
+        Err(GitAIError::Git("仓库中没有任何提交".to_string()))
     } else if commit_count == 1 {
         // 只有一个提交，显示第一次提交的内容
         run_git(&[
@@ -263,7 +264,7 @@ pub fn get_last_commit_diff() -> Result<String, Box<dyn std::error::Error + Send
 }
 
 /// 获取当前分支的上游分支
-pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_upstream_branch() -> Result<String> {
     // 尝试获取当前分支的上游分支
     match run_git(&[
         "rev-parse".to_string(),
@@ -273,7 +274,7 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
         Ok(upstream) => {
             let upstream = upstream.trim().to_string();
             if upstream.is_empty() {
-                Err("没有配置上游分支".into())
+                Err(GitAIError::Git("没有配置上游分支".to_string()))
             } else {
                 Ok(upstream)
             }
@@ -296,10 +297,10 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
                         origin_branch.clone(),
                     ]) {
                         Ok(_) => Ok(origin_branch),
-                        Err(_) => Err("没有找到对应的远程分支".into()),
+                        Err(_) => Err(GitAIError::Git("没有找到对应的远程分支".to_string())),
                     }
                 }
-                Err(e) => Err(format!("无法获取当前分支: {e}").into()),
+                Err(e) => Err(GitAIError::Git(format!("无法获取当前分支: {e}"))),
             }
         }
     }
@@ -307,7 +308,7 @@ pub fn get_upstream_branch() -> Result<String, Box<dyn std::error::Error + Send 
 
 /// 获取所有变更（包括最后一次提交）- 用于 MCP 调用
 #[allow(dead_code)]
-pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_all_diff_or_last_commit() -> Result<String> {
     // 首先尝试获取当前的变更
     match get_all_diff() {
         Ok(diff) => Ok(diff),
@@ -317,7 +318,7 @@ pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error
                 Ok(last_diff) if !last_diff.trim().is_empty() => {
                     Ok(format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}"))
                 }
-                _ => Err("没有检测到任何变更".into()),
+                _ => Err(GitAIError::Git("没有检测到任何变更".to_string())),
             }
         }
     }
@@ -325,9 +326,7 @@ pub fn get_all_diff_or_last_commit() -> Result<String, Box<dyn std::error::Error
 
 /// 过滤掉被 .gitignore 忽略的文件路径
 #[allow(dead_code)]
-pub fn filter_ignored_files(
-    paths: Vec<String>,
-) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn filter_ignored_files(paths: Vec<String>) -> Result<Vec<String>> {
     if paths.is_empty() {
         return Ok(paths);
     }
@@ -336,7 +335,8 @@ pub fn filter_ignored_files(
     let output = Command::new("git")
         .arg("check-ignore")
         .args(&paths)
-        .output()?;
+        .output()
+        .map_err(|e| GitAIError::Io(e))?;
 
     let ignored = String::from_utf8_lossy(&output.stdout);
     let ignored_set: std::collections::HashSet<_> = ignored.lines().collect();
@@ -349,14 +349,14 @@ pub fn filter_ignored_files(
 
 /// 获取当前仓库中被跟踪的文件列表（排除 .gitignore 中的文件）
 #[allow(dead_code)]
-pub fn get_tracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_tracked_files() -> Result<Vec<String>> {
     // git ls-files 只会列出被跟踪的文件，自动排除 .gitignore 中的文件
     let output = run_git(&["ls-files".to_string()])?;
     Ok(output.lines().map(|s| s.to_string()).collect())
 }
 
 /// 获取未跟踪文件（自动排除 .gitignore 中的文件）
-pub fn get_untracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+pub fn get_untracked_files() -> Result<Vec<String>> {
     let output = run_git(&[
         "ls-files".to_string(),
         "--others".to_string(),
@@ -373,7 +373,7 @@ pub fn get_untracked_files() -> Result<Vec<String>, Box<dyn std::error::Error + 
 
 /// 是否存在未跟踪变更（新增文件）
 #[allow(dead_code)]
-pub fn has_untracked_changes() -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+pub fn has_untracked_changes() -> Result<bool> {
     Ok(!get_untracked_files()?.is_empty())
 }
 

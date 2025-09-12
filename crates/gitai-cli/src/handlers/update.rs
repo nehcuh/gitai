@@ -8,8 +8,8 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 
 /// 处理 update 命令
 pub async fn handle_command(
-    _config: &gitai_core::config::Config, 
-    command: &Command
+    _config: &gitai_core::config::Config,
+    command: &Command,
 ) -> HandlerResult<()> {
     match command {
         Command::Update { check, format } => {

@@ -17,6 +17,13 @@ impl CliApp {
         Self { args, config: None }
     }
 
+    /// 获取已加载的配置，否则返回用户友好的错误
+    fn config_or_err(&self) -> CliResult<&Config> {
+        self.config.as_ref().ok_or_else(|| {
+            "配置未加载。请先运行 'gitai init' 或确保 ~/.config/gitai/config.toml 存在".into()
+        })
+    }
+
     /// 初始化配置
     ///
     /// Init 命令不需要配置文件，其他命令需要先加载配置
@@ -45,16 +52,14 @@ impl CliApp {
     /// 运行 CLI 应用程序
     pub async fn run(&self) -> CliResult<()> {
         match &self.args.command {
-            Command::Init { .. } => {
-                crate::handlers::init::handle_command(&self.args.command).await
-            }
+            Command::Init { .. } => crate::handlers::init::handle_command(&self.args.command).await,
             Command::Review { .. } => {
-                let config = self.config.as_ref().unwrap();
+                let config = self.config_or_err()?;
                 crate::handlers::review::handle_command(config, &self.args.command).await
             }
             #[cfg(feature = "security")]
             Command::Scan { .. } | Command::ScanHistory { .. } => {
-                let config = self.config.as_ref().unwrap();
+                let config = self.config_or_err()?;
                 crate::handlers::scan::handle_command(config, &self.args.command).await
             }
             #[cfg(not(feature = "security"))]
@@ -64,11 +69,11 @@ impl CliApp {
                 Err("功能未启用".into())
             }
             Command::Commit { .. } => {
-                let config = self.config.as_ref().unwrap();
+                let config = self.config_or_err()?;
                 crate::handlers::commit::handle_command(config, &self.args.command).await
             }
             Command::Prompts { .. } => {
-                let config = self.config.as_ref().unwrap();
+                let config = self.config_or_err()?;
                 crate::handlers::prompts::handle_command(config, &self.args.command).await
             }
             // TODO: 更新功能暂时禁用，待 feature 重新启用
@@ -79,20 +84,26 @@ impl CliApp {
                 Err("功能未启用".into())
             }
             Command::Git(..) => {
-                let config = self.config.as_ref().unwrap();
+                let config = self.config_or_err()?;
                 crate::handlers::git::handle_command(config, &self.args.command, &self.args).await
             }
-            // TODO: MCP 功能暂时禁用，待 feature 重新启用
-            // #[cfg(feature = "mcp")]
-            Command::Mcp { .. } => {
-                eprintln!("❌ MCP 服务器功能未启用");
-                eprintln!("💡 请使用包含 'mcp' 功能的构建版本");
-                Err("功能未启用".into())
+            Command::Mcp { .. }
+            | Command::McpHealth { .. }
+            | Command::McpTools { .. }
+            | Command::McpInfo { .. }
+            | Command::McpCall { .. }
+            | Command::McpBatch { .. } => {
+                let config = self.config_or_err()?;
+                crate::handlers::mcp::handle_command(config, &self.args.command).await
             }
             Command::Config { .. } => {
-                let config = self.config.as_ref().unwrap();
-                crate::handlers::config::handle_command(config, &self.args.command, self.args.offline)
-                    .await
+                let config = self.config_or_err()?;
+                crate::handlers::config::handle_command(
+                    config,
+                    &self.args.command,
+                    self.args.offline,
+                )
+                .await
             }
             // TODO: 度量功能暂时禁用，待 feature 重新启用
             // #[cfg(feature = "metrics")]
@@ -106,6 +117,9 @@ impl CliApp {
             }
             Command::Features { .. } => {
                 crate::handlers::features::handle_command(&self.args.command).await
+            }
+            Command::Evaluate { .. } => {
+                crate::handlers::evaluation::handle_command(&self.args.command).await
             }
         }
     }

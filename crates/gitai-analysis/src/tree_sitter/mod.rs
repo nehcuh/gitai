@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 pub mod analyzer;
 // Note: analyzer.rs has been refactored into analyzer/ directory
 pub mod cache;
@@ -314,10 +315,7 @@ impl TreeSitterManager {
         };
 
         log::info!(
-            "并发分析完成: {} 个文件成功分析，总耗时: {:.2}秒，吞吐量: {:.2} 文件/秒",
-            files_analyzed,
-            total_time,
-            throughput
+            "并发分析完成: {files_analyzed} 个文件成功分析，总耗时: {total_time:.2}秒，吞吐量: {throughput:.2} 文件/秒"
         );
 
         if files_analyzed > 0 {
@@ -328,10 +326,7 @@ impl TreeSitterManager {
                 .map(|r| r.analysis_time)
                 .fold(f64::MAX, f64::min);
             log::info!(
-                "性能统计 - 平均: {:.3}秒, 最快: {:.3}秒, 最慢: {:.3}秒",
-                avg_time,
-                min_time,
-                max_time
+                "性能统计 - 平均: {avg_time:.3}秒, 最快: {min_time:.3}秒, 最慢: {max_time:.3}秒"
             );
         }
 

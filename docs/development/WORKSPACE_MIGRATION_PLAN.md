@@ -1,5 +1,7 @@
 # Workspace Migration Plan (Proposal)
 
+> ARCHIVED: Proposal superseded by the actual workspace in crates/* with root workspace Cargo.toml.
+
 Goal
 - Adopt a Cargo workspace layout to decouple core, CLI, MCP, security, metrics, and types into separate crates, improving build times, dependency management, and modularity.
 

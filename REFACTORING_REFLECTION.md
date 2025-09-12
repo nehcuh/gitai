@@ -1,5 +1,7 @@
 # GitAI 重构反思记录
 
+> ARCHIVED: Historical reflection for reference only. Current implementation status: see IMPLEMENTATION_STATUS.md.
+
 ## 时间线和决策记录
 
 ### 第一次尝试：错误处理统一 (失败)

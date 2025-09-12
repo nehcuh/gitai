@@ -33,4 +33,3 @@ impl AdapterRegistry {
         self
     }
 }
-

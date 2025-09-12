@@ -88,4 +88,3 @@ pub trait DevOpsAdapter: Send + Sync {
     /// get pull request by id
     async fn get_pull_request(&self, id: &str) -> anyhow::Result<PullRequestInfo>;
 }
-

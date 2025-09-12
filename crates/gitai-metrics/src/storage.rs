@@ -1,8 +1,8 @@
 //! Metrics storage functionality
 
 use crate::tracker::QualityMetrics;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Storage backend for metrics data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,12 +70,19 @@ impl MetricsStorage {
     }
 
     /// Store metrics for a project
-    pub fn store_metrics(&mut self, project_id: &str, metrics: QualityMetrics) -> Result<(), StorageError> {
-        let project_metrics = self.data.entry(project_id.to_string()).or_insert(ProjectMetrics {
-            project_id: project_id.to_string(),
-            metrics: Vec::new(),
-            metadata: HashMap::new(),
-        });
+    pub fn store_metrics(
+        &mut self,
+        project_id: &str,
+        metrics: QualityMetrics,
+    ) -> Result<(), StorageError> {
+        let project_metrics = self
+            .data
+            .entry(project_id.to_string())
+            .or_insert(ProjectMetrics {
+                project_id: project_id.to_string(),
+                metrics: Vec::new(),
+                metadata: HashMap::new(),
+            });
 
         project_metrics.metrics.push(metrics);
 
@@ -108,21 +115,19 @@ impl MetricsStorage {
         if let Some(path) = &self.config.path {
             let json = serde_json::to_string_pretty(&self.data)
                 .map_err(|e| StorageError::Serialization(e.to_string()))?;
-            
-            std::fs::write(path, json)
-                .map_err(|e| StorageError::Io(e.to_string()))?;
+
+            std::fs::write(path, json).map_err(|e| StorageError::Io(e.to_string()))?;
         }
         Ok(())
     }
 
     /// Load data from file
     pub fn load_from_file(&mut self, path: &str) -> Result<(), StorageError> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| StorageError::Io(e.to_string()))?;
-        
+        let content = std::fs::read_to_string(path).map_err(|e| StorageError::Io(e.to_string()))?;
+
         let data: HashMap<String, ProjectMetrics> = serde_json::from_str(&content)
             .map_err(|e| StorageError::Deserialization(e.to_string()))?;
-        
+
         self.data = data;
         Ok(())
     }
@@ -149,12 +154,16 @@ impl Default for MetricsStorage {
 /// Storage errors
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
+    /// I/O error wrapper for storage operations
     #[error("I/O error: {0}")]
     Io(String),
+    /// Serialization error when converting data to persisted formats
     #[error("Serialization error: {0}")]
     Serialization(String),
+    /// Deserialization error when reading persisted data
     #[error("Deserialization error: {0}")]
     Deserialization(String),
+    /// Database backend reported an error
     #[error("Database error: {0}")]
     Database(String),
 }
@@ -182,7 +191,9 @@ mod tests {
             timestamp: Utc::now(),
         };
 
-        storage.store_metrics("test-project", metrics.clone()).unwrap();
+        storage
+            .store_metrics("test-project", metrics.clone())
+            .unwrap();
         let retrieved = storage.get_metrics("test-project").unwrap();
         assert_eq!(retrieved.len(), 1);
         assert_eq!(retrieved[0].total_files, 10);
@@ -215,7 +226,7 @@ mod tests {
         // Load into new storage
         let mut storage2 = MetricsStorage::with_config(config.clone());
         storage2.load_from_file(&path_str).unwrap();
-        
+
         let retrieved = storage2.get_metrics("test-project").unwrap();
         assert_eq!(retrieved.len(), 1);
         assert_eq!(retrieved[0].total_files, 5);

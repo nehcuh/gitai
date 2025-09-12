@@ -2,7 +2,7 @@
 // 统一所有操作的数据传递，消除重复配置和参数传递混乱
 
 use crate::architectural_impact::ArchitecturalImpactAnalysis;
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::tree_sitter::StructuralSummary;
 use std::path::PathBuf;
 

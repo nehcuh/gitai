@@ -11,6 +11,7 @@ members = [
     "crates/gitai-metrics",
     "crates/gitai-security",
     "crates/gitai-adapters",
+    "crates/gitai-evaluation",
     # "crates/gitai-bin",
 ]
 resolver = "2"
@@ -108,9 +109,6 @@ rayon = "1.10"
 # Dev dependencies (used in individual crates)
 criterion = "0.5"
 
-# Workspace-level dev dependencies for integration tests
-[workspace.dev-dependencies]
-tempfile = "3.20.0"
 tokio-test = "0.4"
 assert_cmd = "2.0"
 predicates = "3.0"

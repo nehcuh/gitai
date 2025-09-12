@@ -9,28 +9,41 @@ use std::process::Command;
 use std::sync::Arc;
 
 lazy_static! {
-    static ref VERSION_CACHE: Arc<RwLock<HashMap<String, String>>> = Arc::new(RwLock::new(HashMap::new()));
-    static ref RULES_CACHE: Arc<RwLock<HashMap<PathBuf, RulesInfo>>> = Arc::new(RwLock::new(HashMap::new()));
+    static ref VERSION_CACHE: Arc<RwLock<HashMap<String, String>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    static ref RULES_CACHE: Arc<RwLock<HashMap<PathBuf, RulesInfo>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
 /// Security scan result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
+    /// 扫描工具名称
     pub tool: String,
+    /// 扫描工具版本
     pub version: String,
+    /// 执行耗时（秒）
     pub execution_time: f64,
+    /// 发现的问题列表
     pub findings: Vec<Finding>,
+    /// 错误信息（如发生）
     pub error: Option<String>,
+    /// 规则信息（目录、来源、数量）
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub rules_info: Option<RulesInfo>,
 }
 
+/// 规则信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RulesInfo {
+    /// 规则目录路径
     pub dir: String,
+    /// 规则来源列表
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub sources: Vec<String>,
+    /// 规则总数
     pub total_rules: usize,
+    /// 规则更新时间
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub updated_at: Option<String>,
 }
@@ -38,22 +51,34 @@ pub struct RulesInfo {
 /// Security finding
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
+    /// 问题标题
     pub title: String,
+    /// 文件路径
     pub file_path: PathBuf,
+    /// 行号
     pub line: usize,
+    /// 列号
     pub column: usize,
+    /// 严重级别
     pub severity: String,
+    /// 规则 ID
     pub rule_id: Option<String>,
+    /// 相关代码片段
     pub code_snippet: Option<String>,
+    /// 详细说明
     pub message: String,
+    /// 修复建议
     pub remediation: Option<String>,
 }
 
 /// Severity level
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Severity {
+    /// 错误
     Error,
+    /// 警告
     Warning,
+    /// 信息
     Info,
 }
 
@@ -77,7 +102,10 @@ pub fn run_opengrep_scan(
     let mut args = vec![
         "--json".to_string(),
         "--quiet".to_string(),
-        format!("--timeout={}", timeout_override.unwrap_or(config.scan.timeout)),
+        format!(
+            "--timeout={}",
+            timeout_override.unwrap_or(config.scan.timeout)
+        ),
     ];
     if config.scan.jobs > 0 {
         args.push(format!("--jobs={}", config.scan.jobs));
@@ -105,7 +133,19 @@ pub fn run_opengrep_scan(
         if let Ok(mut iter) = std::fs::read_dir(&rules_dir) {
             if iter.next().is_some() {
                 let known_langs = [
-                    "java", "python", "javascript", "typescript", "go", "rust", "c", "cpp", "ruby", "php", "kotlin", "scala", "swift",
+                    "java",
+                    "python",
+                    "javascript",
+                    "typescript",
+                    "go",
+                    "rust",
+                    "c",
+                    "cpp",
+                    "ruby",
+                    "php",
+                    "kotlin",
+                    "scala",
+                    "swift",
                 ];
 
                 fn dir_contains_valid_rules(dir: &Path) -> bool {
@@ -123,8 +163,11 @@ pub fn run_opengrep_scan(
                                     }
                                     stack.push(p);
                                 } else if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-                                    if ext.eq_ignore_ascii_case("yml") || ext.eq_ignore_ascii_case("yaml") {
-                                        if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+                                    if ext.eq_ignore_ascii_case("yml")
+                                        || ext.eq_ignore_ascii_case("yaml")
+                                    {
+                                        if let Some(fname) = p.file_name().and_then(|s| s.to_str())
+                                        {
                                             if fname.starts_with('.') {
                                                 continue;
                                             }
@@ -135,7 +178,9 @@ pub fn run_opengrep_scan(
                                         if let Ok(content) = fs::read_to_string(&p) {
                                             for line in content.lines().take(200) {
                                                 let t = line.trim_start();
-                                                if t.starts_with("rules:") || t.starts_with("rules :") {
+                                                if t.starts_with("rules:")
+                                                    || t.starts_with("rules :")
+                                                {
                                                     return true;
                                                 }
                                             }
@@ -169,24 +214,39 @@ pub fn run_opengrep_scan(
                                 }
                                 found_any = true;
                             } else {
-                                log::warn!("指定语言 '{}' 的规则目录存在但未检测到有效规则: {}", l, candidate.display());
+                                log::warn!(
+                                    "指定语言 '{}' 的规则目录存在但未检测到有效规则: {}",
+                                    l,
+                                    candidate.display()
+                                );
                             }
                         }
                     }
                     if !found_any {
-                        log::warn!("未找到指定语言 '{}' 的有效规则目录（已检查候选根目录下的子目录）: {}", l, rules_dir.display());
+                        log::warn!(
+                            "未找到指定语言 '{}' 的有效规则目录（已检查候选根目录下的子目录）: {}",
+                            l,
+                            rules_dir.display()
+                        );
                     }
                 } else {
                     for root in &candidate_roots {
                         for l in known_langs {
                             let p = root.join(l);
-                            if p.exists() && p.is_dir() && dir_contains_valid_rules(&p) && !used_config_paths.iter().any(|x| x == &p) {
+                            if p.exists()
+                                && p.is_dir()
+                                && dir_contains_valid_rules(&p)
+                                && !used_config_paths.iter().any(|x| x == &p)
+                            {
                                 used_config_paths.push(p);
                             }
                         }
                     }
                     if used_config_paths.is_empty() {
-                        log::warn!("未在规则目录及其一级子目录下找到任何包含有效规则的语言子目录: {}", rules_dir.display());
+                        log::warn!(
+                            "未在规则目录及其一级子目录下找到任何包含有效规则的语言子目录: {}",
+                            rules_dir.display()
+                        );
                     }
                 }
 
@@ -222,14 +282,21 @@ pub fn run_opengrep_scan(
         let stderr_trim = stderr.trim();
 
         if exit_code == 2 {
-            if stderr_trim.is_empty() || stderr_trim.contains("No rules") || stderr_trim.contains("No files") {
+            if stderr_trim.is_empty()
+                || stderr_trim.contains("No rules")
+                || stderr_trim.contains("No files")
+            {
                 log::info!("OpenGrep 退出码 2：无匹配规则或文件，视为成功扫描");
             } else {
                 let err_msg = stderr_trim.to_string();
-                log::warn!("OpenGrep 返回错误状态码 2: {}", err_msg);
+                log::warn!("OpenGrep 返回错误状态码 2: {err_msg}");
                 return Ok(ScanResult {
                     tool: "opengrep".to_string(),
-                    version: if include_version { get_opengrep_version()? } else { "unknown".to_string() },
+                    version: if include_version {
+                        get_opengrep_version()?
+                    } else {
+                        "unknown".to_string()
+                    },
                     execution_time,
                     findings: vec![],
                     error: Some(err_msg),
@@ -242,17 +309,25 @@ pub fn run_opengrep_scan(
             } else {
                 let head = stdout.lines().take(5).collect::<Vec<_>>().join(" | ");
                 if head.is_empty() {
-                    format!("OpenGrep exited with status {} (no stderr)", exit_code)
+                    format!("OpenGrep exited with status {exit_code} (no stderr)")
                 } else {
-                    let mut s = format!("OpenGrep exited with status {} (no stderr). stdout: {}", exit_code, head);
-                    if s.len() > 500 { s.truncate(500); }
+                    let mut s = format!(
+                        "OpenGrep exited with status {exit_code} (no stderr). stdout: {head}"
+                    );
+                    if s.len() > 500 {
+                        s.truncate(500);
+                    }
                     s
                 }
             };
-            log::warn!("OpenGrep 返回非零状态码 ({}): {}", exit_code, err_msg);
+            log::warn!("OpenGrep 返回非零状态码 ({exit_code}): {err_msg}");
             return Ok(ScanResult {
                 tool: "opengrep".to_string(),
-                version: if include_version { get_opengrep_version()? } else { "unknown".to_string() },
+                version: if include_version {
+                    get_opengrep_version()?
+                } else {
+                    "unknown".to_string()
+                },
                 execution_time,
                 findings: vec![],
                 error: Some(err_msg),
@@ -264,8 +339,12 @@ pub fn run_opengrep_scan(
     let stdout = String::from_utf8_lossy(&output.stdout);
     debug!("📄 OpenGrep stdout: {stdout}");
     if !used_config_paths.is_empty() {
-        let joined = used_config_paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ");
-        debug!("📦 使用规则目录: {}", joined);
+        let joined = used_config_paths
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        debug!("📦 使用规则目录: {joined}");
     }
 
     let findings = match parse_opengrep_output(&stdout) {
@@ -274,7 +353,11 @@ pub fn run_opengrep_scan(
             debug!("❌ JSON 解析失败: {e}");
             return Ok(ScanResult {
                 tool: "opengrep".to_string(),
-                version: if include_version { get_opengrep_version().unwrap_or_else(|_| "unknown".to_string()) } else { "unknown".to_string() },
+                version: if include_version {
+                    get_opengrep_version().unwrap_or_else(|_| "unknown".to_string())
+                } else {
+                    "unknown".to_string()
+                },
                 execution_time,
                 findings: vec![],
                 error: Some(format!("JSON 解析失败: {e}")),
@@ -285,7 +368,11 @@ pub fn run_opengrep_scan(
 
     Ok(ScanResult {
         tool: "opengrep".to_string(),
-        version: if include_version { get_opengrep_version()? } else { "unknown".to_string() },
+        version: if include_version {
+            get_opengrep_version()?
+        } else {
+            "unknown".to_string()
+        },
         execution_time,
         findings,
         error: None,
@@ -363,14 +450,20 @@ fn parse_opengrep_output(
 fn create_finding_from_result(
     item: &serde_json::Value,
 ) -> Result<Finding, Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let title = item["extra"]["message"].as_str().unwrap_or("Unknown issue").to_string();
+    let title = item["extra"]["message"]
+        .as_str()
+        .unwrap_or("Unknown issue")
+        .to_string();
     let file_path = item["path"].as_str().unwrap_or("").to_string();
     let line = item["start"]["line"].as_u64().unwrap_or(0) as usize;
     let column = item["start"]["col"].as_u64().unwrap_or(0) as usize;
     let rule_id = item["check_id"].as_str().map(|s| s.to_string());
     let severity_str = item["severity"].as_str().unwrap_or("WARNING");
     let code_snippet = item["lines"].as_str().map(|s| s.to_string());
-    let message = item["extra"]["message"].as_str().unwrap_or(title.as_str()).to_string();
+    let message = item["extra"]["message"]
+        .as_str()
+        .unwrap_or(title.as_str())
+        .to_string();
     let remediation = item["extra"]["fix"].as_str().map(|s| s.to_string());
 
     Ok(Finding {
@@ -411,16 +504,35 @@ pub fn read_rules_info(rules_dir: &Path) -> Option<RulesInfo> {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
             let sources = v["sources"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|s| s.as_str().map(|x| x.to_string())).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str().map(|x| x.to_string()))
+                        .collect()
+                })
                 .unwrap_or_else(Vec::new);
             let total = v["total_rules"].as_u64().unwrap_or(0) as usize;
             let updated_at = v["updated_at"].as_str().map(|s| s.to_string());
-            Some(RulesInfo { dir: rules_dir.display().to_string(), sources, total_rules: total, updated_at })
+            Some(RulesInfo {
+                dir: rules_dir.display().to_string(),
+                sources,
+                total_rules: total,
+                updated_at,
+            })
         } else {
-            Some(RulesInfo { dir: rules_dir.display().to_string(), sources: Vec::new(), total_rules: 0, updated_at: None })
+            Some(RulesInfo {
+                dir: rules_dir.display().to_string(),
+                sources: Vec::new(),
+                total_rules: 0,
+                updated_at: None,
+            })
         }
     } else {
-        Some(RulesInfo { dir: rules_dir.display().to_string(), sources: Vec::new(), total_rules: 0, updated_at: None })
+        Some(RulesInfo {
+            dir: rules_dir.display().to_string(),
+            sources: Vec::new(),
+            total_rules: 0,
+            updated_at: None,
+        })
     };
 
     if let Some(ref info) = rules_info {
@@ -442,7 +554,9 @@ pub fn install_opengrep() -> Result<(), Box<dyn std::error::Error + Send + Sync 
         .unwrap_or(false);
 
     if cargo_available {
-        let output = Command::new("cargo").args(["install", "opengrep"]).output()?;
+        let output = Command::new("cargo")
+            .args(["install", "opengrep"])
+            .output()?;
 
         if output.status.success() {
             if !is_opengrep_installed() {
@@ -515,7 +629,8 @@ mod tests {
         let findings = parse_opengrep_output("").expect("empty is ok");
         assert!(findings.is_empty());
 
-        let findings2 = parse_opengrep_output("INFO: scanning... no json here").expect("no json -> empty");
+        let findings2 =
+            parse_opengrep_output("INFO: scanning... no json here").expect("no json -> empty");
         assert!(findings2.is_empty());
 
         let noisy = format!("some logs... {}", sample_json());
@@ -577,4 +692,3 @@ mod tests {
         assert!(msg.contains("扫描路径不存在"));
     }
 }
-

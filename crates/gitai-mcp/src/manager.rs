@@ -20,7 +20,10 @@ impl GitAiMcpManager {
 
     /// 启动管理器
     pub async fn start(&self) -> McpResult<()> {
-        if self.is_running.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .is_running
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             log::warn!("⚠️ 管理器已经在运行");
             return Ok(());
         }
@@ -32,7 +35,10 @@ impl GitAiMcpManager {
 
     /// 停止管理器
     pub async fn stop(&self) -> McpResult<()> {
-        if !self.is_running.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .is_running
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
             log::warn!("⚠️ 管理器未运行");
             return Ok(());
         }

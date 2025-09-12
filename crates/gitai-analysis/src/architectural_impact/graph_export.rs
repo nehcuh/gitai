@@ -1,10 +1,11 @@
+#![allow(missing_docs)]
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::architectural_impact::dependency_graph::{DependencyGraph, DotOptions, NodeType};
-use gitai_core::git;
 use crate::tree_sitter::{SupportedLanguage, TreeSitterManager};
+use gitai_core::git;
 
 fn is_code_file(path: &Path) -> bool {
     matches!(

@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::path::PathBuf;
+use gitai_types::{GitAIError, Result};
 
 /// 应用配置
 #[derive(Debug, Clone, Deserialize)]
@@ -27,29 +28,28 @@ pub struct AiConfig {
 
 impl AiConfig {
     /// 验证 AI 配置
-    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    pub fn validate(&self) -> Result<()> {
         // 验证 API URL
         if self.api_url.trim().is_empty() {
-            return Err("AI API URL 不能为空".into());
+            return Err(GitAIError::Config("AI API URL 不能为空".to_string()));
         }
 
         // 验证 URL 格式
         if !self.api_url.starts_with("http://") && !self.api_url.starts_with("https://") {
-            return Err(format!("AI API URL 格式无效: {}", self.api_url).into());
+            return Err(GitAIError::Config(format!("AI API URL 格式无效: {}", self.api_url)));
         }
 
         // 验证模型名称
         if self.model.trim().is_empty() {
-            return Err("AI 模型名称不能为空".into());
+            return Err(GitAIError::Config("AI 模型名称不能为空".to_string()));
         }
 
         // 验证温度参数
         if self.temperature < 0.0 || self.temperature > 1.0 {
-            return Err(format!(
+            return Err(GitAIError::Config(format!(
                 "AI 温度参数必须在 0.0 到 1.0 之间，当前值: {}",
                 self.temperature
-            )
-            .into());
+            )));
         }
 
         Ok(())
@@ -71,36 +71,36 @@ pub struct ScanConfig {
 
 impl ScanConfig {
     /// 验证扫描配置
-    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    pub fn validate(&self) -> Result<()> {
         // 验证超时时间
         if self.timeout == 0 {
-            return Err("扫描超时时间不能为 0".into());
+            return Err(GitAIError::Config("扫描超时时间不能为 0".to_string()));
         }
 
         if self.timeout > 3600 {
-            return Err("扫描超时时间不能超过 3600 秒（1小时）".into());
+            return Err(GitAIError::Config("扫描超时时间不能超过 3600 秒（1小时）".to_string()));
         }
 
         // 验证并发数
         if self.jobs == 0 {
-            return Err("扫描并发数不能为 0".into());
+            return Err(GitAIError::Config("扫描并发数不能为 0".to_string()));
         }
 
         if self.jobs > 32 {
-            return Err("扫描并发数不能超过 32".into());
+            return Err(GitAIError::Config("扫描并发数不能超过 32".to_string()));
         }
 
         // 验证默认路径（如果存在）
         if let Some(ref path) = self.default_path {
             if path.trim().is_empty() {
-                return Err("扫描默认路径不能为空字符串".into());
+                return Err(GitAIError::Config("扫描默认路径不能为空字符串".to_string()));
             }
         }
 
         // 验证规则目录（如果存在）
         if let Some(ref rules_dir) = self.rules_dir {
             if rules_dir.trim().is_empty() {
-                return Err("规则目录不能为空字符串".into());
+                return Err(GitAIError::Config("规则目录不能为空字符串".to_string()));
             }
         }
 

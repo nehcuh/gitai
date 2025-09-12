@@ -12,39 +12,46 @@ name = "gitai"
 path = "src/main.rs"
 
 [dependencies]
-gitai-types = { path = "../gitai-types" }
-gitai-core = { path = "../gitai-core" }
-gitai-analysis = { path = "../gitai-analysis" }
-gitai-security = { path = "../gitai-security" }
+ gitai-types = { path = "../gitai-types" }
+ gitai-core = { path = "../gitai-core" }
+ gitai-analysis = { path = "../gitai-analysis" }
+ gitai-security = { path = "../gitai-security" }
+ gitai-mcp = { path = "../gitai-mcp" }
+ gitai-evaluation = { path = "../gitai-evaluation" }
 
-# CLI framework
-clap = { workspace = true }
+ # CLI framework
+ clap = { workspace = true }
 
-# Async runtime
-tokio = { workspace = true }
+ # Async runtime
+ tokio = { workspace = true }
 
-# Serialization
-serde = { workspace = true }
-serde_json = { workspace = true }
-toml = { workspace = true }
+ # Serialization
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+ toml = { workspace = true }
 
-# Logging
-log = { workspace = true }
-env_logger = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+# HTTP client
+ reqwest = { workspace = true }
+ # Async streams utilities for concurrency
+ futures-util = { workspace = true }
+ 
+ # Logging
+ log = { workspace = true }
+ env_logger = { workspace = true }
+ tracing = { workspace = true }
+ tracing-subscriber = { workspace = true }
 
-# Date and time
-chrono = { workspace = true }
+ # Date and time
+ chrono = { workspace = true }
 
-# Error handling
-anyhow = { workspace = true }
+ # Error handling
+ anyhow = { workspace = true }
 
-# File system
-dirs = { workspace = true }
+ # File system
+ dirs = { workspace = true }
 
-# Terminal colors
-colored = "2.0"
+ # Terminal colors
+ colored = "2.0"
 
 [features]
 # Keep defaults minimal to avoid pulling optional subsystems during migration

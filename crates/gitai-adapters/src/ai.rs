@@ -65,7 +65,11 @@ pub trait AiAdapter: Send + Sync {
 }
 
 /// Helper to build a basic response with timestamp
-pub fn build_response(content: String, model: impl Into<String>, usage: Option<UsageInfo>) -> AiResponse {
+pub fn build_response(
+    content: String,
+    model: impl Into<String>,
+    usage: Option<UsageInfo>,
+) -> AiResponse {
     AiResponse {
         content,
         model: model.into(),
@@ -73,4 +77,3 @@ pub fn build_response(content: String, model: impl Into<String>, usage: Option<U
         generated_at: Utc::now().to_rfc3339(),
     }
 }
-

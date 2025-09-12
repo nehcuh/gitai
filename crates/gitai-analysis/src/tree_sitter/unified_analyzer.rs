@@ -13,9 +13,13 @@ use tree_sitter::{Node, Query, QueryCursor, Tree};
 /// 查询配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageQueries {
+    /// 函数匹配查询
     pub function_query: String,
+    /// 类/结构体匹配查询
     pub class_query: String,
+    /// 注释匹配查询
     pub comment_query: String,
+    /// 调用关系匹配查询（可选）
     pub call_query: Option<String>,
 }
 

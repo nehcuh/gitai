@@ -9,7 +9,7 @@ pub mod analysis;
 pub mod architectural_impact;
 pub mod args;
 pub mod commit;
-pub mod config;
+// config模块已迁移到crates/gitai-core
 pub mod config_init;
 pub mod context;
 pub mod error;
@@ -17,7 +17,7 @@ pub mod error_ext;
 #[cfg(test)]
 pub mod error_tests;
 pub mod features;
-pub mod git;
+// git模块已迁移到crates/gitai-core
 pub mod project_insights;
 pub mod prompts;
 pub mod resource_manager;
@@ -50,7 +50,8 @@ pub mod metrics;
 pub mod mcp;
 
 pub use architectural_impact::{ArchitecturalImpactAnalysis, BreakingChange, RiskLevel};
-pub use config::Config;
+// Config已从crates/gitai-core导出
+pub use gitai_core::config::Config;
 pub use context::{Issue, OperationContext, OperationOptions};
 pub use error::{GitAIError, Result};
 pub use project_insights::{InsightsGenerator, ProjectInsights};

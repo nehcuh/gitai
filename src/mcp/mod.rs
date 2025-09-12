@@ -359,7 +359,7 @@ pub struct GitAiMcpManager {
 
 impl GitAiMcpManager {
     /// 创建新的 MCP 服务管理器
-    pub async fn new(config: crate::config::Config) -> McpResult<Self> {
+    pub async fn new(config: gitai_core::config::Config) -> McpResult<Self> {
         info!("🔧 初始化 GitAI MCP 服务管理器");
 
         let managed_registry = manager::ManagedServiceRegistry::new(config).await?;
@@ -456,7 +456,7 @@ impl GitAiMcpManager {
 
     /// 获取服务器信息
     #[allow(dead_code)]
-    pub fn get_server_info(&self, config: &crate::config::Config) -> Option<Implementation> {
+    pub fn get_server_info(&self, config: &gitai_core::config::Config) -> Option<Implementation> {
         config.mcp.as_ref().map(|config| Implementation {
             name: config.server.name.clone(),
             version: config.server.version.clone(),

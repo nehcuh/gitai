@@ -3,20 +3,19 @@
 
 #![warn(missing_docs)]
 
+pub mod change;
 pub mod common;
 pub mod error;
-pub mod change;
 pub mod risk;
 
 // Re-export commonly used types
+pub use change::*;
 pub use common::*;
 pub use error::*;
-pub use change::*;
 pub use risk::*;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
 
 // ============ 依赖和架构相关 ============
 
@@ -214,7 +213,6 @@ pub struct Statistics {
     pub errors: usize,
 }
 
-
 // ============ Traits ============
 
 /// 可评分的 trait
@@ -286,9 +284,18 @@ mod tests {
 
     #[test]
     fn test_complexity_from_cyclomatic() {
-        assert_eq!(ComplexityLevel::from_cyclomatic(3), ComplexityLevel::VeryLow);
-        assert_eq!(ComplexityLevel::from_cyclomatic(15), ComplexityLevel::Medium);
-        assert_eq!(ComplexityLevel::from_cyclomatic(100), ComplexityLevel::VeryHigh);
+        assert_eq!(
+            ComplexityLevel::from_cyclomatic(3),
+            ComplexityLevel::VeryLow
+        );
+        assert_eq!(
+            ComplexityLevel::from_cyclomatic(15),
+            ComplexityLevel::Medium
+        );
+        assert_eq!(
+            ComplexityLevel::from_cyclomatic(100),
+            ComplexityLevel::VeryHigh
+        );
     }
 
     #[test]

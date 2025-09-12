@@ -29,6 +29,7 @@ pub struct Args {
     pub config_url: Option<String>,
 }
 
+/// GitAI CLI 子命令枚举
 #[derive(Parser, Debug)]
 pub enum Command {
     /// AI驱动的代码评审（支持安全扫描集成）
@@ -118,6 +119,7 @@ pub enum Command {
     /// 管理AI提示词模板
     Prompts {
         #[command(subcommand)]
+        /// 子动作
         action: PromptAction,
     },
     /// 智能提交（自动生成信息，支持Issue关联）
@@ -158,12 +160,84 @@ pub enum Command {
     Git(Vec<String>),
     /// 启动MCP服务器
     Mcp {
-        /// 传输协议 (stdio|tcp|sse)
+        /// 传输协议 (stdio|tcp|http|sse)
         #[arg(long, default_value = "stdio")]
         transport: String,
-        /// 监听地址 (tcp/sse)
-        #[arg(long, default_value = "127.0.0.1:8080")]
+        /// 监听地址 (tcp/http/sse)
+        #[arg(long, default_value = "127.0.0.1:8711")]
         addr: String,
+    },
+    /// MCP 服务器健康检查（HTTP）
+    McpHealth {
+        /// 服务器 URL（默认 http://127.0.0.1:8711）
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// MCP 服务器工具列表（HTTP）
+    McpTools {
+        /// 服务器 URL（默认 http://127.0.0.1:8711）
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// MCP 服务器信息（HTTP）
+    McpInfo {
+        /// 服务器 URL（默认 http://127.0.0.1:8711）
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// 通过 /rpc 批量调用工具（HTTP）
+    McpBatch {
+        /// 服务器 URL（默认 http://127.0.0.1:8711）
+        #[arg(long)]
+        url: Option<String>,
+        /// 批量调用定义文件（JSON 数组：[{"name":"...","arguments":{...}}, ...]）
+        #[arg(long, value_name = "FILE")]
+        file: PathBuf,
+        /// 输出文件（不指定则输出到 stdout）
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 原始模式：仅输出每个响应的 content 主体，合并为数组
+        #[arg(long)]
+        raw: bool,
+        /// 紧凑 JSON 输出
+        #[arg(long)]
+        minify: bool,
+        /// 并发度（默认 4）
+        #[arg(long, default_value_t = 4)]
+        concurrency: usize,
+        /// 失败重试次数（默认 0）
+        #[arg(long, default_value_t = 0)]
+        retries: usize,
+        /// 允许 JSONC（注释、尾逗号），启用宽松解析
+        #[arg(long)]
+        allow_jsonc: bool,
+    },
+    /// 通过 /rpc 调用工具（HTTP）
+    McpCall {
+        /// 服务器 URL（默认 http://127.0.0.1:8711）
+        #[arg(long)]
+        url: Option<String>,
+        /// 工具名称（如 execute_analysis、execute_review）
+        #[arg(long, value_name = "NAME")]
+        name: String,
+        /// 工具参数 JSON 字符串（例如 '{"path":".","verbosity":0}'）；与 --args-file 同时给出时优先使用本参数
+        #[arg(long, value_name = "JSON")]
+        args: Option<String>,
+        /// 工具参数 JSON 文件路径（例如 args.json）；当未提供 --args 时读取该文件
+        #[arg(long, value_name = "FILE")]
+        args_file: Option<PathBuf>,
+        /// 输出文件（不指定则输出到 stdout）
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 仅输出 result.content[0].json 的原始对象（若存在），否则回退输出完整响应
+        #[arg(long)]
+        raw: bool,
+        /// 输出紧凑 JSON（默认 pretty 格式）；与 --raw 可组合
+        #[arg(long)]
+        minify: bool,
+        /// 允许 JSONC（注释、尾逗号），启用宽松解析
+        #[arg(long)]
+        allow_jsonc: bool,
     },
     /// 初始化GitAI配置
     Init {
@@ -186,11 +260,13 @@ pub enum Command {
     /// 配置管理
     Config {
         #[command(subcommand)]
+        /// 子动作
         action: ConfigAction,
     },
     /// 架构质量趋势追踪
     Metrics {
         #[command(subcommand)]
+        /// 子动作
         action: MetricsAction,
     },
     /// 依赖图导出（全局/子目录）
@@ -249,6 +325,18 @@ pub enum Command {
         /// 输出格式 (text|table|json)
         #[arg(long, default_value = "text")]
         format: String,
+    },
+    /// 评估重构完成度与代码一致性
+    Evaluate {
+        /// 扫描路径（默认工作区根目录）
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// 输出格式 (text|json)
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// 输出文件
+        #[arg(long)]
+        output: Option<PathBuf>,
     },
 }
 

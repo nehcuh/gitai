@@ -75,3 +75,9 @@ debug_*.sh
 # Project intermediates
 .tasks/
 *.backup
+src.backup/
+B
+C
+# Evaluation outputs
+*.report.json
+evaluation.json

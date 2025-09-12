@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -13,16 +13,23 @@ pub trait ConfigProvider:
     VersionedInterface + ConfigurableInterface + HealthCheckInterface + Send + Sync
 {
     /// 从文件加载配置
-    async fn load_from_file(&self, path: &Path) -> std::result::Result<(), crate::domain_errors::ConfigError>;
+    async fn load_from_file(
+        &self,
+        path: &Path,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 从环境变量加载配置
     async fn load_from_env(&self) -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 获取AI配置
-    async fn get_ai_config(&self) -> std::result::Result<AiConfig, crate::domain_errors::ConfigError>;
+    async fn get_ai_config(
+        &self,
+    ) -> std::result::Result<AiConfig, crate::domain_errors::ConfigError>;
 
     /// 获取扫描配置
-    async fn get_scan_config(&self) -> std::result::Result<ScanConfig, crate::domain_errors::ConfigError>;
+    async fn get_scan_config(
+        &self,
+    ) -> std::result::Result<ScanConfig, crate::domain_errors::ConfigError>;
 
     /// 获取DevOps配置
     async fn get_devops_config(&self) -> Result<Option<DevOpsConfig>, ConfigError>;
@@ -31,25 +38,40 @@ pub trait ConfigProvider:
     async fn get_mcp_config(&self) -> Result<Option<McpConfig>, ConfigError>;
 
     /// 获取缓存配置
-    async fn get_cache_config(&self) -> std::result::Result<CacheConfig, crate::domain_errors::ConfigError>;
+    async fn get_cache_config(
+        &self,
+    ) -> std::result::Result<CacheConfig, crate::domain_errors::ConfigError>;
 
     /// 获取日志配置
-    async fn get_logging_config(&self) -> std::result::Result<LoggingConfig, crate::domain_errors::ConfigError>;
+    async fn get_logging_config(
+        &self,
+    ) -> std::result::Result<LoggingConfig, crate::domain_errors::ConfigError>;
 
     /// 获取功能开关配置
-    async fn get_feature_flags(&self) -> std::result::Result<FeatureFlags, crate::domain_errors::ConfigError>;
+    async fn get_feature_flags(
+        &self,
+    ) -> std::result::Result<FeatureFlags, crate::domain_errors::ConfigError>;
 
     /// 保存配置到文件
-    async fn save_to_file(&self, path: &Path) -> std::result::Result<(), crate::domain_errors::ConfigError>;
+    async fn save_to_file(
+        &self,
+        path: &Path,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 重置配置到默认值
-    async fn reset_to_defaults(&self) -> std::result::Result<(), crate::domain_errors::ConfigError>;
+    async fn reset_to_defaults(&self)
+        -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 获取配置的JSON表示
-    async fn to_json(&self) -> std::result::Result<serde_json::Value, crate::domain_errors::ConfigError>;
+    async fn to_json(
+        &self,
+    ) -> std::result::Result<serde_json::Value, crate::domain_errors::ConfigError>;
 
     /// 从JSON更新配置
-    async fn update_from_json(&mut self, json: serde_json::Value) -> std::result::Result<(), crate::domain_errors::ConfigError>;
+    async fn update_from_json(
+        &mut self,
+        json: serde_json::Value,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 订阅配置变更通知
     fn subscribe_config_changes(&self, handler: Box<dyn Fn(&str) + Send + Sync>);
@@ -425,7 +447,9 @@ pub trait ModuleConfig: ConfigValidator + ConfigDefault + Send + Sync {
     fn config_version(&self) -> &str;
 
     /// 验证模块特定的业务规则
-    fn validate_business_rules(&self) -> std::result::Result<(), crate::domain_errors::ConfigError> {
+    fn validate_business_rules(
+        &self,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError> {
         Ok(())
     }
 }
@@ -433,7 +457,10 @@ pub trait ModuleConfig: ConfigValidator + ConfigDefault + Send + Sync {
 /// 环境感知配置trait
 pub trait EnvironmentAwareConfig {
     /// 根据环境调整配置
-    fn adjust_for_environment(&mut self, environment: &str) -> std::result::Result<(), crate::domain_errors::ConfigError>;
+    fn adjust_for_environment(
+        &mut self,
+        environment: &str,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError>;
 
     /// 获取当前环境
     fn get_environment(&self) -> &str;
@@ -443,7 +470,9 @@ pub trait EnvironmentAwareConfig {
 #[async_trait]
 pub trait ObservableConfig {
     /// 获取配置指标
-    async fn get_config_metrics(&self) -> std::result::Result<ConfigMetrics, crate::domain_errors::ConfigError>;
+    async fn get_config_metrics(
+        &self,
+    ) -> std::result::Result<ConfigMetrics, crate::domain_errors::ConfigError>;
 
     /// 获取配置变更事件流
     async fn get_config_events(&self) -> Result<Vec<ConfigEvent>, ConfigError>;
@@ -516,6 +545,7 @@ pub struct DefaultConfigProvider {
 }
 
 impl DefaultConfigProvider {
+    /// 创建一个带默认值的配置提供者
     pub fn new() -> Self {
         Self {
             ai_config: AiConfig::default(),
@@ -584,16 +614,17 @@ impl HealthCheckInterface for DefaultConfigProvider {
     async fn health_check(&self) -> super::HealthCheckResult {
         match self.validate_config().await {
             Ok(_) => super::HealthCheckResult::healthy(),
-            Err(e) => {
-                super::HealthCheckResult::unhealthy(format!("Config validation failed: {}", e))
-            }
+            Err(e) => super::HealthCheckResult::unhealthy(format!("Config validation failed: {e}")),
         }
     }
 }
 
 #[async_trait]
 impl ConfigProvider for DefaultConfigProvider {
-    async fn load_from_file(&self, _path: &Path) -> std::result::Result<(), crate::domain_errors::ConfigError> {
+    async fn load_from_file(
+        &self,
+        _path: &Path,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError> {
         // TODO: 实现从文件加载配置
         Ok(())
     }
@@ -603,11 +634,15 @@ impl ConfigProvider for DefaultConfigProvider {
         Ok(())
     }
 
-    async fn get_ai_config(&self) -> std::result::Result<AiConfig, crate::domain_errors::ConfigError> {
+    async fn get_ai_config(
+        &self,
+    ) -> std::result::Result<AiConfig, crate::domain_errors::ConfigError> {
         Ok(self.ai_config.clone())
     }
 
-    async fn get_scan_config(&self) -> std::result::Result<ScanConfig, crate::domain_errors::ConfigError> {
+    async fn get_scan_config(
+        &self,
+    ) -> std::result::Result<ScanConfig, crate::domain_errors::ConfigError> {
         Ok(self.scan_config.clone())
     }
 
@@ -619,33 +654,49 @@ impl ConfigProvider for DefaultConfigProvider {
         Ok(self.mcp_config.clone())
     }
 
-    async fn get_cache_config(&self) -> std::result::Result<CacheConfig, crate::domain_errors::ConfigError> {
+    async fn get_cache_config(
+        &self,
+    ) -> std::result::Result<CacheConfig, crate::domain_errors::ConfigError> {
         Ok(self.cache_config.clone())
     }
 
-    async fn get_logging_config(&self) -> std::result::Result<LoggingConfig, crate::domain_errors::ConfigError> {
+    async fn get_logging_config(
+        &self,
+    ) -> std::result::Result<LoggingConfig, crate::domain_errors::ConfigError> {
         Ok(self.logging_config.clone())
     }
 
-    async fn get_feature_flags(&self) -> std::result::Result<FeatureFlags, crate::domain_errors::ConfigError> {
+    async fn get_feature_flags(
+        &self,
+    ) -> std::result::Result<FeatureFlags, crate::domain_errors::ConfigError> {
         Ok(self.feature_flags.clone())
     }
 
-    async fn save_to_file(&self, _path: &Path) -> std::result::Result<(), crate::domain_errors::ConfigError> {
+    async fn save_to_file(
+        &self,
+        _path: &Path,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError> {
         // TODO: 实现保存配置到文件
         Ok(())
     }
 
-    async fn reset_to_defaults(&self) -> std::result::Result<(), crate::domain_errors::ConfigError> {
+    async fn reset_to_defaults(
+        &self,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError> {
         // TODO: 实现重置到默认配置
         Ok(())
     }
 
-    async fn to_json(&self) -> std::result::Result<serde_json::Value, crate::domain_errors::ConfigError> {
+    async fn to_json(
+        &self,
+    ) -> std::result::Result<serde_json::Value, crate::domain_errors::ConfigError> {
         self.get_config().await
     }
 
-    async fn update_from_json(&mut self, _json: serde_json::Value) -> std::result::Result<(), crate::domain_errors::ConfigError> {
+    async fn update_from_json(
+        &mut self,
+        _json: serde_json::Value,
+    ) -> std::result::Result<(), crate::domain_errors::ConfigError> {
         // TODO: 实现从JSON更新配置
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::project_insights::InsightsGenerator;
 use crate::prompts::{PromptContext, PromptManager};
 use serde::{Deserialize, Serialize};

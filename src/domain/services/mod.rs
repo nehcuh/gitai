@@ -5,13 +5,14 @@
 // 应用服务
 pub mod application;
 
-// 配置服务
-pub mod config;
+// 配置服务已迁移到crates/gitai-core
+// pub mod config;
 
 // 工作流服务
 pub mod workflow;
 
 // 重新导出主要服务
 pub use application::ApplicationService;
-pub use config::ConfigurationService;
+// ConfigurationService从gitai-core导出
+pub use gitai_core::services::config::ConfigurationService;
 pub use workflow::WorkflowService;

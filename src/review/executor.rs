@@ -2,7 +2,7 @@
 // 负责执行评审流程的核心逻辑
 
 use super::types::{ReviewConfig, ReviewResult};
-use crate::config::Config;
+use gitai_core::config::Config;
 
 /// 执行评审流程（控制台输出）
 pub async fn execute_review(
@@ -71,11 +71,11 @@ pub async fn execute_review_with_result(
     // 获取代码变更
     // 优先获取当前变更，如果没有则尝试获取最后一次提交
     // 这样 MCP 调用时即使没有新变更也可以分析最近的提交
-    let diff = match crate::git::get_all_diff() {
+    let diff = match gitai_core::git_impl::get_all_diff() {
         Ok(d) => d,
         Err(_) => {
             // 如果没有当前变更，尝试获取最后一次提交
-            match crate::git::get_last_commit_diff() {
+            match gitai_core::git_impl::get_last_commit_diff() {
                 Ok(last_diff) if !last_diff.trim().is_empty() => {
                     format!("## 最后一次提交的变更 (Last Commit):\n{last_diff}")
                 }
@@ -150,10 +150,10 @@ pub async fn execute_review_with_result(
     }
 
     // 检查暂存状态与未跟踪文件、提交基线
-    let has_unstaged = crate::git::has_unstaged_changes().unwrap_or(false);
-    let has_staged = crate::git::has_staged_changes().unwrap_or(false);
-    let has_untracked = crate::git::has_untracked_changes().unwrap_or(false);
-    let has_commits = crate::git::has_any_commit();
+    let has_unstaged = gitai_core::git_impl::has_unstaged_changes().unwrap_or(false);
+    let has_staged = gitai_core::git_impl::has_staged_changes().unwrap_or(false);
+    let has_untracked = gitai_core::git_impl::has_untracked_changes().unwrap_or(false);
+    let has_commits = gitai_core::git_impl::has_any_commit();
 
     if has_unstaged || has_untracked {
         if has_unstaged {
@@ -247,7 +247,7 @@ pub async fn execute_review_with_result(
 
                 // Top PageRank 节点
                 let mut pr_vec: Vec<(String, f32)> = pagerank.into_iter().collect();
-                pr_vec.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                pr_vec.sort_by(|a, b| b.1.total_cmp(&a.1));
                 let top_pr: Vec<String> = pr_vec
                     .iter()
                     .take(5)
@@ -327,7 +327,7 @@ pub async fn execute_review_with_result(
                     }
                     if !impacted.is_empty() {
                         let mut list: Vec<(String, f32)> = impacted.into_iter().collect();
-                        list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                        list.sort_by(|a, b| b.1.total_cmp(&a.1));
                         let top_imp: Vec<String> = list
                             .iter()
                             .take(5)

@@ -11,10 +11,20 @@
 use crate::error::{McpError, McpResult};
 use async_trait::async_trait;
 use gitai_core::config::Config;
-use log::{debug, info};
+use log::{debug, info, warn};
 use serde_json::{json, Value};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+
+// Real subsystems
+use gitai_analysis::analysis::Analyzer as CodeAnalyzer;
+use gitai_analysis::architectural_impact::graph_export;
+use gitai_analysis::architectural_impact::graph_export::build_global_dependency_graph;
+use gitai_analysis::{OperationContext as AnalysisCtx, OperationOptions as AnalysisOpts};
+use gitai_core::git;
+use gitai_security::scanner as security;
+use std::process::{Command, Stdio};
 
 /// MCP 服务接口 - 简化版本
 #[async_trait]
@@ -34,6 +44,7 @@ pub trait McpService: Send + Sync {
 
 /// 代码评审服务
 pub struct ReviewService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -46,50 +57,73 @@ impl ReviewService {
     /// 执行代码评审
     pub async fn execute_review(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行代码评审，参数: {:?}", params);
-        
-        // 提取参数
+        debug!("🔍 执行代码评审，参数: {params:?}");
+
         let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-        let issue_ids = params.get("issue_ids")
+        let issue_ids = params
+            .get("issue_ids")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<String>>())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
-        
-        info!("📝 开始代码评审: {}", path);
-        
-        // 模拟评审逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
-        let result = json!({
+        let format = params
+            .get("format")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let tree_sitter = params
+            .get("tree_sitter")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let security_scan = params
+            .get("security_scan")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        info!("📝 开始代码评审: {path}");
+
+        // 构建分析上下文
+        let mut opts = AnalysisOpts::default();
+        opts.tree_sitter = tree_sitter;
+        opts.security_scan = security_scan;
+        opts.issue_ids = issue_ids.clone();
+        opts.deviation_analysis = false;
+        opts.format = format;
+
+        let mut ctx = AnalysisCtx::new((*self.config).clone());
+        // 获取全量 diff（若没有变更则尝试最后一次提交）
+        match git::get_all_diff() {
+            Ok(diff) => {
+                ctx = ctx.with_options(opts).with_diff(diff);
+            }
+            Err(e) => {
+                warn!("获取 diff 失败: {e}");
+                ctx = ctx.with_options(opts);
+            }
+        }
+
+        let analysis = CodeAnalyzer::analyze(&ctx)
+            .await
+            .map_err(|e| McpError::ExecutionFailed(format!("Analyzer failed: {e}")))?;
+
+        let out = json!({
             "status": "success",
-            "message": "代码评审完成",
             "path": path,
-            "findings": [
-                {
-                    "severity": "medium",
-                    "message": "建议添加错误处理",
-                    "file": "src/main.rs",
-                    "line": 42,
-                    "suggestion": "添加 Result 类型的错误处理"
-                },
-                {
-                    "severity": "low", 
-                    "message": "变量名可以更描述性",
-                    "file": "src/utils.rs",
-                    "line": 15,
-                    "suggestion": "将 'tmp' 重命名为 'temporary_buffer'"
-                }
-            ],
+            "review_report": analysis.review_result,
+            "security_findings": analysis.security_findings,
+            "deviation_analysis": analysis.deviation_analysis,
             "duration_ms": start_time.elapsed().as_millis(),
             "issue_ids": issue_ids,
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "timestamp": chrono::Utc::now().to_rfc3339(),
         });
-        
-        info!("✅ 代码评审完成，耗时: {}ms", start_time.elapsed().as_millis());
-        Ok(result)
+
+        info!(
+            "✅ 代码评审完成，耗时: {}ms",
+            start_time.elapsed().as_millis()
+        );
+        Ok(out)
     }
 }
 
@@ -114,6 +148,7 @@ impl McpService for ReviewService {
 
 /// 安全扫描服务
 pub struct ScanService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -126,55 +161,36 @@ impl ScanService {
     /// 执行安全扫描
     pub async fn execute_scan(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行安全扫描，参数: {:?}", params);
-        
-        // 提取参数
+        debug!("🔍 执行安全扫描，参数: {params:?}");
+
         let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let language = params.get("lang").and_then(|v| v.as_str());
-        let timeout = params.get("timeout").and_then(|v| v.as_u64()).unwrap_or(300);
-        
-        info!("🔒 开始安全扫描: {} (语言: {}, 超时: {}s)", path, language.unwrap_or("auto"), timeout);
-        
-        // 模拟扫描逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
-        
-        let result = json!({
-            "status": "success",
-            "message": "安全扫描完成",
-            "path": path,
-            "language": language,
-            "findings": [
-                {
-                    "severity": "high",
-                    "rule_id": "SQL_INJECTION",
-                    "message": "潜在的 SQL 注入风险",
-                    "file": "src/database.rs",
-                    "line": 128,
-                    "code": "query(format!(\"SELECT * FROM users WHERE id = {}\", user_id))",
-                    "suggestion": "使用参数化查询替代字符串拼接"
-                },
-                {
-                    "severity": "medium",
-                    "rule_id": "HARD_CODED_SECRET",
-                    "message": "检测到硬编码的敏感信息",
-                    "file": "src/config.rs",
-                    "line": 45,
-                    "code": "api_key = \"sk-1234567890abcdef\"",
-                    "suggestion": "将敏感信息移到环境变量或配置文件中"
-                }
-            ],
-            "stats": {
-                "total_files": 45,
-                "scanned_files": 42,
-                "duration_ms": start_time.elapsed().as_millis(),
-                "rules_executed": 156
-            },
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-        
-        info!("✅ 安全扫描完成，耗时: {}ms", start_time.elapsed().as_millis());
-        Ok(result)
+        let timeout = params.get("timeout").and_then(|v| v.as_u64());
+        info!(
+            "🔒 开始安全扫描: {path} (语言: {})",
+            language.unwrap_or("auto")
+        );
+
+        let res =
+            security::run_opengrep_scan(&self.config, Path::new(path), language, timeout, true)
+                .map_err(|e| McpError::ExecutionFailed(format!("opengrep failed: {e}")))?;
+
+        let mut v = serde_json::to_value(&res)
+            .map_err(|e| McpError::ExecutionFailed(format!("serialize scan result failed: {e}")))?;
+        // 附带元信息
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert(
+                "duration_ms".to_string(),
+                json!(start_time.elapsed().as_millis()),
+            );
+            obj.insert("path".to_string(), json!(path));
+        }
+
+        info!(
+            "✅ 安全扫描完成，耗时: {}ms",
+            start_time.elapsed().as_millis()
+        );
+        Ok(v)
     }
 }
 
@@ -199,6 +215,7 @@ impl McpService for ScanService {
 
 /// 智能提交服务
 pub struct CommitService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -211,52 +228,58 @@ impl CommitService {
     /// 执行智能提交
     pub async fn execute_commit(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行智能提交，参数: {:?}", params);
-        
-        // 提取参数
-        let add_all = params.get("add_all").and_then(|v| v.as_bool()).unwrap_or(false);
-        let dry_run = params.get("dry_run").and_then(|v| v.as_bool()).unwrap_or(false);
-        let message = params.get("message").and_then(|v| v.as_str());
-        
-        info!("💾 开始智能提交 (add_all: {}, dry_run: {})", add_all, dry_run);
-        
-        // 模拟提交逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        
-        let commit_message = message.unwrap_or("feat: 自动生成的提交信息");
-        
+        debug!("🔍 执行智能提交，参数: {params:?}");
+
+        let add_all = params
+            .get("add_all")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let dry_run = params
+            .get("dry_run")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let message = params
+            .get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("feat: 自动生成的提交信息");
+
+        info!("💾 开始智能提交 (add_all: {add_all}, dry_run: {dry_run})");
+
+        if dry_run {
+            // 只返回将要执行的信息
+            return Ok(json!({
+                "status": "dry_run",
+                "planned": {
+                    "add_all": add_all,
+                    "commit_message": message,
+                },
+                "duration_ms": start_time.elapsed().as_millis(),
+            }));
+        }
+
+        if add_all {
+            git::git_add_all()
+                .map_err(|e| McpError::ExecutionFailed(format!("git add . failed: {e}")))?;
+        }
+        let _ = git::git_commit(message)
+            .map_err(|e| McpError::ExecutionFailed(format!("git commit failed: {e}")))?;
+        let hash = git::get_current_commit()
+            .map_err(|e| McpError::ExecutionFailed(format!("get commit hash failed: {e}")))?;
+
         let result = json!({
             "status": "success",
-            "message": "智能提交完成",
             "commit": {
-                "hash": "abc123def456789",
-                "message": commit_message,
-                "author": "GitAI Assistant",
-                "files_changed": 5,
-                "insertions": 120,
-                "deletions": 45,
-                "dry_run": dry_run
+                "hash": hash.trim(),
+                "message": message,
             },
-            "changes": [
-                {
-                    "file": "src/main.rs",
-                    "status": "modified",
-                    "additions": 15,
-                    "deletions": 3
-                },
-                {
-                    "file": "src/utils.rs", 
-                    "status": "modified",
-                    "additions": 25,
-                    "deletions": 0
-                }
-            ],
             "duration_ms": start_time.elapsed().as_millis(),
-            "timestamp": chrono::Utc::now().to_rfc3339()
+            "timestamp": chrono::Utc::now().to_rfc3339(),
         });
-        
-        info!("✅ 智能提交完成，耗时: {}ms", start_time.elapsed().as_millis());
+
+        info!(
+            "✅ 智能提交完成，耗时: {}ms",
+            start_time.elapsed().as_millis()
+        );
         Ok(result)
     }
 }
@@ -282,6 +305,7 @@ impl McpService for CommitService {
 
 /// 代码分析服务
 pub struct AnalysisService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -294,52 +318,51 @@ impl AnalysisService {
     /// 执行代码分析
     pub async fn execute_analysis(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行代码分析，参数: {:?}", params);
-        
-        // 提取参数
+        debug!("🔍 执行代码分析，参数: {params:?}");
+
         let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-        let language = params.get("language").and_then(|v| v.as_str());
-        let verbosity = params.get("verbosity").and_then(|v| v.as_u64()).unwrap_or(1);
-        
-        info!("🔬 开始代码分析: {} (语言: {}, 详细程度: {})", path, language.unwrap_or("auto"), verbosity);
-        
-        // 模拟分析逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-        
-        let result = json!({
+        let language = params
+            .get("language")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let verbosity = params
+            .get("verbosity")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1);
+        info!(
+            "🔬 开始代码分析: {path} (语言: {}, 详细程度: {verbosity})",
+            language.as_deref().unwrap_or("auto")
+        );
+
+        let mut opts = AnalysisOpts::default();
+        opts.tree_sitter = true;
+        opts.language = language;
+        // verbosity 暂未直接使用，保留供内部日志参考
+
+        let mut ctx = AnalysisCtx::new((*self.config).clone());
+        match git::get_all_diff() {
+            Ok(diff) => ctx = ctx.with_options(opts).with_diff(diff),
+            Err(_) => ctx = ctx.with_options(opts),
+        }
+
+        let analysis = CodeAnalyzer::analyze(&ctx)
+            .await
+            .map_err(|e| McpError::ExecutionFailed(format!("Analyzer failed: {e}")))?;
+
+        let out = serde_json::to_value(&analysis)
+            .unwrap_or_else(|_| json!({"review_result": analysis.review_result}));
+
+        info!(
+            "✅ 代码分析完成，耗时: {}ms",
+            start_time.elapsed().as_millis()
+        );
+        Ok(json!({
             "status": "success",
-            "message": "代码分析完成",
             "path": path,
-            "language": language.unwrap_or("multi"),
-            "summary": {
-                "total_files": 156,
-                "analyzed_files": 152,
-                "total_lines": 15420,
-                "code_lines": 12450,
-                "comment_lines": 1870,
-                "blank_lines": 1100,
-                "complexity_score": 7.8,
-                "maintainability_index": 85.2
-            },
-            "languages": {
-                "Rust": { "files": 45, "lines": 5200, "percentage": 33.7 },
-                "TypeScript": { "files": 38, "lines": 4800, "percentage": 31.1 },
-                "Python": { "files": 28, "lines": 3200, "percentage": 20.8 },
-                "Others": { "files": 41, "lines": 2220, "percentage": 14.4 }
-            },
-            "quality_metrics": {
-                "code_duplication": 3.2,
-                "cyclomatic_complexity": 6.5,
-                "technical_debt_ratio": 2.1,
-                "test_coverage": 78.5
-            },
+            "analysis": out,
             "duration_ms": start_time.elapsed().as_millis(),
             "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-        
-        info!("✅ 代码分析完成，耗时: {}ms", start_time.elapsed().as_millis());
-        Ok(result)
+        }))
     }
 }
 
@@ -364,6 +387,7 @@ impl McpService for AnalysisService {
 
 /// 依赖图服务
 pub struct DependencyService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -376,85 +400,138 @@ impl DependencyService {
     /// 执行依赖图生成
     pub async fn execute_dependency_graph(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行依赖图生成，参数: {:?}", params);
-        
-        // 提取参数
+        debug!("🔍 执行依赖图生成，参数: {params:?}");
+
         let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-        let format = params.get("format").and_then(|v| v.as_str()).unwrap_or("json");
-        let include_calls = params.get("include_calls").and_then(|v| v.as_bool()).unwrap_or(true);
-        let include_imports = params.get("include_imports").and_then(|v| v.as_bool()).unwrap_or(true);
-        
-        info!("🔗 开始生成依赖图: {} (格式: {})", path, format);
-        
-        // 模拟依赖图生成逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
-        
-        let result = json!({
-            "status": "success",
-            "message": "依赖图生成完成",
-            "path": path,
-            "format": format,
-            "graph": {
-                "nodes": [
-                    {
-                        "id": "src/main.rs",
-                        "type": "file",
-                        "language": "Rust",
-                        "loc": 1250,
-                        "complexity": 8.2
-                    },
-                    {
-                        "id": "src/utils.rs",
-                        "type": "file", 
-                        "language": "Rust",
-                        "loc": 850,
-                        "complexity": 5.1
-                    },
-                    {
-                        "id": "src/database.rs",
-                        "type": "file",
-                        "language": "Rust", 
-                        "loc": 2100,
-                        "complexity": 12.7
-                    }
-                ],
-                "edges": [
-                    {
-                        "source": "src/main.rs",
-                        "target": "src/utils.rs",
-                        "type": "import",
-                        "weight": 15
-                    },
-                    {
-                        "source": "src/main.rs", 
-                        "target": "src/database.rs",
-                        "type": "import",
-                        "weight": 23
-                    },
-                    {
-                        "source": "src/utils.rs",
-                        "target": "src/database.rs", 
-                        "type": "import",
-                        "weight": 8
-                    }
-                ],
-                "stats": {
-                    "total_nodes": 156,
-                    "total_edges": 342,
-                    "max_depth": 8,
-                    "avg_degree": 4.4
+        let format = params
+            .get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("json");
+        let _include_calls = params
+            .get("include_calls")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let _include_imports = params
+            .get("include_imports")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        info!("🔗 开始生成依赖图: {path} (格式: {format})");
+
+        match format {
+            "mermaid" => {
+                let graph = build_global_dependency_graph(Path::new(path))
+                    .await
+                    .map_err(|e| McpError::ExecutionFailed(format!("build graph failed: {e}")))?;
+                let mut out = String::from("graph LR\n");
+                for e in &graph.edges {
+                    out.push_str(&format!("  \"{}\" --> \"{}\"\n", e.from, e.to));
                 }
-            },
-            "include_calls": include_calls,
-            "include_imports": include_imports,
-            "duration_ms": start_time.elapsed().as_millis(),
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
-        
-        info!("✅ 依赖图生成完成，耗时: {}ms", start_time.elapsed().as_millis());
-        Ok(result)
+                Ok(json!({
+                    "status": "success",
+                    "path": path,
+                    "format": "mermaid",
+                    "graph": out,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }))
+            }
+            "svg" => {
+                let dot = graph_export::export_dot_string(Path::new(path), 0.15)
+                    .await
+                    .map_err(|e| McpError::ExecutionFailed(format!("graph export failed: {e}")))?;
+                // 尝试使用 graphviz dot 转换为 SVG
+                let svg = match try_dot_to_svg(&dot) {
+                    Ok(svg) => svg,
+                    Err(e) => {
+                        return Ok(json!({
+                            "status": "degraded",
+                            "path": path,
+                            "format": "dot",
+                            "graph": dot,
+                            "warning": format!("dot->svg 转换失败: {} (可能未安装 graphviz 'dot')", e),
+                            "duration_ms": start_time.elapsed().as_millis(),
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        }));
+                    }
+                };
+                Ok(json!({
+                    "status": "success",
+                    "path": path,
+                    "format": "svg",
+                    "graph": svg,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }))
+            }
+            "json" => {
+                // 使用摘要 JSON（更易消费）
+                let summary = graph_export::export_summary_string(
+                    Path::new(path),
+                    1,     // radius
+                    200,   // top_k
+                    false, // seeds_from_diff
+                    "json",
+                    3000,  // budget_tokens
+                    false, // with_communities
+                    "labelprop",
+                    50,
+                    10,
+                    false,
+                    5,
+                    5,
+                )
+                .await
+                .map_err(|e| McpError::ExecutionFailed(format!("graph summary failed: {e}")))?;
+                let json_v: Value =
+                    serde_json::from_str(&summary).unwrap_or_else(|_| json!({"summary": summary}));
+                Ok(json!({
+                    "status": "success",
+                    "path": path,
+                    "format": "json",
+                    "graph": json_v,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }))
+            }
+            "dot" | "ascii" | _ => {
+                let dot = graph_export::export_dot_string(Path::new(path), 0.15)
+                    .await
+                    .map_err(|e| McpError::ExecutionFailed(format!("graph export failed: {e}")))?;
+                Ok(json!({
+                    "status": "success",
+                    "path": path,
+                    "format": "dot",
+                    "graph": dot,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }))
+            }
+        }
     }
+}
+
+fn try_dot_to_svg(dot: &str) -> Result<String, String> {
+    let mut child = Command::new("dot")
+        .arg("-Tsvg")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("spawn dot failed: {}", e))?;
+    use std::io::Write as _;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(dot.as_bytes())
+            .map_err(|e| format!("write dot stdin failed: {}", e))?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("wait dot failed: {}", e))?;
+    if !output.status.success() {
+        return Err(format!("dot exited with status {:?}", output.status.code()));
+    }
+    let svg = String::from_utf8(output.stdout).map_err(|e| format!("invalid utf8 svg: {}", e))?;
+    Ok(svg)
 }
 
 #[async_trait]
@@ -478,6 +555,7 @@ impl McpService for DependencyService {
 
 /// 偏差分析服务
 pub struct DeviationService {
+    #[allow(dead_code)]
     config: Arc<Config>,
 }
 
@@ -490,61 +568,47 @@ impl DeviationService {
     /// 执行偏差分析
     pub async fn execute_deviation(&self, params: &Value) -> McpResult<Value> {
         let start_time = Instant::now();
-        
-        debug!("🔍 执行偏差分析，参数: {:?}", params);
-        
-        // 提取参数
-        let _diff = params.get("diff").and_then(|v| v.as_str()).unwrap_or("");
-        let issue_ids = params.get("issue_ids")
+        debug!("🔍 执行偏差分析，参数: {params:?}");
+
+        let issue_ids = params
+            .get("issue_ids")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<String>>())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
-        
-        info!("📊 开始偏差分析 (Issue 数量: {})", issue_ids.len());
-        
-        // 模拟偏差分析逻辑
-        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
-        
-        let result = json!({
-            "status": "success", 
-            "message": "偏差分析完成",
+
+        info!("📊 开始偏差分析 (Issue 数量: {len})", len = issue_ids.len());
+
+        let mut opts = AnalysisOpts::default();
+        opts.deviation_analysis = true;
+        opts.issue_ids = issue_ids.clone();
+
+        let mut ctx = AnalysisCtx::new((*self.config).clone());
+        match git::get_all_diff() {
+            Ok(diff) => ctx = ctx.with_options(opts).with_diff(diff),
+            Err(_) => ctx = ctx.with_options(opts),
+        }
+
+        let analysis = CodeAnalyzer::analyze(&ctx)
+            .await
+            .map_err(|e| McpError::ExecutionFailed(format!("Analyzer failed: {e}")))?;
+
+        let out = json!({
+            "status": "success",
             "issue_ids": issue_ids,
-            "analysis": {
-                "total_issues": issue_ids.len(),
-                "aligned_changes": 8,
-                "deviated_changes": 2,
-                "deviation_score": 20.0,
-                "alignment_percentage": 80.0,
-                "deviations": [
-                    {
-                        "issue_id": "PROJ-123",
-                        "expected_change": "用户认证模块重构",
-                        "actual_change": "添加了新的 API 端点",
-                        "severity": "medium",
-                        "suggestion": "考虑将 API 端点修改与用户认证重构结合"
-                    },
-                    {
-                        "issue_id": "PROJ-456", 
-                        "expected_change": "数据库性能优化",
-                        "actual_change": "前端 UI 改进",
-                        "severity": "high",
-                        "suggestion": "请优先处理数据库性能优化任务"
-                    }
-                ]
-            },
-            "recommendations": [
-                "建议将开发工作与 Issue 需求更紧密对齐",
-                "定期检查代码变更与项目目标的符合度",
-                "考虑使用分支策略来管理不同功能开发"
-            ],
+            "deviation_analysis": analysis.deviation_analysis,
             "duration_ms": start_time.elapsed().as_millis(),
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
-        
-        info!("✅ 偏差分析完成，耗时: {}ms", start_time.elapsed().as_millis());
-        Ok(result)
+
+        info!(
+            "✅ 偏差分析完成，耗时: {}ms",
+            start_time.elapsed().as_millis()
+        );
+        Ok(out)
     }
 }
 
@@ -588,6 +652,9 @@ impl ServiceFactory {
         services: &'a [Box<dyn McpService>],
         name: &'a str,
     ) -> Option<&'a dyn McpService> {
-        services.iter().find(|s| s.name() == name).map(|s| s.as_ref())
+        services
+            .iter()
+            .find(|s| s.name() == name)
+            .map(|s| s.as_ref())
     }
 }

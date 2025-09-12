@@ -2,7 +2,7 @@
 //
 // 提供 GitAI MCP 服务器的桥接层，将 GitAI 核心功能封装为 MCP 兼容接口
 
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::mcp::McpResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;

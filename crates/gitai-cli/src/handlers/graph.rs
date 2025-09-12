@@ -32,7 +32,7 @@ pub async fn handle_command(command: &Command) -> HandlerResult<()> {
             println!("  输出文件: {:?}", output);
             println!("  阈值: {}", threshold);
             println!("  生成摘要: {}", summary);
-            
+
             // TODO: 实现实际的图导出逻辑
             Ok(())
         }

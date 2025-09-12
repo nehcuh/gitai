@@ -283,11 +283,11 @@ impl ModuleManager {
 
 /// 核心模块
 pub struct CoreModule {
-    config: Arc<crate::config::Config>,
+    config: Arc<gitai_core::config::Config>,
 }
 
 impl CoreModule {
-    pub fn new(config: Arc<crate::config::Config>) -> Self {
+    pub fn new(config: Arc<gitai_core::config::Config>) -> Self {
         Self { config }
     }
 }

@@ -50,4 +50,3 @@ async fn main() -> Result<()> {
     // Run the application
     app.run().await
 }
-

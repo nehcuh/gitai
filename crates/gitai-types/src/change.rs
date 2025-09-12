@@ -1,7 +1,7 @@
 //! Change and breaking change related types
 
-use serde::{Deserialize, Serialize};
 use crate::risk::{RiskLevel, Severity};
+use serde::{Deserialize, Serialize};
 
 /// 统一的破坏性变更结构
 #[derive(Debug, Clone, Serialize, Deserialize)]

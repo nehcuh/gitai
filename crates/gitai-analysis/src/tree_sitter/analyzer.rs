@@ -886,9 +886,9 @@ impl StructureAnalyzer {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
     use super::*;
     use crate::tree_sitter::queries::QueriesManager;
-    use tree_sitter::Parser;
 
     #[test]
     fn test_parse_parameters() {

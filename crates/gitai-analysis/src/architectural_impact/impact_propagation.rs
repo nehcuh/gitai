@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 // 影响传播算法模块 - 计算代码变更的影响传播范围
 use crate::architectural_impact::dependency_graph::{DependencyGraph, EdgeType, NodeType};
 use serde::{Deserialize, Serialize};

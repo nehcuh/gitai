@@ -53,9 +53,8 @@ See also: API Reference → MCP Quickstart (docs/api/API_REFERENCE.md).
 - **Review Output Fix / 评审输出修复** — [review-output-fix.md](review-output-fix.md) - Review module fixes
 
 ## ⚙️ Performance Notes / 性能说明
-- Phase 2 optimizations and env configuration — [PHASE2_OPTIMIZATIONS.md](PHASE2_OPTIMIZATIONS.md)
-  - Tree-sitter cache: GITAI_TS_CACHE_CAPACITY, GITAI_TS_CACHE_MAX_AGE
-  - Graph export pruning: GITAI_GRAPH_EXPORT_PRUNE, GITAI_GRAPH_EXPORT_KEEP_TOP, GITAI_GRAPH_EXPORT_MIN_EDGE_WEIGHT
+- Current tuning lives in code and CLI flags. See feature docs and CLI help.
+- Archived Phase 2 notes have been moved to Archives; see (PHASE2_OPTIMIZATIONS.md) for historical reference.
 
 ## 📖 Reference / 参考资料
 - **Terminology / 术语表** — [TERMINOLOGY.md](TERMINOLOGY.md) - Project-specific terminology

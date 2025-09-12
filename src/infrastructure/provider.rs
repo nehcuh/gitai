@@ -3,7 +3,7 @@
 //! 为各种服务提供具体的实例化逻辑
 
 use super::container::{ServiceContainer, ContainerError};
-use crate::config::Config;
+use gitai_core::config::Config;
 use std::sync::Arc;
 
 /// 配置提供者

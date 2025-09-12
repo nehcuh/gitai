@@ -1,4 +1,4 @@
-use crate::config::DevOpsConfig;
+use gitai_core::config::DevOpsConfig;
 use serde::{Deserialize, Serialize};
 
 /// Issue信息（统一结构，便于上层消费）
@@ -153,9 +153,11 @@ impl DevOpsClient {
             // API 返回毫秒时间戳
             let secs = created_at_ms / 1000;
             let nanos = ((created_at_ms % 1000) * 1_000_000) as u32;
-            let dt_utc = chrono::DateTime::<chrono::Utc>::from_timestamp(secs, nanos)
-                .unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap());
-            dt_utc.to_rfc3339()
+            if let Some(dt_utc) = chrono::DateTime::<chrono::Utc>::from_timestamp(secs, nanos) {
+                dt_utc.to_rfc3339()
+            } else {
+                String::new()
+            }
         } else {
             String::new()
         };

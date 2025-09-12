@@ -31,15 +31,15 @@ pub enum McpError {
 impl std::fmt::Display for McpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            McpError::InvalidParameters(msg) => write!(f, "Invalid parameters: {}", msg),
-            McpError::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
-            McpError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
-            McpError::FileOperationError(msg) => write!(f, "File operation error: {}", msg),
-            McpError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            McpError::ExternalToolError(msg) => write!(f, "External tool error: {}", msg),
-            McpError::PermissionError(msg) => write!(f, "Permission error: {}", msg),
-            McpError::TimeoutError(msg) => write!(f, "Timeout error: {}", msg),
-            McpError::Unknown(msg) => write!(f, "Unknown error: {}", msg),
+            McpError::InvalidParameters(msg) => write!(f, "Invalid parameters: {msg}"),
+            McpError::ExecutionFailed(msg) => write!(f, "Execution failed: {msg}"),
+            McpError::ConfigurationError(msg) => write!(f, "Configuration error: {msg}"),
+            McpError::FileOperationError(msg) => write!(f, "File operation error: {msg}"),
+            McpError::NetworkError(msg) => write!(f, "Network error: {msg}"),
+            McpError::ExternalToolError(msg) => write!(f, "External tool error: {msg}"),
+            McpError::PermissionError(msg) => write!(f, "Permission error: {msg}"),
+            McpError::TimeoutError(msg) => write!(f, "Timeout error: {msg}"),
+            McpError::Unknown(msg) => write!(f, "Unknown error: {msg}"),
         }
     }
 }
@@ -48,7 +48,7 @@ impl std::error::Error for McpError {}
 
 impl From<serde_json::Error> for McpError {
     fn from(err: serde_json::Error) -> Self {
-        McpError::InvalidParameters(format!("JSON parsing error: {}", err))
+        McpError::InvalidParameters(format!("JSON parsing error: {err}"))
     }
 }
 
@@ -56,26 +56,26 @@ impl From<std::io::Error> for McpError {
     fn from(err: std::io::Error) -> Self {
         match err.kind() {
             std::io::ErrorKind::NotFound => {
-                McpError::FileOperationError(format!("File not found: {}", err))
+                McpError::FileOperationError(format!("File not found: {err}"))
             }
             std::io::ErrorKind::PermissionDenied => {
-                McpError::PermissionError(format!("Permission denied: {}", err))
+                McpError::PermissionError(format!("Permission denied: {err}"))
             }
-            std::io::ErrorKind::TimedOut => McpError::TimeoutError(format!("Timeout: {}", err)),
-            _ => McpError::FileOperationError(format!("IO error: {}", err)),
+            std::io::ErrorKind::TimedOut => McpError::TimeoutError(format!("Timeout: {err}")),
+            _ => McpError::FileOperationError(format!("IO error: {err}")),
         }
     }
 }
 
 impl From<tokio::time::error::Elapsed> for McpError {
     fn from(err: tokio::time::error::Elapsed) -> Self {
-        McpError::TimeoutError(format!("Operation timeout: {}", err))
+        McpError::TimeoutError(format!("Operation timeout: {err}"))
     }
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for McpError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        McpError::ExternalToolError(format!("External service error: {}", err))
+        McpError::ExternalToolError(format!("External service error: {err}"))
     }
 }
 
@@ -83,38 +83,47 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for McpError {
 pub type McpResult<T> = Result<T, McpError>;
 
 // 错误创建辅助函数
+/// 构造 参数无效 错误
 pub fn invalid_parameters_error<T: Into<String>>(msg: T) -> McpError {
     McpError::InvalidParameters(msg.into())
 }
 
+/// 构造 执行失败 错误
 pub fn execution_failed_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ExecutionFailed(msg.into())
 }
 
+/// 构造 配置错误 错误
 pub fn configuration_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ConfigurationError(msg.into())
 }
 
+/// 构造 文件操作错误 错误
 pub fn file_operation_error<T: Into<String>>(msg: T) -> McpError {
     McpError::FileOperationError(msg.into())
 }
 
+/// 构造 网络错误 错误
 pub fn network_error<T: Into<String>>(msg: T) -> McpError {
     McpError::NetworkError(msg.into())
 }
 
+/// 构造 外部工具错误 错误
 pub fn external_tool_error<T: Into<String>>(msg: T) -> McpError {
     McpError::ExternalToolError(msg.into())
 }
 
+/// 构造 权限错误 错误
 pub fn permission_error<T: Into<String>>(msg: T) -> McpError {
     McpError::PermissionError(msg.into())
 }
 
+/// 构造 超时 错误
 pub fn timeout_error<T: Into<String>>(msg: T) -> McpError {
     McpError::TimeoutError(msg.into())
 }
 
+/// 构造 未知错误 错误
 pub fn unknown_error<T: Into<String>>(msg: T) -> McpError {
     McpError::Unknown(msg.into())
 }
@@ -290,23 +299,17 @@ impl PerformanceCollector {
 /// Convert parameter parsing error to MCP error
 /// Linus principle: eliminate the pattern "Failed to parse XXX parameters: {}"
 pub fn parse_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
-    invalid_parameters_error(format!(
-        "Failed to parse {} parameters: {}",
-        service_name, e
-    ))
+    invalid_parameters_error(format!("Failed to parse {service_name} parameters: {e}"))
 }
 
 /// Convert execution error to MCP error
 /// Linus principle: eliminate the pattern "XXX execution failed: {}"
 pub fn execution_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
-    execution_failed_error(format!("{} execution failed: {}", service_name, e))
+    execution_failed_error(format!("{service_name} execution failed: {e}"))
 }
 
 /// Convert serialization error to MCP error
 /// Linus principle: eliminate the pattern "Failed to serialize XXX result: {}"
 pub fn serialize_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
-    execution_failed_error(format!(
-        "Failed to serialize {} result: {}",
-        service_name, e
-    ))
+    execution_failed_error(format!("Failed to serialize {service_name} result: {e}"))
 }

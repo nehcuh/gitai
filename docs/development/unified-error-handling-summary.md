@@ -1,5 +1,8 @@
 # Unified Error Handling Implementation Summary
 
+> Status: PARTIAL (adoption rate: 14.6% of files use GitAIError) — as of 2025-09-11
+> Source of truth: run `gitai evaluate --path . --format json` and check `error_patterns.adoption_rate`.
+
 ## Date: 2025-01-09
 
 ## Overview

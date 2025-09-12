@@ -1,5 +1,7 @@
 # Phase 3: GitAI Workspace 架构迁移计划
 
+> ARCHIVED: Migration plan retained for reference. For the current workspace layout see Cargo.toml and docs/architecture/ARCHITECTURE.md.
+
 ## 概述
 
 将 GitAI 从单体应用重构为多 crate workspace 架构，提高模块化程度、可维护性和可扩展性。

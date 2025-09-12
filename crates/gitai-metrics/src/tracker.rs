@@ -82,13 +82,19 @@ impl QualityMetrics {
 
         let coverage_ratio = self.files_analyzed as f64 / self.total_files as f64;
         let finding_penalty = (self.total_findings as f64 / self.total_files as f64) * 10.0;
-        let critical_penalty = *self.findings_by_severity.get(&FindingSeverity::Critical)
-            .unwrap_or(&0) as f64 * 5.0;
-        let error_penalty = *self.findings_by_severity.get(&FindingSeverity::Error)
-            .unwrap_or(&0) as f64 * 2.0;
+        let critical_penalty = *self
+            .findings_by_severity
+            .get(&FindingSeverity::Critical)
+            .unwrap_or(&0) as f64
+            * 5.0;
+        let error_penalty = *self
+            .findings_by_severity
+            .get(&FindingSeverity::Error)
+            .unwrap_or(&0) as f64
+            * 2.0;
 
         let base_score = coverage_ratio * 100.0;
-        (base_score - finding_penalty - critical_penalty - error_penalty).max(0.0).min(100.0)
+        (base_score - finding_penalty - critical_penalty - error_penalty).clamp(0.0, 100.0)
     }
 
     /// Get quality grade from score
@@ -108,23 +114,30 @@ impl QualityMetrics {
         let mut recommendations = Vec::new();
 
         if self.files_analyzed < self.total_files {
-            recommendations.push("Consider investigating why some files could not be analyzed".to_string());
+            recommendations
+                .push("Consider investigating why some files could not be analyzed".to_string());
         }
 
         if let Some(&critical_count) = self.findings_by_severity.get(&FindingSeverity::Critical) {
             if critical_count > 0 {
-                recommendations.push(format!("Address {} critical security issues immediately", critical_count));
+                recommendations.push(format!(
+                    "Address {critical_count} critical security issues immediately"
+                ));
             }
         }
 
         if let Some(&error_count) = self.findings_by_severity.get(&FindingSeverity::Error) {
             if error_count > 5 {
-                recommendations.push(format!("High number of errors ({}): consider improving error handling", error_count));
+                recommendations.push(format!(
+                    "High number of errors ({error_count}): consider improving error handling"
+                ));
             }
         }
 
         if self.duration_ms > 10000 {
-            recommendations.push("Analysis time is high: consider optimizing the analysis process".to_string());
+            recommendations.push(
+                "Analysis time is high: consider optimizing the analysis process".to_string(),
+            );
         }
 
         if recommendations.is_empty() {
@@ -247,7 +260,6 @@ impl QualityGrade {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     #[test]
     fn test_quality_metrics_creation() {
@@ -300,19 +312,29 @@ mod tests {
         metrics1.total_files = 5;
         metrics1.files_analyzed = 4;
         metrics1.total_findings = 1;
-        metrics1.findings_by_severity.insert(FindingSeverity::Warning, 1);
+        metrics1
+            .findings_by_severity
+            .insert(FindingSeverity::Warning, 1);
 
         let mut metrics2 = QualityMetrics::new();
         metrics2.total_files = 3;
         metrics2.files_analyzed = 2;
         metrics2.total_findings = 1;
-        metrics2.findings_by_severity.insert(FindingSeverity::Error, 1);
+        metrics2
+            .findings_by_severity
+            .insert(FindingSeverity::Error, 1);
 
         metrics1.merge(&metrics2);
         assert_eq!(metrics1.total_files, 8);
         assert_eq!(metrics1.files_analyzed, 6);
         assert_eq!(metrics1.total_findings, 2);
-        assert_eq!(metrics1.findings_by_severity.get(&FindingSeverity::Warning), Some(&1));
-        assert_eq!(metrics1.findings_by_severity.get(&FindingSeverity::Error), Some(&1));
+        assert_eq!(
+            metrics1.findings_by_severity.get(&FindingSeverity::Warning),
+            Some(&1)
+        );
+        assert_eq!(
+            metrics1.findings_by_severity.get(&FindingSeverity::Error),
+            Some(&1)
+        );
     }
 }

@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::context::Issue;
 use crate::tree_sitter::{StructuralSummary, SupportedLanguage, TreeSitterManager};
 use serde::{Deserialize, Serialize};
@@ -176,7 +176,7 @@ pub async fn execute_commit_with_result(
 
 /// 获取代码变更
 fn get_changes() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    crate::git::get_all_diff()
+    gitai_core::git_impl::get_all_diff()
 }
 
 /// 获取Issue上下文
@@ -503,12 +503,12 @@ async fn execute_git_operations_with_result(
     // 添加文件到暂存区
     if commit_config.add_all {
         println!("📝 添加所有变更到暂存区...");
-        crate::git::git_add_all()?;
+        gitai_core::git_impl::git_add_all()?;
     }
 
     // 执行提交
     println!("📝 执行提交: {commit_message}");
-    match crate::git::git_commit(commit_message) {
+    match gitai_core::git_impl::git_commit(commit_message) {
         Ok(hash) => {
             println!("✅ 提交成功: {hash}");
             Ok(Some(hash))

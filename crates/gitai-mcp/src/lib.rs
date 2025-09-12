@@ -4,15 +4,17 @@
 
 #![warn(missing_docs)]
 
-pub mod server;
-pub mod services;
-pub mod registry;
-pub mod manager;
 pub mod bridge;
 pub mod error;
+pub mod http;
+pub mod manager;
+pub mod registry;
+pub mod server;
+pub mod services;
 
+pub use error::*;
+pub use http::*;
+pub use manager::*;
 /// Re-export commonly used types
 pub use server::*;
-pub use error::*;
-pub use manager::*;
 pub use services::*;

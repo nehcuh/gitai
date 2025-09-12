@@ -1,4 +1,4 @@
-use crate::config::Config;
+use gitai_core::config::Config;
 use log::debug;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};

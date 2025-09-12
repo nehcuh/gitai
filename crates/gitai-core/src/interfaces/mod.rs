@@ -58,13 +58,18 @@ pub trait HealthCheckInterface {
 /// 健康检查结果
 #[derive(Debug, Clone)]
 pub struct HealthCheckResult {
+    /// 是否健康
     pub is_healthy: bool,
+    /// 健康状态
     pub status: HealthStatus,
+    /// 说明消息（可选）
     pub message: Option<String>,
+    /// 详细信息（可选）
     pub details: Option<serde_json::Value>,
 }
 
 impl HealthCheckResult {
+    /// 创建健康检查结果（Healthy）
     pub fn healthy() -> Self {
         Self {
             is_healthy: true,
@@ -74,6 +79,7 @@ impl HealthCheckResult {
         }
     }
 
+    /// 创建不健康检查结果（Unhealthy），附带说明
     pub fn unhealthy(message: impl Into<String>) -> Self {
         Self {
             is_healthy: false,
@@ -83,6 +89,7 @@ impl HealthCheckResult {
         }
     }
 
+    /// 创建降级检查结果（Degraded），附带说明
     pub fn degraded(message: impl Into<String>) -> Self {
         Self {
             is_healthy: true,
@@ -155,14 +162,20 @@ pub trait ServiceStatusInterface {
 /// 服务状态
 #[derive(Debug, Clone)]
 pub struct ServiceStatus {
+    /// 服务是否运行
     pub is_running: bool,
+    /// 运行时长（可选）
     pub uptime: Option<std::time::Duration>,
+    /// 最近错误（可选）
     pub last_error: Option<String>,
+    /// 请求总数
     pub request_count: u64,
+    /// 错误总数
     pub error_count: u64,
 }
 
 impl ServiceStatus {
+    /// 创建默认服务状态
     pub fn new() -> Self {
         Self {
             is_running: false,
@@ -183,15 +196,22 @@ impl Default for ServiceStatus {
 /// 服务统计信息
 #[derive(Debug, Clone)]
 pub struct ServiceStatistics {
+    /// 总请求数
     pub total_requests: u64,
+    /// 成功请求数
     pub successful_requests: u64,
+    /// 失败请求数
     pub failed_requests: u64,
+    /// 平均响应时间（可选）
     pub average_response_time: Option<std::time::Duration>,
+    /// 95 分位响应时间（可选）
     pub percentile_95_response_time: Option<std::time::Duration>,
+    /// 99 分位响应时间（可选）
     pub percentile_99_response_time: Option<std::time::Duration>,
 }
 
 impl ServiceStatistics {
+    /// 创建服务统计的初始值
     pub fn new() -> Self {
         Self {
             total_requests: 0,
@@ -249,31 +269,41 @@ pub trait ServiceDiscovery {
 /// 服务端点信息
 #[derive(Debug, Clone)]
 pub struct ServiceEndpoint {
+    /// 服务名称
     pub name: String,
+    /// 版本
     pub version: String,
+    /// 地址
     pub address: String,
+    /// 端口
     pub port: u16,
+    /// 协议
     pub protocol: String,
+    /// 额外元数据（可选）
     pub metadata: Option<serde_json::Value>,
 }
 
 /// 服务发现错误
 #[derive(Debug)]
 pub enum DiscoveryError {
+    /// 未找到服务
     ServiceNotFound(String),
+    /// 无健康实例
     NoHealthyInstances(String),
+    /// 网络错误
     NetworkError(String),
+    /// 发现超时
     Timeout,
 }
 
 impl std::fmt::Display for DiscoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DiscoveryError::ServiceNotFound(name) => write!(f, "Service not found: {}", name),
+            DiscoveryError::ServiceNotFound(name) => write!(f, "Service not found: {name}"),
             DiscoveryError::NoHealthyInstances(name) => {
-                write!(f, "No healthy instances for service: {}", name)
+                write!(f, "No healthy instances for service: {name}")
             }
-            DiscoveryError::NetworkError(msg) => write!(f, "Network error: {}", msg),
+            DiscoveryError::NetworkError(msg) => write!(f, "Network error: {msg}"),
             DiscoveryError::Timeout => write!(f, "Discovery timeout"),
         }
     }
@@ -282,10 +312,17 @@ impl std::fmt::Display for DiscoveryError {
 impl std::error::Error for DiscoveryError {}
 
 /// 结果类型别名
+/// 配置操作结果类型别名
 pub type ConfigResult<T> = Result<T, crate::domain_errors::ConfigError>;
+/// Git 操作结果类型别名
 pub type GitResult<T> = Result<T, crate::domain_errors::GitError>;
+/// AI 操作结果类型别名
 pub type AiResult<T> = Result<T, crate::domain_errors::AiError>;
+/// 缓存操作结果类型别名
 pub type CacheResult<T> = Result<T, crate::domain_errors::CacheError>;
+/// 扫描操作结果类型别名
 pub type ScanResult<T> = Result<T, crate::domain_errors::ScanError>;
+/// 命令执行结果类型别名
 pub type CommandResult<T> = Result<T, crate::domain_errors::CommandError>;
+/// 服务发现结果类型别名
 pub type DiscoveryResult<T> = Result<T, DiscoveryError>;

@@ -8,8 +8,8 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 
 /// 处理 commit 命令
 pub async fn handle_command(
-    _config: &gitai_core::config::Config, 
-    command: &Command
+    _config: &gitai_core::config::Config,
+    command: &Command,
 ) -> HandlerResult<()> {
     match command {
         Command::Commit {
@@ -29,7 +29,7 @@ pub async fn handle_command(
             println!("  启用评审: {}", review);
             println!("  Tree-sitter: {}", tree_sitter);
             println!("  测试运行: {}", dry_run);
-            
+
             // TODO: 实现实际的提交逻辑
             Ok(())
         }

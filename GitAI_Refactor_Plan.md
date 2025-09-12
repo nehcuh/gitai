@@ -1,5 +1,7 @@
 # GitAI 项目重构修复计划
 
+> ARCHIVED: This plan is historical and may not reflect the current codebase. See docs/architecture/ARCHITECTURE.md and docs/README.md for current state.
+
 **创建日期**: 2025-01-10  
 **最后更新**: 2025-01-10  
 **版本**: v1.0  

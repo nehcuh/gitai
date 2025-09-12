@@ -8,9 +8,9 @@ type HandlerResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send 
 
 /// 处理 git 命令
 pub async fn handle_command(
-    _config: &gitai_core::config::Config, 
-    command: &Command, 
-    args: &Args
+    _config: &gitai_core::config::Config,
+    command: &Command,
+    args: &Args,
 ) -> HandlerResult<()> {
     match command {
         Command::Git(git_args) => {

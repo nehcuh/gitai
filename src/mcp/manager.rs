@@ -1,7 +1,7 @@
 /// MCP 服务注册表整合模块
 ///
 /// 将 MCP 服务注册表整合到 GitAiMcpManager 中
-use crate::config::Config;
+use gitai_core::config::Config;
 use crate::mcp::registry::{ServiceEvent, ServiceEventListener, ServiceMetadata, ServiceRegistry};
 use crate::mcp::{GitAiMcpService, McpResult, Tool};
 use log::{debug, error, info, warn};

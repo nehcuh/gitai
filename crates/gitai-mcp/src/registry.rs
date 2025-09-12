@@ -1,4 +1,5 @@
 //! MCP 服务注册表 - 简化版本
+#![allow(clippy::await_holding_lock)]
 
 use async_trait::async_trait;
 use log::{error, info, warn};
@@ -54,24 +55,34 @@ pub enum ServiceStatus {
 pub enum ServiceEvent {
     /// 服务已注册
     Registered {
+        /// 服务ID
         service_id: String,
+        /// 元数据
         metadata: ServiceMetadata,
     },
     /// 服务已注销
     Unregistered {
+        /// 服务ID
         service_id: String,
+        /// 注销原因
         reason: String,
     },
     /// 服务状态变更
     StatusChanged {
+        /// 服务ID
         service_id: String,
+        /// 旧状态
         old_status: ServiceStatus,
+        /// 新状态
         new_status: ServiceStatus,
     },
     /// 健康检查完成
     HealthCheckCompleted {
+        /// 服务ID
         service_id: String,
+        /// 是否健康
         healthy: bool,
+        /// 响应时间
         response_time: Duration,
     },
 }
@@ -80,7 +91,10 @@ pub enum ServiceEvent {
 #[async_trait]
 pub trait ServiceEventListener: Send + Sync {
     /// 处理服务事件
-    async fn on_service_event(&self, event: ServiceEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn on_service_event(
+        &self,
+        event: ServiceEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 /// 服务健康检查器
@@ -163,7 +177,7 @@ impl ServiceRegistry {
         config: serde_json::Value,
     ) -> McpResult<String> {
         let service_id = Uuid::new_v4().to_string();
-        
+
         // 创建服务元数据
         let metadata = ServiceMetadata {
             id: service_id.clone(),
@@ -177,10 +191,7 @@ impl ServiceRegistry {
         };
 
         // 创建服务实例
-        let instance = ServiceInstance {
-            service,
-            metadata,
-        };
+        let instance = ServiceInstance { service, metadata };
 
         // 注册服务
         {
@@ -193,13 +204,14 @@ impl ServiceRegistry {
             let services = self.services.read();
             services.get(&service_id).unwrap().metadata.clone()
         };
-        
+
         self.emit_event(ServiceEvent::Registered {
             service_id: service_id.clone(),
             metadata: service_for_event,
-        }).await;
+        })
+        .await;
 
-        info!("✅ 服务注册成功: {}", service_id);
+        info!("✅ 服务注册成功: {service_id}");
         Ok(service_id)
     }
 
@@ -209,7 +221,7 @@ impl ServiceRegistry {
         let _instance = {
             let mut services = self.services.write();
             services.remove(service_id).ok_or_else(|| {
-                McpError::InvalidParameters(format!("Service not found: {}", service_id))
+                McpError::InvalidParameters(format!("Service not found: {service_id}"))
             })?
         };
 
@@ -217,22 +229,28 @@ impl ServiceRegistry {
         self.emit_event(ServiceEvent::Unregistered {
             service_id: service_id.to_string(),
             reason,
-        }).await;
+        })
+        .await;
 
-        info!("📤 服务注销成功: {}", service_id);
+        info!("📤 服务注销成功: {service_id}");
         Ok(())
     }
 
     /// 获取服务
     pub async fn get_service(&self, service_id: &str) -> Option<Arc<dyn McpService + Send + Sync>> {
         let services = self.services.read();
-        services.get(service_id).map(|instance| instance.service.clone())
+        services
+            .get(service_id)
+            .map(|instance| instance.service.clone())
     }
 
     /// 列出所有服务
     pub async fn list_services(&self) -> Vec<ServiceMetadata> {
         let services = self.services.read();
-        services.values().map(|instance| instance.metadata.clone()).collect()
+        services
+            .values()
+            .map(|instance| instance.metadata.clone())
+            .collect()
     }
 
     /// 获取健康的服务
@@ -262,7 +280,7 @@ impl ServiceRegistry {
         let listeners = self.event_listeners.read();
         for listener in listeners.iter() {
             if let Err(e) = listener.on_service_event(event.clone()).await {
-                error!("❌ 事件监听器错误: {}", e);
+                error!("❌ 事件监听器错误: {e}");
             }
         }
     }
@@ -302,7 +320,8 @@ impl ServiceRegistry {
                         service_id: service_id.clone(),
                         old_status,
                         new_status: new_status.clone(),
-                    }).await;
+                    })
+                    .await;
                 }
 
                 // 发送健康检查完成事件
@@ -310,21 +329,25 @@ impl ServiceRegistry {
                     service_id: service_id.clone(),
                     healthy,
                     response_time,
-                }).await;
+                })
+                .await;
             }
         }
     }
 
     /// 启动健康检查循环
     pub async fn start_health_check_loop(&self) {
-        if self.running.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .running
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             warn!("⚠️ 健康检查循环已经在运行");
             return;
         }
 
         info!("🔄 启动健康检查循环");
         let check_interval = self.health_checker.check_interval;
-        
+
         while self.running.load(std::sync::atomic::Ordering::Relaxed) {
             tokio::time::sleep(check_interval).await;
             self.perform_health_check().await;
@@ -333,7 +356,14 @@ impl ServiceRegistry {
 
     /// 停止健康检查循环
     pub fn stop_health_check_loop(&self) {
-        self.running.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         info!("⏹️ 健康检查循环已停止");
+    }
+}
+
+impl Default for ServiceRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }

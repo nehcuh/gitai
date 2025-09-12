@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 // 级联效应检测模块
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

@@ -2,6 +2,7 @@
 //!
 //! 提供安全的错误处理模式，替代 .unwrap() 调用
 
+#![allow(missing_docs)]
 use gitai_types::{GitAIError, Result};
 
 /// 安全的 Result 处理工具
@@ -16,7 +17,7 @@ impl SafeResult {
         match result {
             Ok(value) => value,
             Err(e) => {
-                log::warn!("{} failed: {}", context, e);
+                log::warn!("{context} failed: {e}");
                 default
             }
         }
@@ -35,7 +36,7 @@ impl SafeResult {
         match result {
             Ok(value) => value,
             Err(e) => {
-                log::warn!("{} failed: {}", context, e);
+                log::warn!("{context} failed: {e}");
                 fallback()
             }
         }
@@ -46,7 +47,7 @@ impl SafeResult {
         match option {
             Some(value) => value,
             None => {
-                log::warn!("{}: Option is None", context);
+                log::warn!("{context}: Option is None");
                 default
             }
         }
@@ -60,7 +61,7 @@ impl SafeResult {
         match option {
             Some(value) => value,
             None => {
-                log::warn!("{}: Option is None", context);
+                log::warn!("{context}: Option is None");
                 fallback()
             }
         }
@@ -72,8 +73,8 @@ impl SafeResult {
         E: std::fmt::Display,
     {
         result.map_err(|e| {
-            let error_msg = format!("{}: {}", context, e);
-            log::error!("{}", error_msg);
+            let error_msg = format!("{context}: {e}");
+            log::error!("{error_msg}");
             GitAIError::Other(error_msg)
         })
     }
@@ -88,8 +89,8 @@ impl SafeResult {
         E: std::fmt::Display,
     {
         result.map_err(|e| {
-            let error_msg = format!("{} in {}: {}", context, operation, e);
-            log::error!("{}", error_msg);
+            let error_msg = format!("{context} in {operation}: {e}");
+            log::error!("{error_msg}");
             GitAIError::Other(error_msg)
         })
     }
@@ -105,8 +106,8 @@ impl DomainErrorHandler {
         operation: &str,
     ) -> gitai_core::interfaces::ConfigResult<T> {
         result.map_err(|e| {
-            log::error!("Config operation '{}' failed: {}", operation, e);
-            gitai_core::domain_errors::ConfigError::LoadFailed(format!("{}: {}", operation, e))
+            log::error!("Config operation '{operation}' failed: {e}");
+            gitai_core::domain_errors::ConfigError::LoadFailed(format!("{operation}: {e}"))
         })
     }
 
@@ -116,8 +117,8 @@ impl DomainErrorHandler {
         operation: &str,
     ) -> gitai_core::interfaces::GitResult<T> {
         result.map_err(|e| {
-            log::error!("Git operation '{}' failed: {}", operation, e);
-            gitai_core::domain_errors::GitError::CommandFailed(format!("{}: {}", operation, e))
+            log::error!("Git operation '{operation}' failed: {e}");
+            gitai_core::domain_errors::GitError::CommandFailed(format!("{operation}: {e}"))
         })
     }
 
@@ -127,8 +128,8 @@ impl DomainErrorHandler {
         operation: &str,
     ) -> gitai_core::interfaces::AiResult<T> {
         result.map_err(|e| {
-            log::error!("AI operation '{}' failed: {}", operation, e);
-            gitai_core::domain_errors::AiError::ApiCallFailed(format!("{}: {}", operation, e))
+            log::error!("AI operation '{operation}' failed: {e}");
+            gitai_core::domain_errors::AiError::ApiCallFailed(format!("{operation}: {e}"))
         })
     }
 
@@ -138,8 +139,8 @@ impl DomainErrorHandler {
         operation: &str,
     ) -> gitai_core::interfaces::ScanResult<T> {
         result.map_err(|e| {
-            log::error!("Scan operation '{}' failed: {}", operation, e);
-            gitai_core::domain_errors::ScanError::ScanExecutionFailed(format!("{}: {}", operation, e))
+            log::error!("Scan operation '{operation}' failed: {e}");
+            gitai_core::domain_errors::ScanError::ScanExecutionFailed(format!("{operation}: {e}"))
         })
     }
 }
@@ -218,12 +219,7 @@ pub mod convenience {
         T: std::str::FromStr + std::fmt::Display,
     {
         s.trim().parse().unwrap_or_else(|_| {
-            log::warn!(
-                "{}: Failed to parse '{}', using default {}",
-                context,
-                s,
-                default
-            );
+            log::warn!("{context}: Failed to parse '{s}', using default {default}");
             default
         })
     }
@@ -237,13 +233,7 @@ pub mod convenience {
         context: &str,
     ) -> String {
         s.get(start..end).map(|s| s.to_string()).unwrap_or_else(|| {
-            log::warn!(
-                "{}: Invalid slice range {}..{} for string '{}'",
-                context,
-                start,
-                end,
-                s
-            );
+            log::warn!("{context}: Invalid slice range {start}..{end} for string '{s}'");
             default.to_string()
         })
     }
@@ -256,11 +246,7 @@ pub mod convenience {
         json.get(key)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_else(|| {
-                log::warn!(
-                    "{}: Failed to get or parse key '{}' from JSON",
-                    context,
-                    key
-                );
+                log::warn!("{context}: Failed to get or parse key '{key}' from JSON");
                 default
             })
     }
@@ -273,7 +259,7 @@ pub mod convenience {
         context: &str,
     ) -> u64 {
         json.get(key).and_then(|v| v.as_u64()).unwrap_or_else(|| {
-            log::warn!("{}: Failed to get number key '{}' from JSON", context, key);
+            log::warn!("{context}: Failed to get number key '{key}' from JSON");
             default
         })
     }
@@ -289,7 +275,7 @@ pub mod convenience {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| {
-                log::warn!("{}: Failed to get string key '{}' from JSON", context, key);
+                log::warn!("{context}: Failed to get string key '{key}' from JSON");
                 default.to_string()
             })
     }
@@ -302,7 +288,7 @@ pub mod convenience {
         context: &str,
     ) -> bool {
         json.get(key).and_then(|v| v.as_bool()).unwrap_or_else(|| {
-            log::warn!("{}: Failed to get bool key '{}' from JSON", context, key);
+            log::warn!("{context}: Failed to get bool key '{key}' from JSON");
             default
         })
     }

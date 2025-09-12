@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 // 影响范围报告生成器：将 ImpactScope 转为 AI 友好的 Markdown 报告
 use crate::architectural_impact::dependency_graph::DependencyGraph;
 use crate::architectural_impact::ImpactScope;
