@@ -1,7 +1,8 @@
 //! GitAI Shared Types
 //! 统一的类型定义，避免重复和不一致
 
-#![warn(missing_docs)]
+// TODO: Enable missing_docs warning after adding all documentation
+// #![warn(missing_docs)]
 
 pub mod change;
 pub mod common;

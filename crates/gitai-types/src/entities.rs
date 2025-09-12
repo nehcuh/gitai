@@ -146,23 +146,41 @@ impl std::str::FromStr for FilePath {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProgrammingLanguage {
+    /// Rust programming language
     Rust,
+    /// Java programming language
     Java,
+    /// Python programming language
     Python,
+    /// JavaScript programming language
     JavaScript,
+    /// TypeScript programming language
     TypeScript,
+    /// Go programming language
     Go,
+    /// C programming language
     C,
+    /// C++ programming language
     Cpp,
+    /// C# programming language
     CSharp,
+    /// Scala programming language
     Scala,
+    /// Kotlin programming language
     Kotlin,
+    /// Swift programming language
     Swift,
+    /// PHP programming language
     Php,
+    /// Ruby programming language
     Ruby,
+    /// F# programming language
     FSharp,
+    /// OCaml programming language
     OCaml,
+    /// Haskell programming language
     Haskell,
+    /// Unknown or unsupported language
     Unknown,
 }
 

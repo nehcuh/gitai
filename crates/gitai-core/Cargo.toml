@@ -12,6 +12,10 @@ gitai-types = { path = "../gitai-types" }
 # NOTE: Removed gitai-adapters to avoid circular dependency
 # Adapters should depend on core, not vice versa
 
+# Add missing dependencies
+directories = "5.0"
+home = "0.5"
+
 # Core dependencies
 anyhow = { workspace = true }
 async-trait = { workspace = true }

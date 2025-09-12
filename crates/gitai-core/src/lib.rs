@@ -23,7 +23,8 @@ pub mod services;
 pub mod utils;
 
 /// Adapter integration registry and traits exposure
-pub mod adapters;
+// TODO: Fix circular dependency issue with gitai-adapters
+// pub mod adapters;
 
 #[cfg(feature = "ai")]
 /// AI integration façade (enabled via `ai` feature)

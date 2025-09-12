@@ -3,7 +3,15 @@
 //! 提供安全的错误处理模式，替代 .unwrap() 调用
 
 use gitai_types::error::*;
-use crate::error::{GitAIError, Result};
+
+// Define Result type aliases for domain-specific errors
+type ConfigResult<T> = std::result::Result<T, ConfigError>;
+type GitResult<T> = std::result::Result<T, GitError>;
+type AiResult<T> = std::result::Result<T, AiError>;
+type ScanResult<T> = std::result::Result<T, ScanError>;
+
+// Import GitAIError and Result from gitai-types instead of crate::error
+use gitai_types::error::{GitAIError, Result};
 
 /// 安全的 Result 处理工具
 pub struct SafeResult;
@@ -67,7 +75,7 @@ impl SafeResult {
         }
     }
 
-    /// 将 Result 转换为 GitAIError::Unknown
+    /// 将 Result 转换为 GitAIError::Other
     pub fn convert_unknown<T, E>(result: std::result::Result<T, E>, context: &str) -> Result<T>
     where
         E: std::fmt::Display,
@@ -75,11 +83,11 @@ impl SafeResult {
         result.map_err(|e| {
             let error_msg = format!("{}: {}", context, e);
             log::error!("{}", error_msg);
-            GitAIError::Unknown(error_msg)
+            GitAIError::Other(error_msg)
         })
     }
 
-    /// 将 Result 转换为 GitAIError::Unknown，提供上下文
+    /// 将 Result 转换为 GitAIError::Other，提供上下文
     pub fn convert_unknown_with<T, E>(
         result: std::result::Result<T, E>,
         context: &str,
@@ -91,7 +99,7 @@ impl SafeResult {
         result.map_err(|e| {
             let error_msg = format!("{} in {}: {}", context, operation, e);
             log::error!("{}", error_msg);
-            GitAIError::Unknown(error_msg)
+            GitAIError::Other(error_msg)
         })
     }
 }
