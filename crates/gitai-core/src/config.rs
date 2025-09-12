@@ -8,18 +8,18 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// AI 相关配置
-    pub ai: AIConfig,
+    pub ai: AiConfig,
     /// 安全扫描相关配置
     pub scan: ScanConfig,
     /// DevOps 平台集成配置（可选）
     pub devops: Option<DevOpsConfig>,
     /// MCP（模型上下文协议）配置（可选）
-    pub mcp: Option<MCPConfig>,
+    pub mcp: Option<McpConfig>,
 }
 
 /// AI 服务配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AIConfig {
+pub struct AiConfig {
     /// AI 服务地址
     pub api_url: String,
     /// 默认模型名称
@@ -62,7 +62,7 @@ pub struct DevOpsConfig {
 
 /// MCP（模型上下文协议）配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MCPConfig {
+pub struct McpConfig {
     /// 是否启用 MCP
     pub enabled: bool,
 }
@@ -70,7 +70,7 @@ pub struct MCPConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            ai: AIConfig {
+            ai: AiConfig {
                 api_url: "http://localhost:11434/v1/chat/completions".to_string(),
                 model: "qwen2.5:32b".to_string(),
                 api_key: None,
@@ -83,15 +83,29 @@ impl Default for Config {
                 rules_dir: None,
             },
             devops: None,
-            mcp: Some(MCPConfig { enabled: true }),
+            mcp: Some(McpConfig { enabled: true }),
         }
     }
 }
 
 impl Config {
-    /// 从默认路径加载配置（占位实现）
+    /// 从默认路径加载配置
     pub fn load() -> gitai_types::Result<Self> {
-        // TODO: 实际加载逻辑
-        Ok(Self::default())
+        let config_path = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".config")
+            .join("gitai")
+            .join("config.toml");
+
+        if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)
+                .map_err(|e| gitai_types::GitAIError::Other(format!("Failed to read config file: {}", e)))?;
+            let config: Config = toml::from_str(&content)
+                .map_err(|e| gitai_types::GitAIError::Other(format!("Failed to parse config file: {}", e)))?;
+            Ok(config)
+        } else {
+            // 如果配置文件不存在，使用默认配置
+            Ok(Self::default())
+        }
     }
 }
