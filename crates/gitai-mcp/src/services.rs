@@ -553,6 +553,136 @@ impl McpService for DependencyService {
     }
 }
 
+/// 图摘要服务
+pub struct GraphSummaryService {
+    #[allow(dead_code)]
+    config: Arc<Config>,
+}
+
+impl GraphSummaryService {
+    /// 创建新的图摘要服务
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { config }
+    }
+
+    /// 执行图摘要生成
+    pub async fn execute_summary(&self, params: &Value) -> McpResult<Value> {
+        let start_time = Instant::now();
+        debug!("🔍 执行图摘要，参数: {params:?}");
+
+        let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        let radius = params.get("radius").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
+        let top_k = params.get("top_k").and_then(|v| v.as_u64()).unwrap_or(200) as usize;
+        let budget_tokens = params.get("budget_tokens").and_then(|v| v.as_u64()).unwrap_or(3000) as usize;
+        let format = params.get("format").and_then(|v| v.as_str()).unwrap_or("json");
+        
+        info!("📊 生成图摘要: {path} (radius: {radius}, top_k: {top_k}, budget: {budget_tokens})");
+
+        // Build the full dependency graph first
+        let graph = build_global_dependency_graph(Path::new(path))
+            .await
+            .map_err(|e| McpError::ExecutionFailed(format!("Failed to build graph: {e}")))?;
+
+        // Calculate basic statistics
+        let node_count = graph.nodes.len();
+        let edge_count = graph.edges.len();
+        let avg_degree = if node_count > 0 {
+            (edge_count * 2) as f64 / node_count as f64
+        } else {
+            0.0
+        };
+
+        // Calculate PageRank for node importance
+        let mut graph_mut = graph.clone();
+        let pagerank_scores = graph_mut.calculate_pagerank(0.85, 20, 1e-6);
+
+        // Get top nodes by PageRank score
+        let mut scored_nodes: Vec<(String, f32)> = pagerank_scores
+            .into_iter()
+            .map(|(id, score)| (id.clone(), score))
+            .collect();
+        scored_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        // Limit to top_k nodes
+        let top_nodes: Vec<(String, f32)> = scored_nodes
+            .into_iter()
+            .take(top_k)
+            .collect();
+
+        // Estimate output size and apply budget if needed
+        let estimated_size = node_count * 50 + edge_count * 20; // rough estimate
+        let truncated = estimated_size > budget_tokens * 4; // ~4 chars per token
+        
+        let actual_top_k = if truncated {
+            top_k.min(100) // reduce if over budget
+        } else {
+            top_k
+        };
+
+        // Build summary response
+        let result = if format == "text" {
+            let mut summary = format!("## 依赖图摘要\n\n");
+            summary.push_str(&format!("- 节点数: {}\n", node_count));
+            summary.push_str(&format!("- 边数: {}\n", edge_count));
+            summary.push_str(&format!("- 平均度: {:.2}\n\n", avg_degree));
+            summary.push_str(&format!("### Top {} 重要节点:\n", actual_top_k));
+            
+            for (i, (node_id, score)) in top_nodes.iter().take(actual_top_k).enumerate() {
+                summary.push_str(&format!("{}. {} (score: {:.4})\n", i + 1, node_id, score));
+            }
+            
+            if truncated {
+                summary.push_str(&format!("\n注意: 输出已截断以适应 {} token 预算\n", budget_tokens));
+            }
+            
+            json!({
+                "status": "success",
+                "content": summary,
+                "truncated": truncated,
+            })
+        } else {
+            json!({
+                "status": "success",
+                "graph_stats": {
+                    "node_count": node_count,
+                    "edge_count": edge_count,
+                    "avg_degree": avg_degree,
+                },
+                "top_nodes": top_nodes.iter().take(actual_top_k)
+                    .map(|(id, score)| vec![json!(id), json!(score)])
+                    .collect::<Vec<_>>(),
+                "kept_nodes": actual_top_k,
+                "radius": radius,
+                "truncated": truncated,
+                "duration_ms": start_time.elapsed().as_millis(),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            })
+        };
+
+        info!("✅ 图摘要生成完成，耗时: {}ms", start_time.elapsed().as_millis());
+        Ok(result)
+    }
+}
+
+#[async_trait]
+impl McpService for GraphSummaryService {
+    fn name(&self) -> &str {
+        "图摘要"
+    }
+
+    fn description(&self) -> &str {
+        "生成依赖图的智能摘要"
+    }
+
+    async fn is_available(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, params: Value) -> Result<Value, McpError> {
+        self.execute_summary(&params).await
+    }
+}
+
 /// 偏差分析服务
 pub struct DeviationService {
     #[allow(dead_code)]
@@ -644,6 +774,7 @@ impl ServiceFactory {
             Box::new(AnalysisService::new(config.clone())),
             Box::new(DependencyService::new(config.clone())),
             Box::new(DeviationService::new(config.clone())),
+            Box::new(GraphSummaryService::new(config.clone())),
         ]
     }
 

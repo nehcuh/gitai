@@ -31,6 +31,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     tool_to_service.insert("execute_analysis", 3);
     tool_to_service.insert("execute_dependency_graph", 4);
     tool_to_service.insert("analyze_deviation", 5);
+    tool_to_service.insert("summarize_graph", 6);
 
     // 预构建工具列表与输入 schema（与 Warp / MCP 客户端对齐）
     let tools_listing = build_tools_listing();
@@ -507,6 +508,7 @@ pub async fn process_message(
                     ("execute_analysis", 3),
                     ("execute_dependency_graph", 4),
                     ("analyze_deviation", 5),
+                    ("summarize_graph", 6),
                 ]
                 .into_iter()
                 .collect::<std::collections::HashMap<_, _>>();
@@ -634,6 +636,29 @@ pub fn build_tools_listing() -> Vec<Value> {
                     "issue_ids": {"type": "array", "items": {"type": "string"}}
                 },
                 "required": ["issue_ids"]
+            }
+        }),
+        json!({
+            "name": "summarize_graph",
+            "description": "图摘要（支持社区压缩与预算自适应裁剪）",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "扫描目录（默认 .）"},
+                    "radius": {"type": "integer", "minimum": 1, "description": "从种子出发的邻域半径（默认1）"},
+                    "top_k": {"type": "integer", "minimum": 1, "description": "Top节点上限（默认200）"},
+                    "budget_tokens": {"type": "integer", "minimum": 0, "description": "预算token用于自适应裁剪（默认3000）"},
+                    "format": {"type": "string", "enum": ["json","text"], "description": "输出格式（默认json）"},
+                    "community": {"type": "boolean", "description": "启用社区压缩（v1）"},
+                    "comm_alg": {"type": "string", "enum": ["labelprop"], "description": "社区检测算法（默认labelprop）"},
+                    "max_communities": {"type": "integer", "minimum": 1, "description": "社区数量上限（默认50）"},
+                    "max_nodes_per_community": {"type": "integer", "minimum": 1, "description": "每个社区展示节点上限（默认10）"},
+                    "with_paths": {"type": "boolean", "description": "启用路径采样（v2）"},
+                    "path_samples": {"type": "integer", "minimum": 0, "description": "路径样本数量（默认5）"},
+                    "path_max_hops": {"type": "integer", "minimum": 1, "description": "单条路径最大跳数（默认5）"},
+                    "seeds_from_diff": {"type": "boolean", "description": "从 git diff 推导变更种子（默认false）"}
+                },
+                "required": ["path"]
             }
         }),
     ]
