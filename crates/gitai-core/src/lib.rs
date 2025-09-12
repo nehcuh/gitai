@@ -5,8 +5,8 @@
 
 /// Configuration management (loading, validation)
 pub mod config;
-/// Commit message generation and management
-pub mod commit;
+// TODO: commit module needs refactoring
+// pub mod commit;
 /// Shared operation context and domain structures
 pub mod context;
 /// Domain-specific error types and results

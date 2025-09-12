@@ -2,7 +2,7 @@
 //!
 //! 提供安全的错误处理模式，替代 .unwrap() 调用
 
-use crate::domain::errors::*;
+use gitai_types::error::*;
 use crate::error::{GitAIError, Result};
 
 /// 安全的 Result 处理工具

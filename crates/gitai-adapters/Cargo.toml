@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 # shared types and core interfaces
 gitai-types = { path = "../gitai-types" }
+gitai-core = { path = "../gitai-core" }
 
 # async and utils from workspace
 async-trait = { workspace = true }

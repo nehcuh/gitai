@@ -9,7 +9,8 @@ description = "Core functionality for GitAI"
 
 [dependencies]
 gitai-types = { path = "../gitai-types" }
-gitai-adapters = { path = "../gitai-adapters" }
+# NOTE: Removed gitai-adapters to avoid circular dependency
+# Adapters should depend on core, not vice versa
 
 # Core dependencies
 anyhow = { workspace = true }
