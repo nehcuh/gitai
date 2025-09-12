@@ -20,7 +20,7 @@ use std::time::Instant;
 // Real subsystems
 use gitai_analysis::analysis::Analyzer as CodeAnalyzer;
 use gitai_analysis::architectural_impact::graph_export;
-use gitai_analysis::architectural_impact::graph_export::build_global_dependency_graph;
+use gitai_analysis::architectural_impact::graph_export::{build_global_dependency_graph, query_call_chain};
 use gitai_analysis::{OperationContext as AnalysisCtx, OperationOptions as AnalysisOpts};
 use gitai_core::git;
 use gitai_security::scanner as security;
@@ -683,6 +683,106 @@ impl McpService for GraphSummaryService {
     }
 }
 
+/// 调用链查询服务
+pub struct CallChainService {
+    #[allow(dead_code)]
+    config: Arc<Config>,
+}
+
+impl CallChainService {
+    /// 创建新的调用链查询服务
+    pub fn new(config: Arc<Config>) -> Self {
+        Self { config }
+    }
+
+    /// 执行调用链查询
+    pub async fn execute_query(&self, params: &Value) -> McpResult<Value> {
+        let start_time = Instant::now();
+        debug!("🔍 执行调用链查询，参数: {params:?}");
+
+        let path = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        let start = params.get("start").and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::ExecutionFailed("Missing required parameter: start".to_string()))?;
+        let end = params.get("end").and_then(|v| v.as_str());
+        let direction = params.get("direction").and_then(|v| v.as_str()).unwrap_or("downstream");
+        let max_depth = params.get("max_depth").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+        let max_paths = params.get("max_paths").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+        info!("🔗 查询调用链: {} -> {:?} (方向: {}, 深度: {}, 路径数: {})", 
+            start, end, direction, max_depth, max_paths);
+
+        let chains = query_call_chain(
+            Path::new(path),
+            start,
+            end,
+            direction,
+            max_depth,
+            max_paths,
+        )
+        .await
+        .map_err(|e| McpError::ExecutionFailed(format!("Failed to query call chain: {e}")))?;
+
+        // 格式化输出
+        let formatted_chains: Vec<Value> = chains
+            .iter()
+            .map(|chain| {
+                let path_str = chain.nodes
+                    .iter()
+                    .map(|n| n.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" -> ");
+                json!({
+                    "path": path_str,
+                    "nodes": chain.nodes.iter().map(|n| json!({
+                        "name": n.name,
+                        "file": n.file_path,
+                        "line_start": n.line_start,
+                        "line_end": n.line_end,
+                    })).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+
+        let result = json!({
+            "status": "success",
+            "query": {
+                "start": start,
+                "end": end,
+                "direction": direction,
+                "max_depth": max_depth,
+                "max_paths": max_paths,
+            },
+            "chains_found": chains.len(),
+            "chains": formatted_chains,
+            "duration_ms": start_time.elapsed().as_millis(),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        });
+
+        info!("✅ 调用链查询完成，找到 {} 条路径，耗时: {}ms", 
+            chains.len(), start_time.elapsed().as_millis());
+        Ok(result)
+    }
+}
+
+#[async_trait]
+impl McpService for CallChainService {
+    fn name(&self) -> &str {
+        "调用链查询"
+    }
+
+    fn description(&self) -> &str {
+        "查询函数的上下游调用链"
+    }
+
+    async fn is_available(&self) -> bool {
+        true
+    }
+
+    async fn execute(&self, params: Value) -> Result<Value, McpError> {
+        self.execute_query(&params).await
+    }
+}
+
 /// 偏差分析服务
 pub struct DeviationService {
     #[allow(dead_code)]
@@ -775,6 +875,7 @@ impl ServiceFactory {
             Box::new(DependencyService::new(config.clone())),
             Box::new(DeviationService::new(config.clone())),
             Box::new(GraphSummaryService::new(config.clone())),
+            Box::new(CallChainService::new(config.clone())),
         ]
     }
 

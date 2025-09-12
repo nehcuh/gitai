@@ -32,6 +32,7 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
     tool_to_service.insert("execute_dependency_graph", 4);
     tool_to_service.insert("analyze_deviation", 5);
     tool_to_service.insert("summarize_graph", 6);
+    tool_to_service.insert("query_call_chain", 7);
 
     // 预构建工具列表与输入 schema（与 Warp / MCP 客户端对齐）
     let tools_listing = build_tools_listing();
@@ -509,6 +510,7 @@ pub async fn process_message(
                     ("execute_dependency_graph", 4),
                     ("analyze_deviation", 5),
                     ("summarize_graph", 6),
+                    ("query_call_chain", 7),
                 ]
                 .into_iter()
                 .collect::<std::collections::HashMap<_, _>>();
@@ -659,6 +661,22 @@ pub fn build_tools_listing() -> Vec<Value> {
                     "seeds_from_diff": {"type": "boolean", "description": "从 git diff 推导变更种子（默认false）"}
                 },
                 "required": ["path"]
+            }
+        }),
+        json!({
+            "name": "query_call_chain",
+            "description": "查询函数调用链（上游/下游），可设定最大深度与路径数量",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "扫描目录（默认 .）"},
+                    "start": {"type": "string", "description": "起始函数名（必需）"},
+                    "end": {"type": "string", "description": "结束函数名（可选）"},
+                    "direction": {"type": "string", "enum": ["downstream","upstream"], "description": "方向：下游(被调用方)/上游(调用方)，默认 downstream"},
+                    "max_depth": {"type": "integer", "minimum": 1, "maximum": 32, "description": "最大深度，默认 8"},
+                    "max_paths": {"type": "integer", "minimum": 1, "maximum": 100, "description": "最多返回路径数，默认 20"}
+                },
+                "required": ["start"]
             }
         }),
     ]
