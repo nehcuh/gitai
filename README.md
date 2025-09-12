@@ -1,6 +1,6 @@
 # GitAI - AI驱动的Git工作流助手
 
-[![Version](https://img.shields.io/badge/version-v1.1.0-blue.svg?style=for-the-badge)](https://github.com/nehcuh/gitai/releases/tag/v1.1.0)
+[![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg?style=for-the-badge)](https://github.com/nehcuh/gitai/releases/tag/v2.0.0)
 [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 ![Platform](https://img.shields.io/badge/platform-Linux%20|%20macOS%20|%20Windows-lightgrey.svg)
@@ -50,11 +50,11 @@ GitAI 是一个AI驱动的Git工作流增强工具，提供**即时**、**非强
 # 从源码安装（推荐）
 git clone https://github.com/nehcuh/gitai.git
 cd gitai
-cargo build --release --features default
+cargo build --release
 sudo cp target/release/gitai /usr/local/bin/
 
-# 或使用 cargo install
-cargo install gitai
+# 或使用 cargo install（即将支持）
+# cargo install gitai
 ```
 
 ### 初始化配置
@@ -83,22 +83,19 @@ gitai scan
 gitai mcp --transport stdio
 ```
 
-## 🎯 功能门控
+## 🏗️ 架构特点
 
-GitAI 支持灵活的功能门控，可根据需求定制构建：
+GitAI 采用模块化的 Workspace 架构，包含9个专门的 crate：
 
-```bash
-# 最小构建 (10MB)
-cargo build --release --no-default-features --features minimal
-
-# 默认构建 (12MB)
-cargo build --release --features default
-
-# 完整构建 (22MB)
-cargo build --release --features full
-```
-
-详见 [功能门控指南](docs/features/FEATURE_FLAGS.md)。
+- **gitai-core**: 核心业务逻辑和接口定义
+- **gitai-types**: 共享类型和错误定义
+- **gitai-analysis**: 代码分析引擎（Tree-sitter、架构影响分析）
+- **gitai-security**: 安全扫描功能（OpenGrep集成）
+- **gitai-metrics**: 质量度量和趋势分析
+- **gitai-mcp**: MCP协议服务器实现
+- **gitai-adapters**: 外部服务适配器（AI、DevOps）
+- **gitai-cli**: 命令行界面
+- **gitai-evaluation**: 项目质量评估工具
 
 ## 📚 文档
 
@@ -120,4 +117,4 @@ cargo build --release --features full
 
 ---
 
-**当前版本**: v1.1.0 | **项目状态**: 稳定版 | [查看更新日志](CHANGELOG.md)
+**当前版本**: v2.0.0 | **项目状态**: 稳定版 | [查看更新日志](CHANGELOG.md)

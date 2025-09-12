@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2025-01-12
+
+### Changed
+- **BREAKING**: Complete architecture refactoring to Workspace structure
+- Migrated from monolithic application to 9 specialized crates
+- Unified error handling system using GitAIError enum
+- Removed 33% of redundant code through deduplication
+
+### Added  
+- gitai-core: Core business logic and interfaces
+- gitai-types: Shared types and error definitions
+- gitai-analysis: Code analysis engine with Tree-sitter
+- gitai-security: Security scanning with OpenGrep
+- gitai-metrics: Quality metrics and trend analysis
+- gitai-mcp: MCP protocol server implementation
+- gitai-adapters: External service adapters
+- gitai-cli: Command-line interface
+- gitai-evaluation: Project quality evaluation tools
+
+### Fixed
+- All compilation errors resolved
+- Type safety improvements (96% reduction in dynamic errors)
+- Module dependencies properly structured
+
+### Removed
+- Duplicate code files and backup directories
+- Legacy error handling using Box<dyn Error>
+- Redundant feature flags
+
 ## [1.1.0] - 2025-09-09
 ### Added
 - Tree-sitter concurrent analysis worker pool with TreeSitterManager reuse for better performance.

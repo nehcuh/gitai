@@ -67,70 +67,115 @@ GitAI不是强制性的开发流程，而是一组独立的辅助工具，每个
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 1. 模块与职责
+## 1. Workspace 架构（2025-01-12 重构）
 
-### CLI 模块化架构（2025-01-09 更新）
+### 模块化 Crate 结构
 
-- src/main.rs
-  - 精简的入口点，仅负责创建和运行 CliApp
-- src/cli/mod.rs
-  - CLI 应用主控制器，负责命令分发和全局初始化
-- src/cli/handlers/
-  - 模块化的命令处理器（12个独立处理器）：
-    - review.rs: 代码评审命令
-    - commit.rs: 智能提交命令
-    - scan.rs: 安全扫描命令
-    - prompts.rs: 提示词管理
-    - init.rs: 配置初始化
-    - git.rs: Git 代理与 AI 解释
-    - config.rs: 配置管理
-    - update.rs: 更新检查
-    - metrics.rs: 质量度量
-    - mcp.rs: MCP 服务器
-    - graph.rs: 架构图生成
-    - features.rs: 功能特性列表
+GitAI 采用 Cargo Workspace 架构，将功能拆分为9个专门的 crate：
 
-### 核心模块
-- src/args.rs
-  - CLI 参数定义（Review/Scan/ScanHistory/Prompts/Commit/Update/Git 代理/MCP）
-- src/config.rs
-  - 配置结构体与加载（~/.config/gitai/config.toml），包含MCP配置验证
-- src/git.rs
-  - Git 子进程封装（run_git、diff/status/add/commit），禁用 pager 保证非交互稳定
-- src/scan.rs
-  - OpenGrep 集成：规则目录选择（--lang 优先/自动检测作为后备）、构建命令、运行与 JSON 解析、扫描历史持久化、安装帮助
-- src/review.rs
-  - 评审主流程：获取 diff → 暂存提示 → 缓存 → 获取 Issue 上下文 → 调用 Analyzer → 保存缓存 → 输出（可阻断严重问题）
-- src/analysis.rs
-  - Analyzer：多维度数据融合分析的核心
-    - analyze_review：结合代码结构、安全扫描、任务上下文生成AI提示词
-    - analyze_security：按需调用安全扫描，集成到代码评审流程
-    - analyze_deviation：分析代码变更与DevOps任务的一致性
-- src/commit.rs
-  - 智能提交：收集 diff/Issue → 生成提交信息（或使用用户 -m）→ 可选评审 → git add/commit
-- src/devops.rs
-  - DevOps 客户端（Coding/GitHub）拉取 Issue 简要信息
-- src/update/*
-  - 自动更新器：规则包下载/解压/元信息写入、prompts（占位）、版本检查与通知
-- src/ai.rs
-  - AI 请求（OpenAI 兼容），system+user 双消息，支持 api_key/temperature
-- src/mcp/*
-  - MCP (Model Context Protocol) 服务器实现
-    - mod.rs: MCP服务管理器、错误处理、性能统计
-    - manager.rs: MCP管理器，集成服务注册表
-    - registry.rs: 服务注册表，支持依赖管理和版本控制
-    - bridge.rs: MCP协议桥接，支持stdio传输
-    - services/: 核心MCP服务实现
-      - review.rs: 代码评审服务
-      - commit.rs: 智能提交服务
-      - scan.rs: 安全扫描服务
-      - analysis.rs: 代码分析服务（支持并发）
-      - deviation.rs: 偏离度分析服务
-- src/tree_sitter/*
-  - Tree-sitter 多语言结构分析
-    - mod.rs: TreeSitterManager 管理器
-    - 支持 8 种语言的并发分析
-    - 线程安全的缓存实现
+```
+gitai/
+├── Cargo.toml              # Workspace 根配置
+├── crates/
+│   ├── gitai-core/        # 核心业务逻辑
+│   ├── gitai-types/       # 共享类型定义
+│   ├── gitai-analysis/    # 代码分析引擎
+│   ├── gitai-security/    # 安全扫描功能
+│   ├── gitai-metrics/     # 度量和监控
+│   ├── gitai-mcp/         # MCP 服务器
+│   ├── gitai-adapters/    # 外部服务适配器
+│   ├── gitai-cli/         # 命令行接口
+│   └── gitai-evaluation/  # 项目质量评估
+└── src/                    # 主二进制入口
+```
+
+### 各 Crate 职责
+
+#### gitai-types
+- 共享类型定义（FilePath, Language, Version 等）
+- 统一错误类型 GitAIError
+- 风险级别和严重度定义
+
+#### gitai-core  
+- 核心业务逻辑和接口定义
+- 配置管理
+- Git 操作封装
+- DevOps 平台接口
+
+#### gitai-analysis
+- Tree-sitter 多语言结构分析
+- 架构影响分析
+- 依赖图生成和分析
+- 代码质量评估
+
+#### gitai-security
+- OpenGrep 集成
+- 安全规则管理
+- 扫描历史跟踪
+
+#### gitai-metrics
+- 质量指标跟踪
+- 趋势分析
+- 报告生成
+
+#### gitai-mcp
+- MCP 协议服务器实现
+- 服务注册表
+- JSON-RPC 处理
+
+#### gitai-adapters
+- AI 服务适配器（OpenAI 兼容）
+- DevOps 平台适配器（Coding/GitHub）
+
+#### gitai-cli
+- 命令行参数解析
+- 命令处理器：
+  - review: 代码评审
+  - commit: 智能提交
+  - scan: 安全扫描
+  - mcp: MCP 服务器
+  - metrics: 质量度量
+  - graph: 依赖图
+  - features: 功能特性
+
+#### gitai-evaluation
+- 项目质量评估
+- 重复代码检测
+- 错误模式分析
+
+### 依赖关系
+
+```mermaid
+graph TD
+    types[gitai-types]
+    core[gitai-core]
+    analysis[gitai-analysis]
+    security[gitai-security]
+    metrics[gitai-metrics]
+    mcp[gitai-mcp]
+    adapters[gitai-adapters]
+    cli[gitai-cli]
+    evaluation[gitai-evaluation]
+    
+    core --> types
+    analysis --> types
+    analysis --> core
+    security --> types
+    security --> core
+    metrics --> types
+    metrics --> core
+    adapters --> core
+    mcp --> core
+    mcp --> analysis
+    mcp --> security
+    cli --> core
+    cli --> analysis
+    cli --> security
+    cli --> metrics
+    cli --> mcp
+    cli --> adapters
+    evaluation --> types
+```
 
 ## 2. CLI 契约（核心）
 
