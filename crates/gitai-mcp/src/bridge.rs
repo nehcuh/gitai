@@ -179,7 +179,17 @@ pub async fn start_mcp_server(config: Config) -> McpResult<()> {
                         }
                     }
                     Some("resources/list") => {
-                        // List files under a path (shallow recursion with basic ignores)
+                        // Return empty resources list for now - MCP clients should handle this gracefully
+                        // In the future, we could expose project files or Git resources
+                        let response = json!({
+                            "jsonrpc": "2.0",
+                            "id": msg.get("id"),
+                            "result": { "resources": [] }
+                        });
+                        write_response(&mut stdout, &response)?;
+                    }
+                    Some("resources/list_disabled") => {
+                        // Original implementation (disabled for now to avoid issues)
                         let (path, limit) = {
                             let p = msg
                                 .get("params")

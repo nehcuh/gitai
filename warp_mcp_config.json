@@ -1,0 +1,15 @@
+{
+  "gitai": {
+    "command": "/Users/huchen/Projects/gitai/target/release/gitai",
+    "args": [
+      "mcp",
+      "--transport",
+      "stdio"
+    ],
+    "env": {
+      "RUST_LOG": "info",
+      "GITAI_CONFIG_PATH": "/Users/huchen/.config/gitai/config.toml"
+    },
+    "working_directory": "/Users/huchen/Projects/gitai"
+  }
+}
