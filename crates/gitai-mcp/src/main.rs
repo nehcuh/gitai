@@ -69,6 +69,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // 加载配置
     let config = Config::load().map_err(|e| format!("Failed to load config: {}", e))?;
+    
+    // 调试：输出配置信息
+    eprintln!("🔧 配置加载成功:");
+    eprintln!("  AI API URL: {}", config.ai.api_url);
+    eprintln!("  AI Model: {}", config.ai.model);
+    eprintln!("  MCP 启用: {}", config.mcp.as_ref().map_or(false, |mcp| mcp.enabled));
 
     // 检查 MCP 是否启用
     if !config.mcp.as_ref().map_or(false, |mcp| mcp.enabled) {
