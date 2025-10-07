@@ -8,6 +8,7 @@ Welcome to GitAI's documentation. This page provides a comprehensive index of al
 - **Development Guide / 开发指南** — [WARP.md](../WARP.md) - Complete development environment setup and commands
 - **Project Status / 项目状态** — [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) - Current implementation progress
 - **Contributing / 贡献指南** — [development/CONTRIBUTING.md](development/CONTRIBUTING.md) - How to contribute to the project
+- **Optimization Roadmap / 优化路线图** — [optimization/README.md](optimization/README.md) - Complete optimization plan and task breakdown
 
 ## ⚡ Quickstart / 快速开始
 - MCP Server (stdio) Quickstart / MCP 服务器（stdio）快速开始

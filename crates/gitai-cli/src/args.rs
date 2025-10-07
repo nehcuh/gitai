@@ -1,6 +1,8 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+use crate::handlers::review::OutputFormat;
+
 /// GitAI - 简化的参数解析
 #[derive(Parser, Debug)]
 #[command(name = "gitai")]
@@ -34,9 +36,9 @@ pub enum Command {
         /// 语言
         #[arg(long)]
         language: Option<String>,
-        /// 输出格式
-        #[arg(long, default_value = "text")]
-        format: String,
+        /// 输出格式 (console|markdown|json|yaml|text)
+        #[arg(long, default_value = "console")]
+        format: OutputFormat,
         /// 输出文件
         #[arg(long)]
         output: Option<PathBuf>,

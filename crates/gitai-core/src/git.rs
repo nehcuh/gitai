@@ -9,7 +9,7 @@ mod git_impl;
 
 // Re-export the actual implementations
 pub use git_impl::{
-    get_all_diff, get_diff, get_status, get_unpushed_diff, git_add_all, git_commit,
+    get_all_diff, get_diff, get_last_commit_diff, get_status, get_unpushed_diff, git_add_all, git_commit,
     has_staged_changes, has_unstaged_changes, run_git, run_git_capture,
 };
 

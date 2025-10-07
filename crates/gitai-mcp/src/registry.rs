@@ -367,3 +367,165 @@ impl Default for ServiceRegistry {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::ReviewService;
+
+    #[test]
+    fn test_service_status_values() {
+        // 测试服务状态的各种值
+        assert_eq!(ServiceStatus::Healthy, ServiceStatus::Healthy);
+        assert_ne!(ServiceStatus::Healthy, ServiceStatus::Unhealthy);
+        assert_ne!(ServiceStatus::Starting, ServiceStatus::Stopped);
+    }
+
+    #[test]
+    fn test_service_metadata_creation() {
+        let metadata = ServiceMetadata {
+            id: "test-id".to_string(),
+            name: "test-service".to_string(),
+            description: "test description".to_string(),
+            status: ServiceStatus::Healthy,
+            registered_at: chrono::Utc::now(),
+            last_health_check: None,
+            health_check_response_time: None,
+            config: serde_json::json!({"key": "value"}),
+        };
+
+        assert_eq!(metadata.id, "test-id");
+        assert_eq!(metadata.name, "test-service");
+        assert_eq!(metadata.description, "test description");
+        assert_eq!(metadata.status, ServiceStatus::Healthy);
+        assert!(metadata.last_health_check.is_none());
+        assert!(metadata.health_check_response_time.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_registry_creation() {
+        let registry = ServiceRegistry::new();
+
+        let services = registry.list_services().await;
+        assert_eq!(services.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_registry_default() {
+        let registry = ServiceRegistry::default();
+
+        let services = registry.list_services().await;
+        assert_eq!(services.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_health_checker_creation() {
+        let checker = HealthChecker::new();
+
+        // 验证健康检查器能够创建并检查服务
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = ReviewService::new(config);
+
+        let is_healthy = checker.check_health(&service).await;
+        assert!(is_healthy);
+    }
+
+    #[tokio::test]
+    async fn test_health_checker_with_custom_values() {
+        let checker = HealthChecker::new()
+            .with_check_interval(Duration::from_secs(60))
+            .with_timeout(Duration::from_secs(20));
+
+        // 验证自定义配置的健康检查器仍然工作
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = ReviewService::new(config);
+
+        let is_healthy = checker.check_health(&service).await;
+        assert!(is_healthy);
+    }
+
+    #[tokio::test]
+    async fn test_registry_service_registration() {
+        let registry = ServiceRegistry::new();
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = std::sync::Arc::new(ReviewService::new(config));
+
+        // 注册服务
+        let config_value = serde_json::json!({"test": true});
+        let result = registry.register_service(service.clone(), config_value).await;
+        assert!(result.is_ok());
+
+        // 验证服务已注册
+        let services = registry.list_services().await;
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].name, "代码评审");
+        assert_eq!(services[0].status, ServiceStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn test_registry_service_retrieval() {
+        let registry = ServiceRegistry::new();
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = std::sync::Arc::new(ReviewService::new(config));
+
+        // 注册服务
+        let config_value = serde_json::json!({"test": true});
+        let service_id = registry.register_service(service.clone(), config_value).await.unwrap();
+
+        // 获取服务
+        let retrieved_service = registry.get_service(&service_id).await;
+        assert!(retrieved_service.is_some());
+        assert_eq!(retrieved_service.unwrap().name(), "代码评审");
+
+        // 获取不存在的服务
+        let non_existent_service = registry.get_service("non-existent-id").await;
+        assert!(non_existent_service.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_registry_unregister() {
+        let registry = ServiceRegistry::new();
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = std::sync::Arc::new(ReviewService::new(config));
+
+        // 注册服务
+        let config_value = serde_json::json!({"test": true});
+        let service_id = registry.register_service(service.clone(), config_value).await.unwrap();
+
+        // 注销服务
+        let result = registry.unregister_service(&service_id, "test cleanup".to_string()).await;
+        assert!(result.is_ok());
+
+        // 验证服务已移除
+        let services = registry.list_services().await;
+        assert_eq!(services.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_registry_healthy_services() {
+        let registry = ServiceRegistry::new();
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = std::sync::Arc::new(ReviewService::new(config));
+
+        // 注册服务
+        let config_value = serde_json::json!({"test": true});
+        let _service_id = registry.register_service(service.clone(), config_value).await.unwrap();
+
+        // 获取健康服务
+        let healthy_services = registry.get_healthy_services().await;
+        assert_eq!(healthy_services.len(), 1);
+        assert_eq!(healthy_services[0].name, "代码评审");
+        assert_eq!(healthy_services[0].status, ServiceStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn test_health_checker_check_service() {
+        let checker = HealthChecker::new();
+        let config = std::sync::Arc::new(gitai_core::config::Config::default());
+        let service = ReviewService::new(config);
+
+        // 检查服务健康状态
+        let is_healthy = checker.check_health(&service).await;
+        assert!(is_healthy);
+    }
+}

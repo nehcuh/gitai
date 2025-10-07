@@ -30,6 +30,14 @@ pub mod utils;
 /// AI integration façade (enabled via `ai` feature)
 pub mod ai;
 
+/// Performance testing and benchmarking utilities
+#[cfg(feature = "ai")]
+pub mod performance_test;
+
+/// Metrics collection and export functionality
+#[cfg(feature = "ai")]
+pub mod metrics;
+
 #[cfg(feature = "cache")]
 /// Caching facilities (enabled via `cache` feature)
 pub mod cache;

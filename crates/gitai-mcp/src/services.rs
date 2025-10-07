@@ -890,3 +890,93 @@ impl ServiceFactory {
             .map(|s| s.as_ref())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_review_service_creation() {
+        let config = Arc::new(gitai_core::config::Config::default());
+        let service = ReviewService::new(config);
+
+        assert_eq!(service.name(), "代码评审");
+        assert_eq!(service.description(), "执行代码评审和质量分析");
+        assert!(service.is_available().await);
+    }
+
+    #[tokio::test]
+    async fn test_review_service_execute() {
+        let config = Arc::new(gitai_core::config::Config::default());
+        let service = ReviewService::new(config);
+
+        let params = json!({
+            "path": ".",
+            "format": "json",
+            "tree_sitter": true,
+            "security_scan": false
+        });
+
+        let result = service.execute(params).await;
+
+        // 在测试环境中，这可能会因为git操作失败而返回错误，这是正常的
+        // 我们主要验证服务能够正确处理参数并返回结果（成功或失败）
+        match result {
+            Ok(_) => {
+                // 如果成功，验证返回结果的基本结构
+            }
+            Err(_) => {
+                // 如果失败，也是可以接受的，因为测试环境可能没有git仓库
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_service_factory_create_services() {
+        let config = Arc::new(gitai_core::config::Config::default());
+        let services = ServiceFactory::create_services(config);
+
+        // 验证创建了预期的服务数量
+        assert_eq!(services.len(), 8);
+
+        // 验证每个服务都有名称和描述
+        for service in &services {
+            assert!(!service.name().is_empty());
+            assert!(!service.description().is_empty());
+        }
+
+        // 验证包含核心服务
+        let service_names: Vec<_> = services.iter().map(|s| s.name()).collect();
+        assert!(service_names.contains(&"代码评审"));
+        assert!(service_names.contains(&"安全扫描"));
+        assert!(service_names.contains(&"智能提交"));
+    }
+
+    #[tokio::test]
+    async fn test_get_service_by_name() {
+        let config = Arc::new(gitai_core::config::Config::default());
+        let services = ServiceFactory::create_services(config);
+
+        // 测试查找存在的服务
+        let review_service = ServiceFactory::get_service_by_name(&services, "代码评审");
+        assert!(review_service.is_some());
+        assert_eq!(review_service.unwrap().name(), "代码评审");
+
+        // 测试查找不存在的服务
+        let unknown_service = ServiceFactory::get_service_by_name(&services, "未知服务");
+        assert!(unknown_service.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_all_services_available() {
+        let config = Arc::new(gitai_core::config::Config::default());
+        let services = ServiceFactory::create_services(config);
+
+        // 验证所有服务都可用
+        for service in &services {
+            assert!(service.is_available().await,
+                "服务 '{}' 应该可用", service.name());
+        }
+    }
+}

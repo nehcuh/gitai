@@ -2,6 +2,75 @@
 
 use log::info;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_server_creation() {
+        let server = McpServer::new();
+        // 验证服务器初始状态
+        assert!(!server.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_server_start() {
+        let server = McpServer::new();
+
+        // 启动服务器
+        let result = server.start().await;
+        assert!(result.is_ok());
+
+        // 验证服务器状态
+        assert!(server.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_server_double_start() {
+        let server = McpServer::new();
+
+        // 第一次启动
+        let result1 = server.start().await;
+        assert!(result1.is_ok());
+
+        // 第二次启动应该成功但只是警告
+        let result2 = server.start().await;
+        assert!(result2.is_ok());
+
+        // 验证服务器仍在运行
+        assert!(server.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_server_stop() {
+        let server = McpServer::new();
+
+        // 启动服务器
+        let _ = server.start().await;
+        assert!(server.is_running());
+
+        // 停止服务器
+        let result = server.stop().await;
+        assert!(result.is_ok());
+
+        // 验证服务器已停止
+        assert!(!server.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_server_stop_when_not_running() {
+        let server = McpServer::new();
+        assert!(!server.is_running());
+
+        // 停止未运行的服务器应该成功但只是警告
+        let result = server.stop().await;
+        assert!(result.is_ok());
+
+        // 验证服务器仍然未运行
+        assert!(!server.is_running());
+    }
+}
+
 /// MCP 服务器实现 - 简化版本
 pub struct McpServer {
     /// 运行状态

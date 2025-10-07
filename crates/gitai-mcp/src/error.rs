@@ -313,3 +313,126 @@ pub fn execution_error(service_name: &str, e: impl std::fmt::Display) -> McpErro
 pub fn serialize_error(service_name: &str, e: impl std::fmt::Display) -> McpError {
     execution_failed_error(format!("Failed to serialize {service_name} result: {e}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mcp_error_display() {
+        let errors = vec![
+            McpError::InvalidParameters("test error".to_string()),
+            McpError::ExecutionFailed("execution failed".to_string()),
+            McpError::ConfigurationError("config error".to_string()),
+            McpError::FileOperationError("file error".to_string()),
+            McpError::NetworkError("network error".to_string()),
+            McpError::ExternalToolError("tool error".to_string()),
+            McpError::PermissionError("permission error".to_string()),
+            McpError::TimeoutError("timeout error".to_string()),
+            McpError::Unknown("unknown error".to_string()),
+        ];
+
+        for error in errors {
+            let display_str = format!("{}", error);
+            assert!(!display_str.is_empty());
+            assert!(display_str.len() > 10); // 确保错误消息有意义
+        }
+    }
+
+    #[test]
+    fn test_mcp_error_debug() {
+        let error = McpError::InvalidParameters("test".to_string());
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("InvalidParameters"));
+        assert!(debug_str.contains("test"));
+    }
+
+    #[test]
+    fn test_error_convenience_functions() {
+        // 测试便捷错误创建函数
+        let param_error = invalid_parameters_error("missing field".to_string());
+        match param_error {
+            McpError::InvalidParameters(msg) => assert_eq!(msg, "missing field"),
+            _ => panic!("Expected InvalidParameters error"),
+        }
+
+        let exec_error = execution_failed_error("command failed".to_string());
+        match exec_error {
+            McpError::ExecutionFailed(msg) => assert_eq!(msg, "command failed"),
+            _ => panic!("Expected ExecutionFailed error"),
+        }
+
+        let config_error = configuration_error("invalid config".to_string());
+        match config_error {
+            McpError::ConfigurationError(msg) => assert_eq!(msg, "invalid config"),
+            _ => panic!("Expected ConfigurationError error"),
+        }
+    }
+
+    #[test]
+    fn test_error_conversion_functions() {
+        // 测试服务特定的错误转换函数
+        let parse_err = parse_error("review-service", "JSON parse error");
+        let display_str = format!("{}", parse_err);
+        assert!(display_str.contains("review-service"));
+        assert!(display_str.contains("JSON parse error"));
+
+        let exec_err = execution_error("scan-service", "tool not found");
+        let display_str = format!("{}", exec_err);
+        assert!(display_str.contains("scan-service"));
+        assert!(display_str.contains("tool not found"));
+
+        let serial_err = serialize_error("analysis-service", "encoding error");
+        let display_str = format!("{}", serial_err);
+        assert!(display_str.contains("analysis-service"));
+        assert!(display_str.contains("encoding error"));
+    }
+
+    #[test]
+    fn test_from_serde_json_error() {
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
+        let mcp_err: McpError = json_err.into();
+
+        match mcp_err {
+            McpError::InvalidParameters(msg) => {
+                assert!(msg.contains("JSON parsing error"));
+            }
+            _ => panic!("Expected InvalidParameters error from serde_json::Error"),
+        }
+    }
+
+    #[test]
+    fn test_from_std_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let mcp_err: McpError = io_err.into();
+
+        match mcp_err {
+            McpError::FileOperationError(msg) => {
+                assert!(msg.contains("file not found"));
+            }
+            _ => panic!("Expected FileOperationError from std::io::Error"),
+        }
+    }
+
+    #[test]
+    fn test_error_variants() {
+        // 测试所有错误变体的创建
+        let errors = vec![
+            McpError::InvalidParameters("test".to_string()),
+            McpError::ExecutionFailed("test".to_string()),
+            McpError::ConfigurationError("test".to_string()),
+            McpError::FileOperationError("test".to_string()),
+            McpError::NetworkError("test".to_string()),
+            McpError::ExternalToolError("test".to_string()),
+            McpError::PermissionError("test".to_string()),
+            McpError::TimeoutError("test".to_string()),
+            McpError::Unknown("test".to_string()),
+        ];
+
+        // 验证所有错误变体都可以正确地转换为字符串
+        for error in &errors {
+            let _ = format!("{}", error); // 测试Display实现
+            let _ = format!("{:?}", error); // 测试Debug实现
+        }
+    }
+}

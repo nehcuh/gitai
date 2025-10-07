@@ -49,6 +49,12 @@ parking_lot = { workspace = true, optional = true }
 # Date/time
 chrono = { workspace = true }
 
+# Random number generation for jitter
+rand = { workspace = true }
+
+# TASK-003-3-1-2-3: High-performance concurrent collections
+dashmap = { workspace = true }
+
 [features]
 default = ["ai", "cache"]
 ai = ["dep:reqwest"]

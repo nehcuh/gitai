@@ -53,6 +53,13 @@ path = "src/main.rs"
  # Terminal colors
  colored = "2.0"
 
+ # Text processing
+ regex = { workspace = true }
+
+ # Tree-sitter for AST parsing and complexity calculation
+ tree-sitter = { workspace = true }
+ tree-sitter-rust = { workspace = true }
+
 [features]
 # Keep defaults minimal to avoid pulling optional subsystems during migration
 default = ["minimal"]
